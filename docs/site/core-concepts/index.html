@@ -1,0 +1,1879 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://phonepe.github.io/ignisMQ/core-concepts/">
+      
+      
+        <link rel="prev" href="../getting-started/">
+      
+      
+        <link rel="next" href="../usage/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="zensical-0.0.32">
+    
+    
+      
+        <title>Core Concepts - IgnisMQ</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.53a7feaf.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,a=__md_scope)=>JSON.parse(t.getItem(a.pathname+"."+e)),__md_set=(e,t,a=localStorage,_=__md_scope)=>{try{a.setItem(_.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#core-concepts" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="IgnisMQ" class="md-header__button md-logo" aria-label="IgnisMQ" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            IgnisMQ
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Core Concepts
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/PhonePe/ignisMQ" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="./.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../getting-started/" class="md-tabs__link">
+        
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="././" class="md-tabs__link">
+        
+  
+  Core Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../usage/" class="md-tabs__link">
+        
+  
+  Usage Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../api/api-reference/" class="md-tabs__link">
+          
+  
+  API
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../backends/aerospike/" class="md-tabs__link">
+          
+  
+  Storage Backends
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../references/" class="md-tabs__link">
+        
+  
+  References
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="IgnisMQ" class="md-nav__button md-logo" aria-label="IgnisMQ" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+
+    </a>
+    IgnisMQ
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/PhonePe/ignisMQ" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="./.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Concepts
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#message-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Message Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Message Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-by-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step-by-step
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sidelining" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sidelining
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sidelining">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#decision-logic-in-magazineconsumertask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision logic in MagazineConsumerTask
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shoveling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shoveling
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shoveling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#two-modes-of-operation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two modes of operation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sweeping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sweeping
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sweeping">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#key-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sideline-sweep-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sideline sweep logic
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#leader-election" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Leader Election
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Leader Election">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#zookeeper-path-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ZooKeeper path structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-activation-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How activation works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queue-refresh-cycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Queue Refresh Cycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Queue Refresh Cycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-refreshqueues-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What refreshQueues() does
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consumer-threading-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consumer Threading Model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Consumer Threading Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scheduling-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scheduling parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scaling-consumers-at-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scaling consumers at runtime
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/error-codes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Error Codes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage Backends
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Storage Backends
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/aerospike/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aerospike
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../references/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    References
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#message-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Message Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Message Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-by-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step-by-step
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sidelining" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sidelining
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sidelining">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#decision-logic-in-magazineconsumertask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision logic in MagazineConsumerTask
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shoveling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shoveling
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shoveling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#two-modes-of-operation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two modes of operation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sweeping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sweeping
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sweeping">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#key-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sideline-sweep-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sideline sweep logic
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#leader-election" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Leader Election
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Leader Election">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#zookeeper-path-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ZooKeeper path structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-activation-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How activation works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queue-refresh-cycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Queue Refresh Cycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Queue Refresh Cycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-refreshqueues-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What refreshQueues() does
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consumer-threading-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consumer Threading Model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Consumer Threading Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scheduling-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scheduling parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scaling-consumers-at-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scaling consumers at runtime
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="core-concepts">Core Concepts<a class="headerlink" href="#core-concepts" title="Permanent link">&para;</a></h1>
+<p>This page covers the internal architecture and key mechanisms of IgnisMQ. Understanding these concepts is essential for operating IgnisMQ effectively in production.</p>
+<hr />
+<h2 id="message-lifecycle">Message Lifecycle<a class="headerlink" href="#message-lifecycle" title="Permanent link">&para;</a></h2>
+<p>Every message in IgnisMQ follows a deterministic path from publication to deletion. The core abstraction is the <strong>Magazine</strong> — a sharded, persistent message store backed by your chosen datastore (Aerospike, etc.).</p>
+<pre class="mermaid"><code>stateDiagram-v2
+    [*] --&gt; Published : magazine.load()
+    Published --&gt; Fired : magazine.fire()
+    Fired --&gt; Consumed : handler returns true
+    Fired --&gt; Sidelined : handler returns false / exception
+    Consumed --&gt; Deleted : magazine.delete()
+    Sidelined --&gt; Deleted : magazine.delete() from main
+    Sidelined --&gt; Shoveled : ShovelTask
+    Shoveled --&gt; Published : reloaded to main magazine
+    Fired --&gt; Swept : stuck message detected
+    Swept --&gt; Sidelined : reloaded to sideline
+    Deleted --&gt; [*]</code></pre>
+<h3 id="step-by-step">Step-by-step<a class="headerlink" href="#step-by-step" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Publish</strong> — <code>magazine.load(message)</code> serializes the message to JSON via <code>ObjectMapper</code> and persists it to the datastore with a unique message ID and the current timestamp.</li>
+<li><strong>Fire</strong> — <code>magazine.fire()</code> retrieves the next available message from the store. The message is now considered "in-flight."</li>
+<li><strong>Consume</strong> — The registered <code>MagazineHandler</code> processes the message. The outcome determines what happens next (see <a href="#sidelining">Sidelining</a>).</li>
+<li><strong>Delete</strong> — <code>magazine.delete(messageId)</code> removes the message from the main magazine. This happens <strong>regardless</strong> of whether the handler succeeded or failed.</li>
+</ol>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">// Publishing a message</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">Magazine</span><span class="o">&lt;</span><span class="n">MyEvent</span><span class="o">&gt;</span><span class="w"> </span><span class="n">magazine</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ignisClient</span><span class="p">.</span><span class="na">getMagazine</span><span class="p">(</span><span class="s">&quot;orders&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">MyEvent</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">magazine</span><span class="p">.</span><span class="na">load</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">MyEvent</span><span class="p">(</span><span class="s">&quot;order-123&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;PLACED&quot;</span><span class="p">));</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1">// Firing (typically done by the consumer loop, not user code)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">MagazineEntry</span><span class="w"> </span><span class="n">entry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">magazine</span><span class="p">.</span><span class="na">fire</span><span class="p">();</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1">// Deleting after processing</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">magazine</span><span class="p">.</span><span class="na">delete</span><span class="p">(</span><span class="n">entry</span><span class="p">.</span><span class="na">getMessageId</span><span class="p">());</span>
+</span></code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>All messages are serialized to JSON using Jackson's <code>ObjectMapper</code>. Ensure your message classes are serialization-friendly — include a no-arg constructor and avoid circular references.</p>
+</div>
+<hr />
+<h2 id="sidelining">Sidelining<a class="headerlink" href="#sidelining" title="Permanent link">&para;</a></h2>
+<p>Sidelining is IgnisMQ's mechanism for isolating messages that could not be processed successfully. Rather than retrying in-place (which risks head-of-line blocking), failed messages are moved to a dedicated <strong>sideline magazine</strong> named <code>{queueName}_SIDELINE</code>.</p>
+<pre class="mermaid"><code>flowchart TD
+    Fire["magazine.fire()"] --&gt; Deser["Deserialize JSON → M"]
+    Deser --&gt; Call["handler.handle(message)"]
+    Call --&gt;|returns true| Delete["magazine.delete()"]
+    Call --&gt;|returns false| Sideline["sidelineMagazine.load()"]
+    Sideline --&gt; Delete
+    Call --&gt;|throws exception| Check{"Is exception&lt;br/&gt;ignorable?"}
+    Check --&gt;|Yes| Delete
+    Check --&gt;|No| Sideline2["sidelineMagazine.load()"]
+    Sideline2 --&gt; Delete</code></pre>
+<h3 id="decision-logic-in-magazineconsumertask">Decision logic in <code>MagazineConsumerTask</code><a class="headerlink" href="#decision-logic-in-magazineconsumertask" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Outcome</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>handler.handle()</code> returns <code>true</code></td>
+<td>Message deleted from main magazine. Done.</td>
+</tr>
+<tr>
+<td><code>handler.handle()</code> returns <code>false</code></td>
+<td>Message loaded into sideline magazine, then deleted from main.</td>
+</tr>
+<tr>
+<td>Exception thrown, <strong>not</strong> in <code>getIgnorableExceptions()</code></td>
+<td>Message loaded into sideline magazine, then deleted from main.</td>
+</tr>
+<tr>
+<td>Exception thrown, <strong>is</strong> in <code>getIgnorableExceptions()</code></td>
+<td>Message deleted from main magazine. Not sidelined, not retried.</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The message is <strong>always</strong> deleted from the main magazine after processing, regardless of success or failure. This is by design — it prevents poison messages from blocking the queue. If you need to inspect failures, look in the sideline magazine.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Use <code>getIgnorableExceptions()</code> to list exception types that represent permanent, non-recoverable failures (e.g., <code>IllegalArgumentException</code>, <code>ValidationException</code>). These messages are silently dropped since sidelining and shoveling them would be pointless.</p>
+</div>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">OrderHandler</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">MagazineHandler</span><span class="o">&lt;</span><span class="n">OrderEvent</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">handle</span><span class="p">(</span><span class="n">OrderEvent</span><span class="w"> </span><span class="n">message</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="c1">// return true  → message consumed successfully</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">        </span><span class="c1">// return false → message sidelined for later retry</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">orderService</span><span class="p">.</span><span class="na">process</span><span class="p">(</span><span class="n">message</span><span class="p">);</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">Set</span><span class="o">&lt;</span><span class="n">Class</span><span class="o">&lt;?</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Exception</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="nf">getIgnorableExceptions</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">        </span><span class="c1">// These exceptions cause the message to be deleted, not sidelined</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">Set</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">            </span><span class="n">IllegalArgumentException</span><span class="p">.</span><span class="na">class</span><span class="p">,</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">            </span><span class="n">MalformedOrderException</span><span class="p">.</span><span class="na">class</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">        </span><span class="p">);</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="p">}</span>
+</span></code></pre></div>
+<hr />
+<h2 id="shoveling">Shoveling<a class="headerlink" href="#shoveling" title="Permanent link">&para;</a></h2>
+<p>The <strong>ShovelTask</strong> moves messages from the sideline magazine back into the main magazine for reprocessing. This is the retry mechanism in IgnisMQ.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant ST as ShovelTask
+    participant SM as Sideline Magazine
+    participant MM as Main Magazine
+
+    loop Every shovelInterval
+        ST-&gt;&gt;SM: fire()
+        SM--&gt;&gt;ST: sidelined message
+        ST-&gt;&gt;ST: Stamp fireTS on message
+        ST-&gt;&gt;MM: load(message)
+        alt Load succeeds
+            ST-&gt;&gt;SM: delete(messageId)
+        else Load fails
+            ST-&gt;&gt;SM: reload(message)
+            Note over ST,SM: Message stays in sideline
+        end
+    end</code></pre>
+<h3 id="two-modes-of-operation">Two modes of operation<a class="headerlink" href="#two-modes-of-operation" title="Permanent link">&para;</a></h3>
+<p><strong>Scheduled mode</strong> (default)</p>
+<ul>
+<li>Runs on a periodic timer controlled by <code>ShovelConfig.timeIntervalInSecs</code>.</li>
+<li>Default interval: <strong>600 seconds (10 minutes)</strong>.</li>
+<li>Keeps running indefinitely.</li>
+</ul>
+<p><strong>One-shot mode</strong> (<code>autoDelete=true</code>)</p>
+<ul>
+<li>Executes a single shovel pass, then cancels itself.</li>
+<li>If an error occurs during the pass, it self-reschedules with a <strong>10-second delay</strong> before retrying.</li>
+<li>Useful for on-demand sideline draining.</li>
+</ul>
+<h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h3>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">ShovelConfig</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ShovelConfig</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="p">.</span><span class="na">concurrency</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="w">            </span><span class="c1">// default: 4 parallel shovel workers</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="p">.</span><span class="na">timeIntervalInSecs</span><span class="p">(</span><span class="mi">600</span><span class="p">)</span><span class="w">   </span><span class="c1">// default: 600 (10 minutes)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>concurrency</code></td>
+<td>4</td>
+<td>Number of parallel shovel workers per queue</td>
+</tr>
+<tr>
+<td><code>timeIntervalInSecs</code></td>
+<td>600</td>
+<td>Interval between scheduled shovel passes</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition info">
+<p class="admonition-title">Info</p>
+<p>Each shoveled message gets a fresh <code>fireTS</code> stamped on it. This timestamp is critical for sweep tracking — it allows the sweeper to distinguish between newly shoveled messages and genuinely stuck ones.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>If <code>magazine.load()</code> back to main fails, the message is <strong>reloaded</strong> to the sideline via <code>sidelineMagazine.reload()</code>. It is never lost.</p>
+</div>
+<hr />
+<h2 id="sweeping">Sweeping<a class="headerlink" href="#sweeping" title="Permanent link">&para;</a></h2>
+<p>The <strong>Sweeper</strong> is a safety net that catches messages stuck in the "fired but never consumed" state — typically due to consumer crashes, network partitions, or long GC pauses.</p>
+<pre class="mermaid"><code>flowchart TD
+    Start["Sweeper TimerTask fires&lt;br/&gt;(every 15 min)"] --&gt; Leader{"Am I the&lt;br/&gt;leader?"}
+    Leader --&gt;|No| Skip["Skip sweep"]
+    Leader --&gt;|Yes| Iterate["For each active queue + shard"]
+    Iterate --&gt; Scan["Scan for messages where&lt;br/&gt;fireTS &lt; now - sweepDuration"]
+    Scan --&gt; Found{"Messages&lt;br/&gt;found?"}
+    Found --&gt;|No| Next["Next shard"]
+    Found --&gt;|Yes| Batch["Process batch of 1000"]
+    Batch --&gt; Reload["Reload to sideline magazine"]
+    Reload --&gt; Update["Update sweep pointer&lt;br/&gt;via MapOperation.increment"]
+    Update --&gt; More{"More messages?"}
+    More --&gt;|Yes| Batch
+    More --&gt;|No| Next
+    Next --&gt; Done{"More shards?"}
+    Done --&gt;|Yes| Iterate
+    Done --&gt;|No| End["Sleep until next tick"]</code></pre>
+<h3 id="key-parameters">Key parameters<a class="headerlink" href="#key-parameters" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sweep interval</td>
+<td>15 minutes</td>
+<td>How often the sweeper runs</td>
+</tr>
+<tr>
+<td>Initial delay</td>
+<td>10 minutes</td>
+<td>Delay before first sweep after startup</td>
+</tr>
+<tr>
+<td><code>sweepDurationInMins</code></td>
+<td>20</td>
+<td>Messages fired more than this many minutes ago are considered stuck</td>
+</tr>
+<tr>
+<td>Batch size</td>
+<td>1000</td>
+<td>Messages processed per batch</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sideline-sweep-logic">Sideline sweep logic<a class="headerlink" href="#sideline-sweep-logic" title="Permanent link">&para;</a></h3>
+<p>When sweeping the sideline magazine, the sweeper uses a more conservative threshold:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>sweepThreshold = min(sweepTillFireTS, now - 2 * shovelInterval)
+</span></code></pre></div>
+<p>This prevents the sweeper from re-sidelining messages that are currently being shoveled back to the main queue. The <code>2x</code> multiplier provides a safety margin.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The sweeper only runs on the <strong>leader-elected instance</strong>. If leader election is misconfigured or ZooKeeper is down, no sweeping occurs. Monitor your sideline queue depths to detect this.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Sweep pointers are tracked per-queue-per-shard in the queue entity using <code>MapOperation.increment</code>. This allows sweeps to resume from where they left off rather than re-scanning the entire shard.</p>
+</div>
+<hr />
+<h2 id="leader-election">Leader Election<a class="headerlink" href="#leader-election" title="Permanent link">&para;</a></h2>
+<p>IgnisMQ uses <strong>Apache Curator's <code>LeaderSelector</code></strong> backed by ZooKeeper to ensure that cluster-wide singleton tasks (like sweeping) run on exactly one instance.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant I1 as Instance 1
+    participant I2 as Instance 2
+    participant ZK as ZooKeeper
+    participant Comm as Communicator Nodes
+
+    I1-&gt;&gt;ZK: Register ephemeral node&lt;br/&gt;/{clientId}-ignis-workers/{clientId}/members/i1
+    I2-&gt;&gt;ZK: Register ephemeral node&lt;br/&gt;/{clientId}-ignis-workers/{clientId}/members/i2
+
+    Note over ZK: LeaderSelector elects I1
+
+    I1-&gt;&gt;I1: takeLeadership()
+    I1-&gt;&gt;ZK: Read member list
+    I1-&gt;&gt;I1: Round-robin partitions across members
+
+    loop Every 30 seconds
+        I1-&gt;&gt;Comm: Write assignments to&lt;br/&gt;communicator ZK nodes
+        I1-&gt;&gt;I1: Refresh partition assignments
+    end
+
+    I1--&gt;&gt;I1: Check communicator node
+    Note over I1: balancerId matches → activate sweeper
+
+    I2--&gt;&gt;I2: Check communicator node
+    Note over I2: balancerId does NOT match → sweeper inactive
+
+    Note over ZK: I1 disconnects
+
+    ZK-&gt;&gt;ZK: Ephemeral node removed
+    ZK-&gt;&gt;I2: Leadership notification
+    I2-&gt;&gt;I2: takeLeadership()
+    I2-&gt;&gt;Comm: Write new assignments
+    I2--&gt;&gt;I2: Activate sweeper</code></pre>
+<h3 id="zookeeper-path-structure">ZooKeeper path structure<a class="headerlink" href="#zookeeper-path-structure" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>/{clientId}-ignis-workers/
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>  └── {clientId}/
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>      ├── loadbalancer-leader    ← LeaderSelector election node
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>      ├── members/
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>      │   ├── instance-1         ← ephemeral member node
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>      │   └── instance-2         ← ephemeral member node
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>      └── communicator/
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>          ├── instance-1         ← partition assignments for instance-1
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>          └── instance-2         ← partition assignments for instance-2
+</span></code></pre></div>
+<h3 id="how-activation-works">How activation works<a class="headerlink" href="#how-activation-works" title="Permanent link">&para;</a></h3>
+<ol>
+<li>The leader reads all registered member nodes.</li>
+<li>It round-robins partitions across members.</li>
+<li>It writes assignments (including a <code>balancerId</code>) to each instance's communicator ZK node.</li>
+<li>Each instance watches its own communicator node. If the <code>balancerId</code> in the assignment matches the instance's own ID, it sets the <code>active</code> AtomicBoolean to <code>true</code>, enabling the sweeper.</li>
+<li>Only <strong>one</strong> instance has <code>active = true</code> at any time.</li>
+</ol>
+<div class="admonition info">
+<p class="admonition-title">Info</p>
+<p>Leadership state is refreshed every <strong>30 seconds</strong>. On ZK disconnect, leadership is immediately relinquished, triggering a re-election. The new leader reassigns partitions and a different instance may become the active sweeper.</p>
+</div>
+<hr />
+<h2 id="queue-refresh-cycle">Queue Refresh Cycle<a class="headerlink" href="#queue-refresh-cycle" title="Permanent link">&para;</a></h2>
+<p>IgnisMQ keeps its in-memory queue state synchronized with the database through a background watcher.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Refresh interval</td>
+<td>5 minutes</td>
+</tr>
+<tr>
+<td>Initial delay</td>
+<td>1 minute</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-refreshqueues-does">What <code>refreshQueues()</code> does<a class="headerlink" href="#what-refreshqueues-does" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Discovery</strong> — Queries the datastore for all queue definitions. Any queue found in the DB but not in memory is created (consumers are started, shovel tasks are scheduled).</li>
+<li><strong>Expiration</strong> — Queues past their expiry time are deactivated.</li>
+<li><strong>Cleanup</strong> — Inactive queues are removed from in-memory data structures and their consumers/shovelers are cancelled.</li>
+<li><strong>Reconciliation</strong> — If a queue's <code>concurrency</code> or <code>ShovelConfig</code> has changed in the DB, the in-memory configuration is updated. Consumers are scaled up or down to match.</li>
+</ol>
+<pre class="mermaid"><code>flowchart LR
+    Timer["Watcher Timer&lt;br/&gt;(every 5 min)"] --&gt; Fetch["Fetch queues from DB"]
+    Fetch --&gt; New{"New queues?"}
+    New --&gt;|Yes| Create["Create consumers&lt;br/&gt;+ shovelers"]
+    New --&gt;|No| Expired{"Expired queues?"}
+    Create --&gt; Expired
+    Expired --&gt;|Yes| Deactivate["Deactivate + remove"]
+    Expired --&gt;|No| Changed{"Config changed?"}
+    Deactivate --&gt; Changed
+    Changed --&gt;|Yes| Reconcile["Scale consumers&lt;br/&gt;Update shovel config"]
+    Changed --&gt;|No| Done["Done"]
+    Reconcile --&gt; Done</code></pre>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>You don't need to restart instances to pick up new queues or configuration changes. The refresh cycle handles this automatically within 5 minutes. For immediate effect, you can trigger a manual refresh if the client exposes that API.</p>
+</div>
+<hr />
+<h2 id="consumer-threading-model">Consumer Threading Model<a class="headerlink" href="#consumer-threading-model" title="Permanent link">&para;</a></h2>
+<p>Each consumer in IgnisMQ is a <code>java.util.Timer</code> running a <code>MagazineConsumerTask</code> on a fixed-delay schedule.</p>
+<h3 id="scheduling-parameters">Scheduling parameters<a class="headerlink" href="#scheduling-parameters" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initial delay</td>
+<td>2 minutes</td>
+</tr>
+<tr>
+<td>Fixed delay between runs</td>
+<td>1 second</td>
+</tr>
+<tr>
+<td>Max consumers per queue</td>
+<td>100 (<code>MAX_CONSUMERS_ALLOWED</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>┌────────────────────────────────────────────────┐
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>│                  Timer Thread                   │
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>│                                                 │
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>│  ┌──────────────────────────────────────────┐   │
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>│  │         MagazineConsumerTask.run()        │   │
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>│  │                                           │   │
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>│  │  while (message = magazine.fire()) {      │   │
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>│  │      process(message);                    │   │
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>│  │      magazine.delete(message);            │   │
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>│  │  }                                        │   │
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>│  │  // magazine empty → return               │   │
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>│  │  // Timer re-invokes after 1s delay       │   │
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>│  └──────────────────────────────────────────┘   │
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>└────────────────────────────────────────────────┘
+</span></code></pre></div>
+<p>Each <code>Timer</code> is <strong>single-threaded</strong>. The <code>MagazineConsumerTask</code> polls in a tight loop until the magazine is empty, then returns control. The <code>Timer</code> waits 1 second (fixed delay), then invokes the task again.</p>
+<h3 id="scaling-consumers-at-runtime">Scaling consumers at runtime<a class="headerlink" href="#scaling-consumers-at-runtime" title="Permanent link">&para;</a></h3>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1">// Scale up — adds more Timer threads for this queue</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">ignisClient</span><span class="p">.</span><span class="na">increaseConsumers</span><span class="p">(</span><span class="s">&quot;orders&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">);</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1">// Scale down — cancels Timer threads for this queue</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">ignisClient</span><span class="p">.</span><span class="na">decreaseConsumers</span><span class="p">(</span><span class="s">&quot;orders&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span>
+</span></code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The maximum number of consumers per queue is <strong>100</strong> (<code>MAX_CONSUMERS_ALLOWED</code>). Attempting to exceed this limit will be silently capped. Each consumer is a full <code>Timer</code> thread, so overprovisioning wastes OS threads.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Fixed-delay scheduling means the 1-second gap is measured <strong>after</strong> the task completes, not from the start of the previous run. If a task takes 30 seconds to drain the magazine, the next invocation starts 31 seconds after the previous one began.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For high-throughput queues, increase the consumer count rather than trying to speed up individual consumers. Each consumer processes sequentially within its thread, so parallelism comes from having multiple consumers on the same queue (each pulling from different shards or competing for the same shard).</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025-2026 PhonePe India Pvt. Ltd.
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.tracking","navigation.path","navigation.tabs","navigation.tabs.sticky","navigation.expand","navigation.top","navigation.indexes","toc.follow","content.code.copy","content.code.annotate","search.suggest","search.highlight","search.share"],"search":"../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.91a19a9e.min.js"></script>
+      
+    
+  </body>
+</html>

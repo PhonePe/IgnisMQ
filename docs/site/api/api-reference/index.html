@@ -1,0 +1,3412 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://phonepe.github.io/ignisMQ/api/api-reference/">
+      
+      
+        <link rel="prev" href="../../architecture/">
+      
+      
+        <link rel="next" href="../configuration/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="zensical-0.0.32">
+    
+    
+      
+        <title>API Reference - IgnisMQ</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.53a7feaf.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,a=__md_scope)=>JSON.parse(t.getItem(a.pathname+"."+e)),__md_set=(e,t,a=localStorage,_=__md_scope)=>{try{a.setItem(_.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#api-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="IgnisMQ" class="md-header__button md-logo" aria-label="IgnisMQ" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            IgnisMQ
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/PhonePe/ignisMQ" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../core-concepts/" class="md-tabs__link">
+        
+  
+  Core Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../usage/" class="md-tabs__link">
+        
+  
+  Usage Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="././" class="md-tabs__link">
+          
+  
+  API
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../backends/aerospike/" class="md-tabs__link">
+          
+  
+  Storage Backends
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../references/" class="md-tabs__link">
+        
+  
+  References
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="IgnisMQ" class="md-nav__button md-logo" aria-label="IgnisMQ" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+
+    </a>
+    IgnisMQ
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/PhonePe/ignisMQ" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#iqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IQueue
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IQueue">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ignismqmanager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IgnisMQManager
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IgnisMQManager">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#initialisemessagehandlers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        initialiseMessageHandlers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#getqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        getQueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#getallqueues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        getAllQueues
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#getallqueuesfromdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        getAllQueuesFromDB
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#createqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        createQueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deactivatequeue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deactivateQueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#increaseconsumers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        increaseConsumers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decreaseconsumers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        decreaseConsumers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scheduleshoveling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        scheduleShoveling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sweepqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sweepQueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refreshqueues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        refreshQueues
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gettaskinitializer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        getTaskInitializer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#messagehandlerm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MessageHandler&lt;M>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MessageHandler&lt;M&gt;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#createqueuerequest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CreateQueueRequest
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CreateQueueRequest">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shovelconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ShovelConfig
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ShovelConfig">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#batchingconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BatchingConfig
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BatchingConfig">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timetolive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimeToLive
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TimeToLive">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timeunit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimeUnit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queuemetadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueMetaData
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QueueMetaData">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queueentity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueEntity
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QueueEntity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basestorage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BaseStorage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BaseStorage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aerospikestorage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AerospikeStorage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AerospikeStorage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#constructor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storageclientt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StorageClient\&lt;T>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StorageClient\&lt;T&gt;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aerospikestoreclient" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AerospikeStoreClient
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AerospikeStoreClient">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructor_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queueservice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueService
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QueueService">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ignismqbundlet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IgnisMQBundle\&lt;T>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IgnisMQBundle\&lt;T&gt;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#abstract-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Abstract Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ignismqexception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IgnisMQException
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IgnisMQException">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#static-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Static Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errorcode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ErrorCode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queuestat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueStat
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QueueStat">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#constants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constants
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../error-codes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Error Codes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage Backends
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Storage Backends
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backends/aerospike/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aerospike
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../references/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    References
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#iqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IQueue
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IQueue">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ignismqmanager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IgnisMQManager
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IgnisMQManager">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#initialisemessagehandlers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        initialiseMessageHandlers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#getqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        getQueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#getallqueues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        getAllQueues
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#getallqueuesfromdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        getAllQueuesFromDB
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#createqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        createQueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deactivatequeue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deactivateQueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#increaseconsumers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        increaseConsumers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decreaseconsumers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        decreaseConsumers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scheduleshoveling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        scheduleShoveling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sweepqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sweepQueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refreshqueues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        refreshQueues
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gettaskinitializer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        getTaskInitializer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#messagehandlerm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MessageHandler&lt;M>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MessageHandler&lt;M&gt;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#createqueuerequest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CreateQueueRequest
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CreateQueueRequest">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shovelconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ShovelConfig
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ShovelConfig">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#batchingconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BatchingConfig
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BatchingConfig">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timetolive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimeToLive
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TimeToLive">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timeunit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimeUnit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queuemetadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueMetaData
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QueueMetaData">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queueentity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueEntity
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QueueEntity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basestorage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BaseStorage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BaseStorage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aerospikestorage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AerospikeStorage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AerospikeStorage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#constructor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storageclientt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StorageClient\&lt;T>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StorageClient\&lt;T&gt;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aerospikestoreclient" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AerospikeStoreClient
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AerospikeStoreClient">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructor_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queueservice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueService
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QueueService">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ignismqbundlet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IgnisMQBundle\&lt;T>
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IgnisMQBundle\&lt;T&gt;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#abstract-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Abstract Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ignismqexception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IgnisMQException
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IgnisMQException">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#static-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Static Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errorcode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ErrorCode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#queuestat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueStat
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QueueStat">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#constants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constants
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="././" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    API
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
+<p>Complete reference for all public classes, interfaces, methods, and fields in IgnisMQ.</p>
+<hr />
+<h2 id="iqueue">IQueue<a class="headerlink" href="#iqueue" title="Permanent link">&para;</a></h2>
+<p>The primary interface for interacting with a queue. Generic parameter <code>M</code> is the message type.</p>
+<h3 id="methods">Methods<a class="headerlink" href="#methods" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>publish</code></td>
+<td><code>boolean publish(M message) throws JsonProcessingException</code></td>
+<td>Serializes the message to JSON and loads it into the Magazine. Returns <code>true</code> on success.</td>
+</tr>
+<tr>
+<td><code>getUnconsumedCount</code></td>
+<td><code>long getUnconsumedCount()</code></td>
+<td>Returns <code>publishedCount - consumedCount</code>, floored at <code>0</code>.</td>
+</tr>
+<tr>
+<td><code>getMetaData</code></td>
+<td><code>QueueMetaData getMetaData()</code></td>
+<td>Returns a snapshot of published, consumed, sidelined, and shovelled counts.</td>
+</tr>
+<tr>
+<td><code>shovel</code></td>
+<td><code>void shovel(int concurrency)</code></td>
+<td>Triggers a one-shot shovel operation with auto-delete enabled.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ignismqmanager">IgnisMQManager<a class="headerlink" href="#ignismqmanager" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="kd">class</span> <span class="nc">IgnisMQManager</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">Managed</span>
+</span></code></pre></div>
+<p>Central manager for all queue lifecycle operations. Implements Dropwizard <code>Managed</code> for start/stop hooks.</p>
+<h3 id="constructors">Constructors<a class="headerlink" href="#constructors" title="Permanent link">&para;</a></h3>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kd">public</span><span class="w"> </span><span class="nf">IgnisMQManager</span><span class="p">(</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="n">String</span><span class="w"> </span><span class="n">clientId</span><span class="p">,</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="n">BaseStorage</span><span class="w"> </span><span class="n">storage</span><span class="p">,</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="n">ObjectMapper</span><span class="w"> </span><span class="n">mapper</span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="n">MetricRegistry</span><span class="w"> </span><span class="n">metricRegistry</span><span class="p">,</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="n">CuratorFramework</span><span class="w"> </span><span class="n">curatorFramework</span><span class="p">,</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="n">String</span><span class="w"> </span><span class="n">farmId</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span>
+</span></code></pre></div>
+<p>Creates the manager without an externally provided <code>StorageClient</code>. The client is constructed internally from the storage configuration.</p>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kd">public</span><span class="w"> </span><span class="nf">IgnisMQManager</span><span class="p">(</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="n">String</span><span class="w"> </span><span class="n">clientId</span><span class="p">,</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="n">BaseStorage</span><span class="w"> </span><span class="n">storage</span><span class="p">,</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="n">ObjectMapper</span><span class="w"> </span><span class="n">mapper</span><span class="p">,</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="n">MetricRegistry</span><span class="w"> </span><span class="n">metricRegistry</span><span class="p">,</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="n">StorageClient</span><span class="w"> </span><span class="n">storageClient</span><span class="p">,</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="n">CuratorFramework</span><span class="w"> </span><span class="n">curatorFramework</span><span class="p">,</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="n">String</span><span class="w"> </span><span class="n">farmId</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span>
+</span></code></pre></div>
+<p>Creates the manager with an externally managed <code>StorageClient</code>, allowing the caller to share or reuse the underlying database connection.</p>
+<h3 id="methods_1">Methods<a class="headerlink" href="#methods_1" title="Permanent link">&para;</a></h3>
+<h4 id="initialisemessagehandlers">initialiseMessageHandlers<a class="headerlink" href="#initialisemessagehandlers" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">initialiseMessageHandlers</span><span class="p">(</span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">Entry</span><span class="o">&lt;</span><span class="n">Class</span><span class="p">,</span><span class="w"> </span><span class="n">MessageHandler</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">messageHandlers</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Registers all message handler mappings. <strong>Must be called exactly once</strong> before any call to <code>createQueue</code>. Subsequent calls will fail. Internally calls <code>refreshQueues()</code> to sync state from the database and registers a <code>QueueStatGauge</code> for metrics.</p>
+<blockquote>
+<p>[!WARNING]
+Calling this method more than once will throw an exception. Ensure all handlers are collected into a single map before invoking.</p>
+</blockquote>
+<hr />
+<h4 id="getqueue">getQueue<a class="headerlink" href="#getqueue" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="o">&lt;</span><span class="n">M</span><span class="o">&gt;</span><span class="w"> </span><span class="n">IQueue</span><span class="o">&lt;</span><span class="n">M</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">getQueue</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">name</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Returns the in-memory <code>IQueue</code> instance for the given queue name.</p>
+<p><strong>Throws:</strong> <code>IgnisMQException</code> with <code>ErrorCode.QUEUE_NOT_FOUND</code> if no queue with that name exists.</p>
+<hr />
+<h4 id="getallqueues">getAllQueues<a class="headerlink" href="#getallqueues" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">IQueue</span><span class="o">&lt;?&gt;&gt;</span><span class="w"> </span><span class="nf">getAllQueues</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Returns the full in-memory map of queue name to <code>IQueue</code> instance.</p>
+<hr />
+<h4 id="getallqueuesfromdb">getAllQueuesFromDB<a class="headerlink" href="#getallqueuesfromdb" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">Set</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">getAllQueuesFromDB</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Queries Aerospike and returns the set of all active queue names persisted in the database.</p>
+<hr />
+<h4 id="createqueue">createQueue<a class="headerlink" href="#createqueue" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">createQueue</span><span class="p">(</span><span class="n">CreateQueueRequest</span><span class="w"> </span><span class="n">queueRequest</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span>
+</span></code></pre></div>
+<p>Validates the request, creates the underlying Magazine structure, and persists a <code>QueueEntity</code> to the database. Starts consumers and schedules sweeps/shovels as configured.</p>
+<p><strong>Throws:</strong> <code>IgnisMQException</code> with <code>ErrorCode.QUEUE_ALREADY_EXISTS</code> if a queue with the same name is already active.</p>
+<hr />
+<h4 id="deactivatequeue">deactivateQueue<a class="headerlink" href="#deactivatequeue" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">deactivateQueue</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">queueName</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Stops all consumers for the queue, removes it from the in-memory map, and sets <code>active=false</code> in the database.</p>
+<blockquote>
+<p>[!CAUTION]
+This operation is <strong>irreversible</strong>. The queue cannot be reactivated after deactivation.</p>
+</blockquote>
+<hr />
+<h4 id="increaseconsumers">increaseConsumers<a class="headerlink" href="#increaseconsumers" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">increaseConsumers</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">queueName</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">count</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Adds <code>count</code> new consumer timers for the specified queue and updates the concurrency value in the database.</p>
+<hr />
+<h4 id="decreaseconsumers">decreaseConsumers<a class="headerlink" href="#decreaseconsumers" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">decreaseConsumers</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">queueName</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">count</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Stops <code>count</code> consumer timers for the specified queue and updates the concurrency value in the database.</p>
+<hr />
+<h4 id="scheduleshoveling">scheduleShoveling<a class="headerlink" href="#scheduleshoveling" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">scheduleShoveling</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">queueName</span><span class="p">,</span><span class="w"> </span><span class="n">ShovelConfig</span><span class="w"> </span><span class="n">shovelConfig</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Schedules periodic shoveling for the queue using the interval and concurrency defined in <code>shovelConfig</code>.</p>
+<hr />
+<h4 id="sweepqueue">sweepQueue<a class="headerlink" href="#sweepqueue" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">sweepQueue</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">queueName</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Manually triggers a sweep operation for the specified queue.</p>
+<hr />
+<h4 id="refreshqueues">refreshQueues<a class="headerlink" href="#refreshqueues" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">refreshQueues</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Synchronizes the in-memory queue map with the persisted state in the database. Creates or removes queue instances as needed.</p>
+<hr />
+<h4 id="gettaskinitializer">getTaskInitializer<a class="headerlink" href="#gettaskinitializer" title="Permanent link">&para;</a></h4>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">TaskInitializer</span><span class="w"> </span><span class="nf">getTaskInitializer</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Returns the internal <code>TaskInitializer</code> instance used for scheduling consumer and sweep tasks.</p>
+<hr />
+<h2 id="messagehandlerm">MessageHandler&lt;M&gt;<a class="headerlink" href="#messagehandlerm" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">interface</span> <span class="nc">MessageHandler</span><span class="o">&lt;</span><span class="n">M</span><span class="o">&gt;</span>
+</span></code></pre></div>
+<p>User-implemented interface for processing messages consumed from a queue.</p>
+<h3 id="methods_2">Methods<a class="headerlink" href="#methods_2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>handle</code> (single)</td>
+<td><code>boolean handle(M message) throws Exception</code></td>
+<td>Processes a single message. Return <code>true</code> to mark as consumed, <code>false</code> to sideline the message.</td>
+</tr>
+<tr>
+<td><code>handle</code> (batch)</td>
+<td><code>boolean handle(List&lt;M&gt; messages) throws Exception</code></td>
+<td>Processes a batch of messages. Return <code>true</code> to mark all as consumed, <code>false</code> to sideline <strong>all</strong> messages in the batch.</td>
+</tr>
+<tr>
+<td><code>getIgnorableExceptions</code></td>
+<td><code>Set&lt;Class&lt;?&gt;&gt; getIgnorableExceptions()</code></td>
+<td>Returns exception types that should <strong>not</strong> cause sidelining. When a thrown exception matches one of these types, the message is deleted instead of sidelined.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="createqueuerequest">CreateQueueRequest<a class="headerlink" href="#createqueuerequest" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="nd">@Data</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">CreateQueueRequest</span>
+</span></code></pre></div>
+<p>Request object for creating a new queue via <code>IgnisMQManager.createQueue()</code>.</p>
+<h3 id="fields">Fields<a class="headerlink" href="#fields" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Constraints</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>String</code></td>
+<td>—</td>
+<td><code>@NotBlank</code></td>
+<td>Unique queue name.</td>
+</tr>
+<tr>
+<td><code>shards</code></td>
+<td><code>Integer</code></td>
+<td><code>32</code></td>
+<td><code>@Min(1) @Max(512)</code></td>
+<td>Number of shards for the underlying Magazine.</td>
+</tr>
+<tr>
+<td><code>messageExpiry</code></td>
+<td><code>TimeToLive</code></td>
+<td>2 days</td>
+<td>Must be valid</td>
+<td>TTL for individual messages.</td>
+</tr>
+<tr>
+<td><code>queueExpiry</code></td>
+<td><code>TimeToLive</code></td>
+<td>2 days</td>
+<td>Must be valid</td>
+<td>TTL for the queue itself.</td>
+</tr>
+<tr>
+<td><code>concurrency</code></td>
+<td><code>int</code></td>
+<td>—</td>
+<td><code>@Min(1) @Max(100)</code></td>
+<td>Number of consumer threads.</td>
+</tr>
+<tr>
+<td><code>messageHandlerType</code></td>
+<td><code>String</code></td>
+<td>—</td>
+<td><code>@NotNull</code></td>
+<td>Key into the handler map registered via <code>initialiseMessageHandlers</code>.</td>
+</tr>
+<tr>
+<td><code>shovelConfig</code></td>
+<td><code>ShovelConfig</code></td>
+<td><code>null</code></td>
+<td><code>@Valid</code>, optional</td>
+<td>If provided, enables periodic shoveling.</td>
+</tr>
+<tr>
+<td><code>sweepDurationInMins</code></td>
+<td><code>int</code></td>
+<td><code>20</code></td>
+<td><code>@Min(5) @Max(300)</code></td>
+<td>Interval in minutes between sweep runs.</td>
+</tr>
+<tr>
+<td><code>batchingConfig</code></td>
+<td><code>BatchingConfig</code></td>
+<td><code>null</code></td>
+<td><code>@Valid</code>, optional</td>
+<td>If <code>null</code>, single-message mode is used. If set, enables batch consumption.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>[!IMPORTANT]
+Validation requires <code>queueExpiry &gt;= messageExpiry</code>. Both <code>queueExpiry</code> and <code>messageExpiry</code> must resolve to valid durations within the allowed maximum.</p>
+</blockquote>
+<hr />
+<h2 id="shovelconfig">ShovelConfig<a class="headerlink" href="#shovelconfig" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nd">@Data</span><span class="w"> </span><span class="nd">@Builder</span><span class="w"> </span><span class="nd">@AllArgsConstructor</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">ShovelConfig</span>
+</span></code></pre></div>
+<p>Configuration for periodic shoveling of sidelined messages back into the queue.</p>
+<h3 id="fields_1">Fields<a class="headerlink" href="#fields_1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Constraints</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timeIntervalInSecs</code></td>
+<td><code>int</code></td>
+<td><code>600</code> (10 min)</td>
+<td><code>@Max(86400)</code></td>
+<td>Interval in seconds between shovel runs.</td>
+</tr>
+<tr>
+<td><code>concurrency</code></td>
+<td><code>int</code></td>
+<td><code>4</code></td>
+<td><code>@Min(1) @Max(50)</code></td>
+<td>Number of parallel shovel threads.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="batchingconfig">BatchingConfig<a class="headerlink" href="#batchingconfig" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="nd">@Data</span><span class="w"> </span><span class="nd">@Builder</span><span class="w"> </span><span class="nd">@AllArgsConstructor</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">BatchingConfig</span>
+</span></code></pre></div>
+<p>Configuration for batch message consumption.</p>
+<h3 id="fields_2">Fields<a class="headerlink" href="#fields_2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Constraints</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>maxBatchSize</code></td>
+<td><code>int</code></td>
+<td><code>2</code></td>
+<td><code>@Min(2) @Max(200000)</code></td>
+<td>Maximum number of messages per batch.</td>
+</tr>
+<tr>
+<td><code>maxWaitTimeInSecs</code></td>
+<td><code>int</code></td>
+<td><code>1</code></td>
+<td><code>@Min(1) @Max(300)</code></td>
+<td>Maximum time in seconds to wait for a full batch before dispatching.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="timetolive">TimeToLive<a class="headerlink" href="#timetolive" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nd">@Getter</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">TimeToLive</span>
+</span></code></pre></div>
+<p>Represents a duration with a unit, used for message and queue expiry.</p>
+<h3 id="fields_3">Fields<a class="headerlink" href="#fields_3" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Constraints</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timeUnit</code></td>
+<td><code>TimeUnit</code></td>
+<td><code>@NotNull</code></td>
+<td>The unit of time.</td>
+</tr>
+<tr>
+<td><code>duration</code></td>
+<td><code>int</code></td>
+<td><code>@Min(1)</code></td>
+<td>The numeric duration value.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods_3">Methods<a class="headerlink" href="#methods_3" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>toSeconds</code></td>
+<td><code>int toSeconds()</code></td>
+<td>Converts the duration to seconds based on <code>timeUnit</code>.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>[!NOTE]
+Maximum allowed value after conversion is <strong>31,536,000 seconds</strong> (1 year).</p>
+</blockquote>
+<hr />
+<h2 id="timeunit">TimeUnit<a class="headerlink" href="#timeunit" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">enum</span><span class="w"> </span><span class="n">TimeUnit</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">    </span><span class="n">MINUTE</span><span class="p">,</span>
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">    </span><span class="n">HOUR</span><span class="p">,</span>
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="w">    </span><span class="n">DAY</span>
+</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="p">}</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Conversion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MINUTE</code></td>
+<td><code>duration * 60</code></td>
+</tr>
+<tr>
+<td><code>HOUR</code></td>
+<td><code>duration * 3600</code></td>
+</tr>
+<tr>
+<td><code>DAY</code></td>
+<td><code>duration * 86400</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="queuemetadata">QueueMetaData<a class="headerlink" href="#queuemetadata" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nd">@Data</span><span class="w"> </span><span class="nd">@Builder</span><span class="w"> </span><span class="nd">@AllArgsConstructor</span><span class="w"> </span><span class="nd">@NoArgsConstructor</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">QueueMetaData</span>
+</span></code></pre></div>
+<h3 id="fields_4">Fields<a class="headerlink" href="#fields_4" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>published</code></td>
+<td><code>long</code></td>
+<td>Total messages published.</td>
+</tr>
+<tr>
+<td><code>consumed</code></td>
+<td><code>long</code></td>
+<td>Total messages consumed.</td>
+</tr>
+<tr>
+<td><code>sidelined</code></td>
+<td><code>long</code></td>
+<td>Total messages sidelined.</td>
+</tr>
+<tr>
+<td><code>shovelled</code></td>
+<td><code>long</code></td>
+<td>Total messages shovelled back into the queue.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="queueentity">QueueEntity<a class="headerlink" href="#queueentity" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nd">@Data</span><span class="w"> </span><span class="nd">@Builder</span><span class="w"> </span><span class="nd">@AllArgsConstructor</span><span class="w"> </span><span class="nd">@NoArgsConstructor</span>
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">QueueEntity</span>
+</span></code></pre></div>
+<p>Persistent representation of a queue stored in Aerospike.</p>
+<h3 id="fields_5">Fields<a class="headerlink" href="#fields_5" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>messageHandlerType</code></td>
+<td><code>String</code></td>
+<td>Key for the registered message handler.</td>
+</tr>
+<tr>
+<td><code>shards</code></td>
+<td><code>int</code></td>
+<td>Number of shards.</td>
+</tr>
+<tr>
+<td><code>queueExpiry</code></td>
+<td><code>TimeToLive</code></td>
+<td>Queue-level TTL.</td>
+</tr>
+<tr>
+<td><code>messageExpiry</code></td>
+<td><code>TimeToLive</code></td>
+<td>Message-level TTL.</td>
+</tr>
+<tr>
+<td><code>concurrency</code></td>
+<td><code>int</code></td>
+<td>Number of consumer threads.</td>
+</tr>
+<tr>
+<td><code>shovelConcurrency</code></td>
+<td><code>int</code></td>
+<td>Number of shovel threads.</td>
+</tr>
+<tr>
+<td><code>shovelTimeIntervalInSecs</code></td>
+<td><code>int</code></td>
+<td>Shovel interval in seconds.</td>
+</tr>
+<tr>
+<td><code>createdAt</code></td>
+<td><code>long</code></td>
+<td>Creation timestamp (epoch millis).</td>
+</tr>
+<tr>
+<td><code>active</code></td>
+<td><code>boolean</code></td>
+<td>Whether the queue is active.</td>
+</tr>
+<tr>
+<td><code>sweepPointers</code></td>
+<td><code>Map</code></td>
+<td>Current sweep cursor positions per shard.</td>
+</tr>
+<tr>
+<td><code>sidelineSweepPointers</code></td>
+<td><code>Map</code></td>
+<td>Current sideline sweep cursor positions per shard.</td>
+</tr>
+<tr>
+<td><code>sweptCounter</code></td>
+<td><code>long</code></td>
+<td>Total messages swept.</td>
+</tr>
+<tr>
+<td><code>sidelineSweptCounter</code></td>
+<td><code>long</code></td>
+<td>Total sidelined messages swept.</td>
+</tr>
+<tr>
+<td><code>sweepDuration</code></td>
+<td><code>int</code></td>
+<td>Sweep interval in minutes.</td>
+</tr>
+<tr>
+<td><code>batchingConfig</code></td>
+<td><code>BatchingConfig</code></td>
+<td>Batching configuration, or <code>null</code> for single-message mode.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="basestorage">BaseStorage<a class="headerlink" href="#basestorage" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">abstract</span><span class="w"> </span><span class="kd">sealed</span><span class="w"> </span><span class="kd">class</span> <span class="nc">BaseStorage</span><span class="w"> </span><span class="kd">permits</span><span class="w"> </span><span class="n">AerospikeStorage</span>
+</span></code></pre></div>
+<p>Abstract base for storage backends.</p>
+<h3 id="fields_6">Fields<a class="headerlink" href="#fields_6" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Constraints</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>storageType</code></td>
+<td><code>StorageType</code></td>
+<td><code>@NotNull</code></td>
+<td>The type of storage backend.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods_4">Methods<a class="headerlink" href="#methods_4" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>accept</code></td>
+<td><code>abstract &lt;T&gt; T accept(StorageVisitor&lt;T&gt; visitor)</code></td>
+<td>Visitor pattern dispatch for storage-specific operations.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="aerospikestorage">AerospikeStorage<a class="headerlink" href="#aerospikestorage" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="kd">class</span> <span class="nc">AerospikeStorage</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">BaseStorage</span>
+</span></code></pre></div>
+<p>Aerospike-backed storage implementation.</p>
+<h3 id="fields_7">Fields<a class="headerlink" href="#fields_7" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>configuration</code></td>
+<td><code>AerospikeConfiguration</code></td>
+<td>Aerospike cluster configuration.</td>
+</tr>
+<tr>
+<td><code>namespace</code></td>
+<td><code>String</code></td>
+<td>Aerospike namespace to use.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="constructor">Constructor<a class="headerlink" href="#constructor" title="Permanent link">&para;</a></h3>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="kd">public</span><span class="w"> </span><span class="nf">AerospikeStorage</span><span class="p">(</span><span class="n">AerospikeConfiguration</span><span class="w"> </span><span class="n">configuration</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">namespace</span><span class="p">)</span>
+</span></code></pre></div>
+<hr />
+<h2 id="storageclientt">StorageClient\&lt;T&gt;<a class="headerlink" href="#storageclientt" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">interface</span> <span class="nc">StorageClient</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span>
+</span></code></pre></div>
+<p>Generic interface for obtaining a database client handle.</p>
+<h3 id="methods_5">Methods<a class="headerlink" href="#methods_5" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getClient</code></td>
+<td><code>T getClient()</code></td>
+<td>Returns the underlying client instance.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="aerospikestoreclient">AerospikeStoreClient<a class="headerlink" href="#aerospikestoreclient" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="kd">class</span> <span class="nc">AerospikeStoreClient</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">StorageClient</span><span class="o">&lt;</span><span class="n">IAerospikeClient</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Managed</span>
+</span></code></pre></div>
+<p>Aerospike client wrapper that auto-starts on construction.</p>
+<h3 id="constructor_1">Constructor<a class="headerlink" href="#constructor_1" title="Permanent link">&para;</a></h3>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="kd">public</span><span class="w"> </span><span class="nf">AerospikeStoreClient</span><span class="p">(</span><span class="n">AerospikeConfiguration</span><span class="w"> </span><span class="n">aerospikeConfiguration</span><span class="p">)</span>
+</span></code></pre></div>
+<blockquote>
+<p>[!NOTE]
+The client starts automatically on construction. Write policy is configured with <code>COMMIT_ALL</code> commit level and <code>MASTER_PROLES</code> replica policy.</p>
+</blockquote>
+<hr />
+<h2 id="queueservice">QueueService<a class="headerlink" href="#queueservice" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">sealed</span><span class="w"> </span><span class="kd">interface</span> <span class="nc">QueueService</span><span class="w"> </span><span class="kd">permits</span><span class="w"> </span><span class="n">AerospikeQueueService</span>
+</span></code></pre></div>
+<p>Internal service interface for queue persistence operations.</p>
+<h3 id="methods_6">Methods<a class="headerlink" href="#methods_6" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>exists</code></td>
+<td>Checks if a queue exists in storage.</td>
+</tr>
+<tr>
+<td><code>get</code></td>
+<td>Retrieves a <code>QueueEntity</code> by name.</td>
+</tr>
+<tr>
+<td><code>store</code></td>
+<td>Persists a new <code>QueueEntity</code>.</td>
+</tr>
+<tr>
+<td><code>updateState</code></td>
+<td>Updates the active state of a queue.</td>
+</tr>
+<tr>
+<td><code>updateConcurrency</code></td>
+<td>Updates consumer concurrency in storage.</td>
+</tr>
+<tr>
+<td><code>updateShovelConfig</code></td>
+<td>Updates shovel configuration in storage.</td>
+</tr>
+<tr>
+<td><code>getQueues</code></td>
+<td>Returns all queue entities from storage.</td>
+</tr>
+<tr>
+<td><code>addFireTimestamp</code></td>
+<td>Records a fire timestamp for audit/tracking.</td>
+</tr>
+<tr>
+<td><code>sweep</code></td>
+<td>Executes a sweep operation in storage.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ignismqbundlet">IgnisMQBundle\&lt;T&gt;<a class="headerlink" href="#ignismqbundlet" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">abstract</span><span class="w"> </span><span class="kd">class</span> <span class="nc">IgnisMQBundle</span><span class="o">&lt;</span><span class="n">T</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Configuration</span><span class="o">&gt;</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">ConfiguredBundle</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span>
+</span></code></pre></div>
+<p>Dropwizard bundle for integrating IgnisMQ into a Dropwizard application.</p>
+<h3 id="abstract-methods">Abstract Methods<a class="headerlink" href="#abstract-methods" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getStorage</code></td>
+<td><code>BaseStorage getStorage(T config)</code></td>
+<td>Provide the storage backend from app config.</td>
+</tr>
+<tr>
+<td><code>getClientId</code></td>
+<td><code>String getClientId(T config)</code></td>
+<td>Provide the client identifier from app config.</td>
+</tr>
+<tr>
+<td><code>getFarmId</code></td>
+<td><code>String getFarmId(T config)</code></td>
+<td>Provide the farm/cluster identifier from app config.</td>
+</tr>
+<tr>
+<td><code>getCuratorFramework</code></td>
+<td><code>CuratorFramework getCuratorFramework()</code></td>
+<td>Provide the ZooKeeper CuratorFramework instance.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods_7">Methods<a class="headerlink" href="#methods_7" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getIgnisMQManager</code></td>
+<td><code>IgnisMQManager getIgnisMQManager()</code></td>
+<td>Returns the initialized <code>IgnisMQManager</code> instance.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ignismqexception">IgnisMQException<a class="headerlink" href="#ignismqexception" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">IgnisMQException</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">RuntimeException</span>
+</span></code></pre></div>
+<h3 id="fields_8">Fields<a class="headerlink" href="#fields_8" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>errorCode</code></td>
+<td><code>ErrorCode</code></td>
+<td>The specific error code for this exception.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="static-methods">Static Methods<a class="headerlink" href="#static-methods" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>propagate</code></td>
+<td><code>static IgnisMQException propagate(Throwable t)</code></td>
+<td>Wraps a throwable as an <code>IgnisMQException</code>.</td>
+</tr>
+<tr>
+<td><code>propagate</code></td>
+<td><code>static IgnisMQException propagate(String message, Throwable t)</code></td>
+<td>Wraps with a custom message.</td>
+</tr>
+<tr>
+<td><code>propagate</code></td>
+<td><code>static IgnisMQException propagate(ErrorCode errorCode, Throwable t)</code></td>
+<td>Wraps with a specific error code.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="errorcode">ErrorCode<a class="headerlink" href="#errorcode" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">enum</span><span class="w"> </span><span class="n">ErrorCode</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>QUEUE_ALREADY_EXISTS</code></td>
+<td>A queue with the given name is already active.</td>
+</tr>
+<tr>
+<td><code>QUEUE_NOT_FOUND</code></td>
+<td>No queue exists with the given name.</td>
+</tr>
+<tr>
+<td><code>NOT_IMPLEMENTED</code></td>
+<td>Operation is not implemented for the current storage backend.</td>
+</tr>
+<tr>
+<td><code>AEROSPIKE_ERROR</code></td>
+<td>An error occurred in the Aerospike layer.</td>
+</tr>
+<tr>
+<td><code>INVALID_REQUEST</code></td>
+<td>The request failed validation.</td>
+</tr>
+<tr>
+<td><code>MAX_ALLOWED_CONSUMERS_EXCEEDED</code></td>
+<td>Consumer count exceeds the maximum of 100.</td>
+</tr>
+<tr>
+<td><code>INVALID_SHOVEL_TIME_INTERVAL</code></td>
+<td>Shovel interval exceeds 86,400 seconds.</td>
+</tr>
+<tr>
+<td><code>INVALID_MESSAGE_HANDLER</code></td>
+<td>The specified message handler type is not registered.</td>
+</tr>
+<tr>
+<td><code>INTERNAL_ERROR</code></td>
+<td>An unexpected internal error occurred.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="queuestat">QueueStat<a class="headerlink" href="#queuestat" title="Permanent link">&para;</a></h2>
+<div class="language-java highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="nd">@Data</span><span class="w"> </span><span class="nd">@Builder</span>
+</span><span id="__span-33-2"><a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">QueueStat</span>
+</span></code></pre></div>
+<h3 id="fields_9">Fields<a class="headerlink" href="#fields_9" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>String</code></td>
+<td>Queue name.</td>
+</tr>
+<tr>
+<td><code>active</code></td>
+<td><code>boolean</code></td>
+<td>Whether the queue is active.</td>
+</tr>
+<tr>
+<td><code>published</code></td>
+<td><code>long</code></td>
+<td>Total published count.</td>
+</tr>
+<tr>
+<td><code>consumed</code></td>
+<td><code>long</code></td>
+<td>Total consumed count.</td>
+</tr>
+<tr>
+<td><code>unConsumed</code></td>
+<td><code>long</code></td>
+<td>Unconsumed count (<code>published - consumed</code>).</td>
+</tr>
+<tr>
+<td><code>sidelined</code></td>
+<td><code>long</code></td>
+<td>Total sidelined count.</td>
+</tr>
+<tr>
+<td><code>shovelled</code></td>
+<td><code>long</code></td>
+<td>Total shovelled count.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="constants">Constants<a class="headerlink" href="#constants" title="Permanent link">&para;</a></h2>
+<p>All constants defined in <code>Constants.java</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DEFAULT_SHARDS</code></td>
+<td><code>32</code></td>
+<td>Default number of shards per queue.</td>
+</tr>
+<tr>
+<td><code>INITIAL_DELAY_IN_MS</code></td>
+<td><code>120000</code></td>
+<td>Initial delay before consumers start (2 minutes).</td>
+</tr>
+<tr>
+<td><code>WATCHER_INITIAL_DELAY_IN_MS</code></td>
+<td><code>60000</code></td>
+<td>Initial delay before the watcher starts (1 minute).</td>
+</tr>
+<tr>
+<td><code>DELAY_PERIOD_IN_MS</code></td>
+<td><code>1000</code></td>
+<td>Consumer polling interval (1 second).</td>
+</tr>
+<tr>
+<td><code>SHOVEL_DELAY_IN_MS</code></td>
+<td><code>10000</code></td>
+<td>Delay before first shovel run (10 seconds).</td>
+</tr>
+<tr>
+<td><code>DEFAULT_DURATION_DAY</code></td>
+<td><code>2</code></td>
+<td>Default TTL duration in days.</td>
+</tr>
+<tr>
+<td><code>MAX_ALLOWED_SHOVEL_TIME_INTERVAL_IN_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Maximum shovel interval (24 hours).</td>
+</tr>
+<tr>
+<td><code>MAX_DURATION_ALLOWED_IN_SECONDS</code></td>
+<td><code>31536000</code></td>
+<td>Maximum TTL duration (1 year).</td>
+</tr>
+<tr>
+<td><code>REFRESH_INTERVAL_IN_MS</code></td>
+<td><code>300000</code></td>
+<td>Queue refresh interval (5 minutes).</td>
+</tr>
+<tr>
+<td><code>MAX_CONSUMERS_ALLOWED</code></td>
+<td><code>100</code></td>
+<td>Maximum consumer threads per queue.</td>
+</tr>
+<tr>
+<td><code>TTL_FACTOR_FOR_QUEUE_EXPIRY</code></td>
+<td><code>2</code></td>
+<td>Multiplier applied to queue expiry for internal storage TTL.</td>
+</tr>
+<tr>
+<td><code>PARALLEL_FACTOR</code></td>
+<td><code>64</code></td>
+<td>Parallelism factor for internal operations.</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025-2026 PhonePe India Pvt. Ltd.
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.tracking","navigation.path","navigation.tabs","navigation.tabs.sticky","navigation.expand","navigation.top","navigation.indexes","toc.follow","content.code.copy","content.code.annotate","search.suggest","search.highlight","search.share"],"search":"../../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.91a19a9e.min.js"></script>
+      
+    
+  </body>
+</html>

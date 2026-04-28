@@ -1,0 +1,1913 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://phonepe.github.io/ignisMQ/architecture/">
+      
+      
+        <link rel="prev" href="../usage/">
+      
+      
+        <link rel="next" href="../api/api-reference/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="zensical-0.0.32">
+    
+    
+      
+        <title>Architecture - IgnisMQ</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.53a7feaf.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,a=__md_scope)=>JSON.parse(t.getItem(a.pathname+"."+e)),__md_set=(e,t,a=localStorage,_=__md_scope)=>{try{a.setItem(_.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#architecture" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="IgnisMQ" class="md-header__button md-logo" aria-label="IgnisMQ" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            IgnisMQ
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Architecture
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/PhonePe/ignisMQ" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="./.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../getting-started/" class="md-tabs__link">
+        
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../core-concepts/" class="md-tabs__link">
+        
+  
+  Core Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../usage/" class="md-tabs__link">
+        
+  
+  Usage Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="././" class="md-tabs__link">
+        
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../api/api-reference/" class="md-tabs__link">
+          
+  
+  API
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../backends/aerospike/" class="md-tabs__link">
+          
+  
+  Storage Backends
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../references/" class="md-tabs__link">
+        
+  
+  References
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="IgnisMQ" class="md-nav__button md-logo" aria-label="IgnisMQ" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+
+    </a>
+    IgnisMQ
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/PhonePe/ignisMQ" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="./.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-system-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. System Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-component-relationships" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Component Relationships
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-threading-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Threading Model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Threading Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#timer-schedule-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timer Schedule Summary
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-data-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Data Flow
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Data Flow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-publish-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Publish Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-consume-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Consume Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-shovel-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 Shovel Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-sweep-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 Sweep Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-sealed-type-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Sealed Type Hierarchy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-visitor-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Visitor Pattern
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Metrics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Metrics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#registered-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Registered Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queuestatgauge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueStatGauge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#functionmetrics-aspectj" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FunctionMetrics (AspectJ)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-zookeeper-node-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. ZooKeeper Node Structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/error-codes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Error Codes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage Backends
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Storage Backends
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/aerospike/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aerospike
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../references/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    References
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-system-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. System Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-component-relationships" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Component Relationships
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-threading-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Threading Model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Threading Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#timer-schedule-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timer Schedule Summary
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-data-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Data Flow
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Data Flow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-publish-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Publish Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-consume-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Consume Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-shovel-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 Shovel Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-sweep-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 Sweep Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-sealed-type-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Sealed Type Hierarchy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-visitor-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Visitor Pattern
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Metrics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Metrics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#registered-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Registered Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queuestatgauge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueueStatGauge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#functionmetrics-aspectj" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FunctionMetrics (AspectJ)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-zookeeper-node-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. ZooKeeper Node Structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h1>
+<p>This page provides a deep dive into the internal architecture of IgnisMQ — its components, threading model, data flows, type hierarchy, and operational mechanics.</p>
+<hr />
+<h2 id="1-system-overview">1. System Overview<a class="headerlink" href="#1-system-overview" title="Permanent link">&para;</a></h2>
+<p>IgnisMQ is structured in distinct layers, each with a clear responsibility.</p>
+<pre class="mermaid"><code>graph TB
+    subgraph Application Layer
+        A[IgnisMQBundle&lt;br/&gt;&lt;i&gt;Dropwizard Bundle&lt;/i&gt;]
+        B[IgnisMQManager&lt;br/&gt;&lt;i&gt;Queue Registry&lt;/i&gt;]
+    end
+
+    subgraph Queue Layer
+        C1[MagazineQueue #1]
+        C2[MagazineQueue #2]
+        CN[MagazineQueue #N]
+        subgraph "Each MagazineQueue"
+            MQ_MAIN[Main Magazine]
+            MQ_SIDE[Sideline Magazine]
+        end
+    end
+
+    subgraph Consumer Layer
+        D1[MagazineConsumerTask Timers]
+        D2[ShovelTask Timers]
+    end
+
+    subgraph Coordination Layer
+        E1[TaskInitializer]
+        E2[LeaderElector]
+        E3[Sweeper]
+        E4[ZooKeeper / Curator]
+    end
+
+    subgraph Storage Layer
+        F1[AerospikeQueueService]
+        F2[AerospikeStoreClient]
+        F3[(Aerospike)]
+    end
+
+    A --&gt;|creates| B
+    B --&gt;|holds| C1
+    B --&gt;|holds| C2
+    B --&gt;|holds| CN
+    C1 --&gt; D1
+    C1 --&gt; D2
+    E1 --&gt;|creates| E2
+    E1 --&gt;|creates| E3
+    E2 --&gt;|LeaderSelector| E4
+    E3 --&gt;|activate/deactivate| D1
+    C1 --&gt; F1
+    F1 --&gt; F2
+    F2 --&gt; F3</code></pre>
+<div class="admonition info">
+<p class="admonition-title">Layered Design</p>
+<p>Each layer only communicates with its immediate neighbours. The application layer never touches storage directly — it always goes through the queue abstraction.</p>
+</div>
+<hr />
+<h2 id="2-component-relationships">2. Component Relationships<a class="headerlink" href="#2-component-relationships" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>classDiagram
+    class IgnisMQBundle {
+        -IgnisMQManager manager
+        +run(config, environment)
+    }
+
+    class IgnisMQManager {
+        -ConcurrentHashMap~String, IQueue~ queues
+        +registerQueue(config, handler) IQueue
+        +getQueue(name) IQueue
+    }
+
+    class IQueue~M~ {
+        &lt;&lt;sealed interface&gt;&gt;
+        +publish(M message)
+        +publishWithDelay(M message, long delay)
+    }
+
+    class MagazineQueue~M~ {
+        -Magazine mainMagazine
+        -Magazine sidelineMagazine
+        -List~Timer~ consumerTimers
+        -List~Timer~ shovelTimers
+        -ObjectMapper objectMapper
+        +publish(M message)
+        +publishWithDelay(M message, long delay)
+    }
+
+    class Magazine {
+        -QueueService queueService
+        -String setName
+        +load(Record record)
+        +fire() Record
+        +delete(String id)
+    }
+
+    class MagazineConsumerTask {
+        -Magazine magazine
+        -Magazine sidelineMagazine
+        -QueueHandler handler
+        +run()
+    }
+
+    class ShovelTask {
+        -Magazine sidelineMagazine
+        -Magazine mainMagazine
+        +run()
+    }
+
+    class TaskInitializer {
+        -LeaderElector leaderElector
+        -Sweeper sweeper
+        +initialize()
+    }
+
+    class LeaderElector {
+        -LeaderSelector leaderSelector
+        -CuratorFramework curator
+        +takeLeadership()
+        +updateState()
+    }
+
+    class Sweeper {
+        &lt;&lt;implements LoadBalancer&gt;&gt;
+        -ExecutorService executorService
+        +activate()
+        +deactivate()
+        +run()
+    }
+
+    class QueueStatGauge {
+        &lt;&lt;CachedGauge~Map~&gt;&gt;
+        -timeout: 3 min
+        +loadValue() Map
+    }
+
+    class QueueService {
+        &lt;&lt;sealed interface&gt;&gt;
+        +load(Record record)
+        +fire(String set) Record
+        +delete(String set, String id)
+        +scan(String set, Filter filter) List
+    }
+
+    class AerospikeQueueService {
+        -AerospikeStoreClient client
+    }
+
+    class AerospikeStoreClient {
+        -IAerospikeClient aerospikeClient
+    }
+
+    IgnisMQBundle --&gt; IgnisMQManager : creates
+    IgnisMQManager o-- IQueue : ConcurrentHashMap
+    IQueue &lt;|.. MagazineQueue : permits
+    MagazineQueue *-- Magazine : main
+    MagazineQueue *-- Magazine : sideline
+    MagazineQueue *-- MagazineConsumerTask : consumerTimers
+    MagazineQueue *-- ShovelTask : shovelTimers
+    MagazineConsumerTask --&gt; Magazine : reads from main
+    MagazineConsumerTask --&gt; Magazine : writes to sideline
+    ShovelTask --&gt; Magazine : reads from sideline
+    ShovelTask --&gt; Magazine : writes to main
+    TaskInitializer --&gt; LeaderElector : creates
+    TaskInitializer --&gt; Sweeper : creates
+    LeaderElector ..&gt; Sweeper : activates/deactivates
+    Magazine --&gt; QueueService
+    QueueService &lt;|.. AerospikeQueueService : permits
+    AerospikeQueueService --&gt; AerospikeStoreClient
+    IgnisMQManager --&gt; QueueStatGauge : registers</code></pre>
+<div class="admonition note">
+<p class="admonition-title">ConcurrentHashMap</p>
+<p><code>IgnisMQManager</code> uses a <code>ConcurrentHashMap&lt;String, IQueue&gt;</code> to hold all registered queues. This allows thread-safe registration and lookup at runtime.</p>
+</div>
+<hr />
+<h2 id="3-threading-model">3. Threading Model<a class="headerlink" href="#3-threading-model" title="Permanent link">&para;</a></h2>
+<p>IgnisMQ relies heavily on <code>java.util.Timer</code> threads and a shared <code>ForkJoinPool</code> for background work.</p>
+<h3 id="timer-schedule-summary">Timer Schedule Summary<a class="headerlink" href="#timer-schedule-summary" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Count</th>
+<th>Initial Delay</th>
+<th>Period</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Consumer Timer</strong></td>
+<td>1 per concurrency slot</td>
+<td>2 min</td>
+<td>1 sec</td>
+<td><code>Timer.schedule(task, 120_000, 1_000)</code></td>
+</tr>
+<tr>
+<td><strong>Shovel Timer</strong></td>
+<td>1 per shovel concurrency</td>
+<td>2 min</td>
+<td><code>timeIntervalInSecs × 1000</code></td>
+<td>Configurable interval</td>
+</tr>
+<tr>
+<td><strong>Watcher Timer</strong></td>
+<td>1 global</td>
+<td>1 min</td>
+<td>5 min</td>
+<td><code>Timer.schedule(refreshQueues, 60_000, 300_000)</code></td>
+</tr>
+<tr>
+<td><strong>Sweeper Timer</strong></td>
+<td>1 global</td>
+<td>10 min</td>
+<td>15 min</td>
+<td><code>Timer.schedule(sweeper, 600_000, 900_000)</code></td>
+</tr>
+<tr>
+<td><strong>Leader Election</strong></td>
+<td>1 global</td>
+<td>—</td>
+<td>30 sec poll</td>
+<td><code>updateState()</code> polling loop</td>
+</tr>
+<tr>
+<td><strong>Sweeper Executor</strong></td>
+<td>ForkJoinPool</td>
+<td>—</td>
+<td>—</td>
+<td><code>parallelism = 64</code>, used for parallel queue sweeps</td>
+</tr>
+</tbody>
+</table>
+<pre class="mermaid"><code>gantt
+    title IgnisMQ Timer Startup Timeline
+    dateFormat ss
+    axisFormat %S s
+
+    section Consumers
+    Initial delay (2 min)           :done, c_delay, 00, 120s
+    Consumer fires every 1s         :active, c_run, after c_delay, 30s
+
+    section Shovels
+    Initial delay (2 min)           :done, s_delay, 00, 120s
+    Shovel fires every N sec        :active, s_run, after s_delay, 30s
+
+    section Watcher
+    Initial delay (1 min)           :done, w_delay, 00, 60s
+    Watcher fires every 5 min       :active, w_run, after w_delay, 30s
+
+    section Sweeper
+    Initial delay (10 min)          :done, sw_delay, 00, 600s
+    Sweeper fires every 15 min      :active, sw_run, after sw_delay, 30s
+
+    section Leader Election
+    Curator LeaderSelector           :active, le, 00, 30s
+    updateState poll (30s loop)      :active, le2, after le, 30s</code></pre>
+<div class="admonition warning">
+<p class="admonition-title">Thread Counts</p>
+<p>For a queue with <code>concurrency = 8</code> and <code>shovelConcurrency = 2</code>, IgnisMQ spawns <strong>10 Timer threads</strong> for that single queue alone. Plan your concurrency settings carefully.</p>
+</div>
+<hr />
+<h2 id="4-data-flow">4. Data Flow<a class="headerlink" href="#4-data-flow" title="Permanent link">&para;</a></h2>
+<h3 id="41-publish-flow">4.1 Publish Flow<a class="headerlink" href="#41-publish-flow" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant App as Application
+    participant IQ as IQueue.publish()
+    participant OM as ObjectMapper
+    participant Mag as Main Magazine
+    participant QS as AerospikeQueueService
+    participant AS as Aerospike
+
+    App-&gt;&gt;IQ: publish(message)
+    IQ-&gt;&gt;OM: writeValueAsString(message)
+    OM--&gt;&gt;IQ: JSON string
+    IQ-&gt;&gt;Mag: load(record)
+    Mag-&gt;&gt;QS: load(record)
+    QS-&gt;&gt;AS: put(key, bins)
+    AS--&gt;&gt;QS: ok
+    QS--&gt;&gt;Mag: ok
+    Mag--&gt;&gt;IQ: ok
+    IQ--&gt;&gt;App: void</code></pre>
+<h3 id="42-consume-flow">4.2 Consume Flow<a class="headerlink" href="#42-consume-flow" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant T as Timer
+    participant CT as MagazineConsumerTask
+    participant M as Main Magazine
+    participant QS as QueueService
+    participant AS as Aerospike
+    participant H as QueueHandler
+
+    T-&gt;&gt;CT: run()
+    CT-&gt;&gt;M: fire()
+    M-&gt;&gt;QS: fire(setName)
+    QS-&gt;&gt;AS: query(set, filter)
+    AS--&gt;&gt;QS: Record
+    QS--&gt;&gt;M: Record
+    M--&gt;&gt;CT: Record (with fireTS added)
+    CT-&gt;&gt;CT: addFireTimestamp(record)
+    CT-&gt;&gt;CT: deserialize(JSON → M)
+    CT-&gt;&gt;H: handle(message)
+
+    alt Success
+        H--&gt;&gt;CT: ok
+        CT-&gt;&gt;M: delete(id)
+        M-&gt;&gt;QS: delete(set, id)
+        QS-&gt;&gt;AS: delete(key)
+    else Failure
+        H--&gt;&gt;CT: exception
+        CT-&gt;&gt;CT: sidelineMagazine.load(record)
+        CT-&gt;&gt;M: delete(id)
+    end</code></pre>
+<h3 id="43-shovel-flow">4.3 Shovel Flow<a class="headerlink" href="#43-shovel-flow" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant T as Timer
+    participant ST as ShovelTask
+    participant SL as Sideline Magazine
+    participant M as Main Magazine
+    participant AS as Aerospike
+
+    T-&gt;&gt;ST: run()
+    ST-&gt;&gt;SL: fire()
+    SL-&gt;&gt;AS: query(sidelineSet)
+    AS--&gt;&gt;SL: Record
+    SL--&gt;&gt;ST: Record
+    ST-&gt;&gt;M: load(record)
+    M-&gt;&gt;AS: put(mainSet, record)
+    AS--&gt;&gt;M: ok
+    M--&gt;&gt;ST: ok
+    ST-&gt;&gt;SL: delete(id)
+    SL-&gt;&gt;AS: delete(sidelineSet, id)</code></pre>
+<h3 id="44-sweep-flow">4.4 Sweep Flow<a class="headerlink" href="#44-sweep-flow" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Timer
+    participant SW as Sweeper
+    participant FJP as ForkJoinPool (p=64)
+    participant QS as QueueService
+    participant AS as Aerospike
+    participant SL as Sideline Magazine
+
+    Timer-&gt;&gt;SW: run()
+    SW-&gt;&gt;QS: getQueues(active=true)
+    QS--&gt;&gt;SW: List&lt;QueueConfig&gt;
+
+    loop For each queue + shard (parallel via FJP)
+        SW-&gt;&gt;FJP: submit(sweepTask)
+        FJP-&gt;&gt;QS: scan(set, fireTS &lt; threshold)
+        QS-&gt;&gt;AS: scan with filter
+        AS--&gt;&gt;QS: stale Records
+        loop For each stale record
+            QS-&gt;&gt;SL: load(record) [reload to sideline]
+            QS-&gt;&gt;AS: delete(original record)
+        end
+    end</code></pre>
+<div class="admonition tip">
+<p class="admonition-title">Sweep Threshold</p>
+<p>The sweeper scans for records whose <code>fireTS</code> is older than a configurable threshold. These are messages that were dequeued (fire timestamp set) but never successfully processed or deleted — indicating a crashed consumer.</p>
+</div>
+<hr />
+<h2 id="5-sealed-type-hierarchy">5. Sealed Type Hierarchy<a class="headerlink" href="#5-sealed-type-hierarchy" title="Permanent link">&para;</a></h2>
+<p>IgnisMQ uses Java 17 sealed types to enforce a closed set of implementations.</p>
+<pre class="mermaid"><code>classDiagram
+    class IQueue~M~ {
+        &lt;&lt;sealed interface&gt;&gt;
+        +publish(M message)
+        +publishWithDelay(M message, long delay)
+    }
+    class MagazineQueue~M~ {
+        &lt;&lt;final&gt;&gt;
+    }
+    IQueue &lt;|.. MagazineQueue : permits
+
+    class QueueService {
+        &lt;&lt;sealed interface&gt;&gt;
+        +load(Record)
+        +fire(String set) Record
+        +delete(String set, String id)
+    }
+    class AerospikeQueueService {
+        &lt;&lt;final&gt;&gt;
+    }
+    QueueService &lt;|.. AerospikeQueueService : permits
+
+    class BaseStorage {
+        &lt;&lt;abstract sealed&gt;&gt;
+        +accept(StorageVisitor~T~ visitor) T
+    }
+    class AerospikeStorage {
+        &lt;&lt;final&gt;&gt;
+        -String namespace
+        -IAerospikeClient client
+    }
+    BaseStorage &lt;|-- AerospikeStorage : permits
+
+    class StorageClient~T~ {
+        &lt;&lt;interface&gt;&gt;
+        +get(Key key) T
+        +put(Key key, Bin... bins)
+        +delete(Key key)
+    }
+    class AerospikeStoreClient {
+        &lt;&lt;final&gt;&gt;
+    }
+    StorageClient &lt;|.. AerospikeStoreClient : implements</code></pre>
+<div class="admonition info">
+<p class="admonition-title">Why Sealed Types?</p>
+<p>Sealed types provide exhaustiveness guarantees at compile time. When you pattern-match on <code>IQueue</code>, the compiler knows the only possible implementation is <code>MagazineQueue</code>. This makes the codebase safer to extend — adding a new storage backend requires updating all <code>permits</code> clauses and their consumers.</p>
+</div>
+<hr />
+<h2 id="6-visitor-pattern">6. Visitor Pattern<a class="headerlink" href="#6-visitor-pattern" title="Permanent link">&para;</a></h2>
+<p>IgnisMQ uses the visitor pattern to decouple storage construction from storage type specifics.</p>
+<pre class="mermaid"><code>classDiagram
+    class BaseStorage {
+        &lt;&lt;abstract sealed&gt;&gt;
+        +accept(StorageVisitor~T~ visitor) T
+    }
+
+    class AerospikeStorage {
+        -String namespace
+        -IAerospikeClient client
+        +accept(StorageVisitor~T~ visitor) T
+    }
+
+    class StorageVisitor~T~ {
+        &lt;&lt;interface&gt;&gt;
+        +visit(AerospikeStorage storage) T
+    }
+
+    class MagazineStorageVisitor {
+        &lt;&lt;inner class of MagazineQueue&gt;&gt;
+        +visit(AerospikeStorage storage) Magazine
+    }
+
+    class QueueServiceVisitor {
+        &lt;&lt;used by IgnisMQManager&gt;&gt;
+        +visit(AerospikeStorage storage) QueueService
+    }
+
+    class StoreClientVisitor {
+        &lt;&lt;used by IgnisMQManager&gt;&gt;
+        +visit(AerospikeStorage storage) StorageClient
+    }
+
+    BaseStorage &lt;|-- AerospikeStorage : permits
+    StorageVisitor &lt;|.. MagazineStorageVisitor
+    StorageVisitor &lt;|.. QueueServiceVisitor
+    StorageVisitor &lt;|.. StoreClientVisitor
+    BaseStorage --&gt; StorageVisitor : accept()
+    AerospikeStorage ..|&gt; BaseStorage</code></pre>
+<p><strong>How it works:</strong></p>
+<ol>
+<li><code>IgnisMQManager</code> receives a <code>BaseStorage</code> instance (which is actually <code>AerospikeStorage</code>).</li>
+<li>To build a <code>QueueService</code>, it calls <code>storage.accept(new QueueServiceVisitor())</code>.</li>
+<li><code>AerospikeStorage.accept()</code> dispatches to <code>visitor.visit(this)</code>.</li>
+<li>The visitor has access to the concrete <code>AerospikeStorage</code> fields and constructs <code>AerospikeQueueService</code>.</li>
+</ol>
+<p>The same pattern is used inside <code>MagazineQueue</code> — <code>MagazineStorageVisitor</code> builds the <code>Magazine</code> instances from the concrete storage.</p>
+<div class="admonition note">
+<p class="admonition-title">Extensibility</p>
+<p>To add a new storage backend (e.g., Redis), you would: (1) create <code>RedisStorage extends BaseStorage</code>, (2) add <code>visit(RedisStorage)</code> to <code>StorageVisitor</code>, (3) implement the visitor methods. The sealed hierarchy ensures you cannot forget any call site.</p>
+</div>
+<hr />
+<h2 id="7-metrics">7. Metrics<a class="headerlink" href="#7-metrics" title="Permanent link">&para;</a></h2>
+<p>IgnisMQ integrates with Dropwizard Metrics for observability.</p>
+<h3 id="registered-metrics">Registered Metrics<a class="headerlink" href="#registered-metrics" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Metric Name Pattern</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>commands.{farmId}_{clientId}_{queueName}_publisher.all</code></td>
+<td>Timer</td>
+<td>Latency and throughput of publish operations</td>
+</tr>
+<tr>
+<td><code>commands.{farmId}_{clientId}_{queueName}_consumer.all</code></td>
+<td>Timer</td>
+<td>Latency and throughput of consume operations</td>
+</tr>
+<tr>
+<td><code>QueueStatGauge</code> per queue</td>
+<td>CachedGauge (3 min TTL)</td>
+<td>Reports <code>published</code>, <code>consumed</code>, <code>unconsumed</code>, <code>sidelined</code>, <code>shovelled</code> counts</td>
+</tr>
+</tbody>
+</table>
+<h3 id="queuestatgauge">QueueStatGauge<a class="headerlink" href="#queuestatgauge" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart LR
+    A[Metrics Reporter] --&gt;|getValue| B[QueueStatGauge]
+    B --&gt;|cached?| C{Cache fresh?&lt;br/&gt;TTL = 3 min}
+    C --&gt;|Yes| D[Return cached Map]
+    C --&gt;|No| E[loadValue]
+    E --&gt; F[Query Aerospike&lt;br/&gt;for queue stats]
+    F --&gt; G[Return Map with&lt;br/&gt;published, consumed,&lt;br/&gt;unconsumed, sidelined,&lt;br/&gt;shovelled]
+    G --&gt; D</code></pre>
+<h3 id="functionmetrics-aspectj">FunctionMetrics (AspectJ)<a class="headerlink" href="#functionmetrics-aspectj" title="Permanent link">&para;</a></h3>
+<p>IgnisMQ uses AspectJ weaving via the <code>@FunctionMetrics</code> annotation to automatically add timing metrics to annotated methods without manual instrumentation code.</p>
+<hr />
+<h2 id="8-zookeeper-node-structure">8. ZooKeeper Node Structure<a class="headerlink" href="#8-zookeeper-node-structure" title="Permanent link">&para;</a></h2>
+<p>IgnisMQ uses ZooKeeper (via Apache Curator) for leader election and work distribution among instances.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>/{clientId}-ignis-workers/
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  └── {clientId}/
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>      ├── loadbalancer-leader          ← LeaderSelector (persistent node)
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>      │                                  Only one instance holds leadership.
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>      │                                  Leader runs the Sweeper.
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>      │
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>      ├── loadbalancer/
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>      │   └── {balancerId}             ← Ephemeral sequential nodes.
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>      │                                  Each running IgnisMQ instance
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>      │                                  registers itself here.
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>      │
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>      └── readers/
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>          └── {partition}              ← Communicator nodes.
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>                                         Each partition stores the
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>                                         assigned balancerId, mapping
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>                                         partitions to instances.
+</span></code></pre></div>
+<pre class="mermaid"><code>graph TD
+    ROOT["/{clientId}-ignis-workers"] --&gt; CLIENT["/{clientId}"]
+    CLIENT --&gt; LEADER["loadbalancer-leader&lt;br/&gt;&lt;i&gt;LeaderSelector&lt;/i&gt;"]
+    CLIENT --&gt; LB["loadbalancer/"]
+    CLIENT --&gt; READERS["readers/"]
+
+    LB --&gt; LB1["{balancerId-001}&lt;br/&gt;&lt;i&gt;ephemeral&lt;/i&gt;"]
+    LB --&gt; LB2["{balancerId-002}&lt;br/&gt;&lt;i&gt;ephemeral&lt;/i&gt;"]
+    LB --&gt; LBN["{balancerId-N}&lt;br/&gt;&lt;i&gt;ephemeral&lt;/i&gt;"]
+
+    READERS --&gt; R1["{partition-0}&lt;br/&gt;assigned: balancerId-001"]
+    READERS --&gt; R2["{partition-1}&lt;br/&gt;assigned: balancerId-002"]
+    READERS --&gt; RN["{partition-N}&lt;br/&gt;assigned: balancerId-001"]
+
+    style LEADER fill:#f9a825,stroke:#f57f17
+    style LB1 fill:#81d4fa,stroke:#0277bd
+    style LB2 fill:#81d4fa,stroke:#0277bd
+    style LBN fill:#81d4fa,stroke:#0277bd</code></pre>
+<p><strong>Leader election flow:</strong></p>
+<ol>
+<li>Each instance creates an ephemeral node under <code>loadbalancer/</code>.</li>
+<li>Curator's <code>LeaderSelector</code> competes for <code>loadbalancer-leader</code>.</li>
+<li>The winning instance calls <code>takeLeadership()</code>, which activates the <code>Sweeper</code>.</li>
+<li>The leader polls <code>updateState()</code> every <strong>30 seconds</strong> to reassign partitions across live balancer nodes.</li>
+<li>When the leader dies, its ephemeral node disappears and Curator triggers a new election.</li>
+</ol>
+<div class="admonition warning">
+<p class="admonition-title">ZooKeeper Dependency</p>
+<p>ZooKeeper is required for multi-instance deployments. In single-instance mode, the instance always becomes the leader. If ZK is unavailable, sweeping and partition rebalancing will stall — but publish and consume continue to work.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025-2026 PhonePe India Pvt. Ltd.
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.tracking","navigation.path","navigation.tabs","navigation.tabs.sticky","navigation.expand","navigation.top","navigation.indexes","toc.follow","content.code.copy","content.code.annotate","search.suggest","search.highlight","search.share"],"search":"../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.91a19a9e.min.js"></script>
+      
+    
+  </body>
+</html>

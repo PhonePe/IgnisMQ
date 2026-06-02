@@ -17,7 +17,7 @@
 package com.phonepe.ignis.storage;
 
 import com.phonepe.magazine.core.StorageType;
-import com.phonepe.platform.aerospike.config.AerospikeConfiguration;
+import com.phonepe.aerospike.config.AerospikeConfiguration;
 import org.junit.Test;
 
 import java.util.Collections;

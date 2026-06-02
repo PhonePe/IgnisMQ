@@ -37,7 +37,7 @@ import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.common.MagazineData;
 import com.phonepe.magazine.scope.MagazineScope;
 import com.phonepe.magazine.util.CommonUtils;
-import com.phonepe.platform.aerospike.config.AerospikeConfiguration;
+import com.phonepe.aerospike.config.AerospikeConfiguration;
 import io.appform.functionmetrics.MonitoredFunction;
 import lombok.extern.slf4j.Slf4j;
 

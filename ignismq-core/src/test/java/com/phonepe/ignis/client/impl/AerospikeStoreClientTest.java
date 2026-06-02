@@ -18,8 +18,8 @@ package com.phonepe.ignis.client.impl;
 
 import com.aerospike.client.IAerospikeClient;
 import com.phonepe.ignis.util.AerospikeTestBase;
-import com.phonepe.platform.aerospike.config.AerospikeConfiguration;
-import com.phonepe.platform.aerospike.config.AerospikeHost;
+import com.phonepe.aerospike.config.AerospikeConfiguration;
+import com.phonepe.aerospike.config.AerospikeHost;
 import org.junit.Test;
 
 import java.util.List;

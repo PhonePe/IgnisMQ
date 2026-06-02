@@ -46,6 +46,8 @@ A distributed, persistent message queue built on top of [Magazine](https://githu
 </dependency>
 ```
 
+> **Note:** Find the latest version on [Maven Central](https://search.maven.org/artifact/com.phonepe/ignisMQ).
+
 ### Prerequisites
 
 - Java 17+

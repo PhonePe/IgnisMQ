@@ -25,9 +25,9 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>com.phonepe.platform</groupId>
+            <groupId>com.phonepe</groupId>
             <artifactId>aerospike-bundle</artifactId>
-            <version>${cpp.aerospike.bundle.version}</version>
+            <version>${aerospike.bundle.version}</version>
         </dependency>
         <dependency>
             <groupId>com.codepoetics</groupId>

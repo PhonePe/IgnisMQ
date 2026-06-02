@@ -103,7 +103,7 @@
         <magazine.version>v1.0.0-4</magazine.version>
         <zookeeper.version>3.4.13</zookeeper.version>
         <curator.version>4.2.0</curator.version>
-        <cpp.aerospike.bundle.version>3.0.12</cpp.aerospike.bundle.version>
+        <aerospike.bundle.version>v1.0.0-2</aerospike.bundle.version>
 
         <!-- Build Plugins -->
         <aspectj-maven-plugin.version>1.13.1</aspectj-maven-plugin.version>

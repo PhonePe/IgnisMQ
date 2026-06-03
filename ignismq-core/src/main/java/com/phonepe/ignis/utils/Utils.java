@@ -100,7 +100,10 @@ public class Utils {
         for (Future<Boolean> future : futureList) {
             try {
                 future.get();
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw IgnisMQException.propagate(e);
+            } catch (ExecutionException e) {
                 throw IgnisMQException.propagate(e);
             }
         }

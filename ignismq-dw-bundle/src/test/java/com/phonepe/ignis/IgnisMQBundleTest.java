@@ -18,7 +18,7 @@ package com.phonepe.ignis;
 
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
-import com.phonepe.platform.aerospike.config.AerospikeConfiguration;
+import com.phonepe.aerospike.config.AerospikeConfiguration;
 import io.dropwizard.Configuration;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;

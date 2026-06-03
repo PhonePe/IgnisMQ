@@ -83,6 +83,9 @@ public final class MagazineConsumerTask<M> extends TimerTask {
                 consumeSingleMessage();
             }
             log.debug("Completed consumption for queue {}", magazine.getMagazineIdentifier());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Fatal!!! Consumer task interrupted for queue {}", magazine.getMagazineIdentifier(), e);
         } catch (Exception e) {
             log.error("Fatal!!! Error running consumer task...", e);
         }

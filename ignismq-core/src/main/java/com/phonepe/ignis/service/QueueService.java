@@ -18,7 +18,7 @@ package com.phonepe.ignis.service;
 
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.common.MagazineData;
+import com.phonepe.magazine.entity.MagazineData;
 
 import java.util.Map;
 import java.util.Optional;

@@ -19,7 +19,7 @@ package com.phonepe.ignis.shovel;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.util.AerospikeTestBase;
 import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.common.MagazineData;
+import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
 import org.junit.Before;
@@ -148,6 +148,17 @@ public class ShovelTaskTest extends AerospikeTestBase {
         task.run();
 
         verify(magazine, never()).load(any());
+    }
+
+    @Test
+    public void testShovelRetriesExhaustedDoesNotDeleteData() {
+        when(sidelineMagazine.fire())
+                .thenThrow(new MagazineException(ErrorCode.RETRIES_EXHAUSTED, "data may remain", null));
+
+        new ShovelTask(magazine, sidelineMagazine, queueService, false).run();
+
+        verify(magazine, never()).load(any());
+        verify(sidelineMagazine, never()).delete(any());
     }
 
     private <T> MagazineData<T> buildMagazineData(final T data) {

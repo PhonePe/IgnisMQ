@@ -25,14 +25,12 @@ import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.utils.Utils;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.common.MagazineData;
-import com.phonepe.magazine.common.MetaData;
+import com.phonepe.magazine.entity.MagazineData;
+import com.phonepe.magazine.entity.MetaData;
 import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.apache.commons.lang3.ClassUtils;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Objects;
@@ -198,7 +196,7 @@ public final class MagazineConsumerTask<M> extends TimerTask {
     }
 
     private void sidelineMessage(final String message) {
-        if (StringUtils.isNotEmpty(message)) {
+        if (Objects.nonNull(message) && !message.isEmpty()) {
             log.warn("Sidelining the messages '{}' to sideline magazine...", message);
             sidelineMagazine.load(message);
         }
@@ -212,7 +210,7 @@ public final class MagazineConsumerTask<M> extends TimerTask {
         if (Objects.nonNull(messageHandler.getIgnorableExceptions())) {
             return messageHandler.getIgnorableExceptions()
                     .stream()
-                    .anyMatch(exceptionType -> ClassUtils.isAssignable(t.getClass(), exceptionType));
+                .anyMatch(exceptionType -> exceptionType.isAssignableFrom(t.getClass()));
         }
         return false;
     }

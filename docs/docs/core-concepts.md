@@ -158,7 +158,9 @@ ShovelConfig config = ShovelConfig.builder()
     Each shoveled message gets a fresh `fireTS` stamped on it. This timestamp is critical for sweep tracking — it allows the sweeper to distinguish between newly shoveled messages and genuinely stuck ones.
 
 !!!warning
-    If `magazine.load()` back to main fails, the message is **reloaded** to the sideline via `sidelineMagazine.reload()`. It is never lost.
+    If `magazine.load()` back to main fails, ignisMQ attempts to reload the message to the sideline.
+    Magazine delivery is at-most-once, so an ambiguous timeout or a failed reload can still lose a
+    message. Handlers that require stronger guarantees must persist their own idempotency state.
 
 ---
 

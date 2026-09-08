@@ -23,7 +23,7 @@ import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.storage.BaseStorage;
 import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.common.MetaData;
+import com.phonepe.magazine.entity.MetaData;
 import io.appform.functionmetrics.MonitoredFunction;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -50,14 +50,21 @@ public class Utils {
         return String.format("%s_SIDELINE", name);
     }
 
-    public static String createMagazineAerospikeKey(final long firePointer, final int shard,
-                                                    final String queueName) {
-        return String.format(Constants.MAGAZINE_DATA_KEY_FORMAT, queueName, shard, firePointer);
+    public static String createMagazineAerospikeKey(final long firePointer, final Integer shard,
+                                                     final String queueName) {
+        return shard == null
+                ? String.format(Constants.MAGAZINE_UNSHARDED_DATA_KEY_FORMAT, queueName, firePointer)
+                : String.format(Constants.MAGAZINE_DATA_KEY_FORMAT, queueName, shard, firePointer);
     }
 
-    public static String createFirePointerKey(final String queueName, final int shard) {
-        return String.format(Constants.MAGAZINE_META_KEY_FORMAT,
-                queueName, shard, com.phonepe.magazine.common.Constants.POINTERS);
+    public static String createMetadataKey(final String queueName, final Integer shard, final String suffix) {
+        return shard == null
+                ? String.format(Constants.MAGAZINE_UNSHARDED_META_KEY_FORMAT, queueName, suffix)
+                : String.format(Constants.MAGAZINE_META_KEY_FORMAT, queueName, shard, suffix);
+    }
+
+    public static String createShardConfigurationKey(final String queueName) {
+        return String.format(Constants.MAGAZINE_SHARD_CONFIGURATION_KEY_FORMAT, queueName);
     }
 
     public static String getMagazineSet(final String clientId, final String setName) {
@@ -65,7 +72,11 @@ public class Utils {
     }
 
     public static String getShardId(int shard) {
-        return String.format(Constants.MAGAZINE_SHARD_FORMAT, com.phonepe.magazine.common.Constants.SHARD_PREFIX, shard);
+        return String.format(Constants.MAGAZINE_SHARD_FORMAT, Constants.MAGAZINE_SHARD_PREFIX, shard);
+    }
+
+    public static String resolveLocalMagazineSet(final String clientId, final String setName, final String farmId) {
+        return String.format(Constants.MAGAZINE_LOCAL_SET_FORMAT, farmId, getMagazineSet(clientId, setName));
     }
 
     @MonitoredFunction

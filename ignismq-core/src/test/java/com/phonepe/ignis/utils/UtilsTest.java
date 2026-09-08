@@ -22,7 +22,7 @@ import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.util.AerospikeTestBase;
-import com.phonepe.magazine.common.MetaData;
+import com.phonepe.magazine.entity.MetaData;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -64,10 +64,9 @@ public class UtilsTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testCreateFirePointerKey() {
-        String key = Utils.createFirePointerKey("QUEUE_1", 3);
-        assertTrue(key.contains("QUEUE_1"));
-        assertTrue(key.contains("3"));
+    public void testCreateMetadataKey() {
+        assertEquals("QUEUE_1_SHARD_3_METADATA", Utils.createMetadataKey("QUEUE_1", 3, "METADATA"));
+        assertEquals("QUEUE_1_POINTERS", Utils.createMetadataKey("QUEUE_1", null, "POINTERS"));
     }
 
     @Test

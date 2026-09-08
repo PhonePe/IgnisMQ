@@ -34,9 +34,7 @@ import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.Utils;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.common.MagazineData;
-import com.phonepe.magazine.scope.MagazineScope;
-import com.phonepe.magazine.util.CommonUtils;
+import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import io.appform.functionmetrics.MonitoredFunction;
 import lombok.extern.slf4j.Slf4j;
@@ -235,11 +233,13 @@ public final class AerospikeQueueService implements QueueService {
                 final List<Bin> binList = new ArrayList<>();
                 binList.add(new Bin(MAGAZINE_FIRE_TS_BIN, timestamp));
 
-                final String magazineDataSetName = CommonUtils.resolveSetName(
-                        Utils.getMagazineSet(clientId, Constants.AEROSPIKE_DATA_SET), farmId, MagazineScope.LOCAL);
+                final String magazineDataSetName = Utils.resolveLocalMagazineSet(
+                        clientId, Constants.AEROSPIKE_DATA_SET, farmId);
                 client.put(
                         createWritePolicy(DO_NOT_UPDATE_TTL),
-                        new Key(namespace, magazineDataSetName, magazineData.createAerospikeKey()),
+                        new Key(namespace, magazineDataSetName, Utils.createMagazineAerospikeKey(
+                                magazineData.getFirePointer(), magazineData.getShard(),
+                                magazineData.getMagazineIdentifier())),
                         binList.toArray(new Bin[0])
                 );
                 return true;
@@ -276,10 +276,23 @@ public final class AerospikeQueueService implements QueueService {
         final BatchPolicy batchPolicy = new BatchPolicy(client.getBatchPolicyDefault());
         batchPolicy.maxConcurrentThreads = 5; // Revisit
 
-        final String magazineMetaSetName = CommonUtils.resolveSetName(
-                Utils.getMagazineSet(clientId, Constants.AEROSPIKE_META_SET), farmId, MagazineScope.LOCAL);
+        final String magazineMetaSetName = Utils.resolveLocalMagazineSet(
+                clientId, Constants.AEROSPIKE_META_SET, farmId);
+        final Record shardConfiguration = client.get(client.getReadPolicyDefault(),
+                new Key(namespace, magazineMetaSetName, Utils.createShardConfigurationKey(magazineIdentifier)));
+        final int persistedShards = Objects.nonNull(shardConfiguration)
+                ? shardConfiguration.getInt(Constants.MAGAZINE_SHARDS_BIN)
+                : queueEntity.getShards();
+        final int schemaVersion = Objects.nonNull(shardConfiguration)
+                ? shardConfiguration.getInt(Constants.MAGAZINE_METADATA_SCHEMA_VERSION_BIN)
+                : 0;
+        final String metadataSuffix = schemaVersion == Constants.MAGAZINE_UNIFIED_METADATA_SCHEMA_VERSION
+                ? Constants.MAGAZINE_UNIFIED_METADATA_SUFFIX
+                : Constants.MAGAZINE_LEGACY_METADATA_SUFFIX;
+        final Integer magazineShard = persistedShards > 1 ? shard : null;
         final Record magazineMetaRecord = client.get(client.getReadPolicyDefault(),
-                new Key(namespace, magazineMetaSetName, Utils.createFirePointerKey(magazineIdentifier, shard)));
+                new Key(namespace, magazineMetaSetName,
+                        Utils.createMetadataKey(magazineIdentifier, magazineShard, metadataSuffix)));
         if (Objects.isNull(magazineMetaRecord)) {
             log.debug("Null meta record for queue {} and shard {}", magazineIdentifier, shard);
             return;
@@ -288,7 +301,7 @@ public final class AerospikeQueueService implements QueueService {
         final String sweepPointersBin = isSideline ? SIDELINE_SWEEP_POINTERS_BIN : SWEEP_POINTERS_BIN;
         final String sweptCounterBin = isSideline ? SIDELINE_SWEPT_COUNTER_BIN : SWEPT_COUNTER_BIN;
         final long currentFirePointer = magazineMetaRecord
-                .getLong(com.phonepe.magazine.common.Constants.FIRE_POINTER);
+                .getLong(Constants.MAGAZINE_FIRE_POINTER_BIN);
         long sweepPointer = getSweepPointer(
                 queueName, shard, queueEntity, isSideline, sweepPointersBin, sweptCounterBin);
         long sweptCounter = isSideline ? queueEntity.getSidelineSweptCounter() : queueEntity.getSweptCounter();
@@ -298,11 +311,11 @@ public final class AerospikeQueueService implements QueueService {
         }
 
         while (true) {
-            final String magazineDataSetName = CommonUtils.resolveSetName(
-                    Utils.getMagazineSet(clientId, Constants.AEROSPIKE_DATA_SET), farmId, MagazineScope.LOCAL);
+            final String magazineDataSetName = Utils.resolveLocalMagazineSet(
+                    clientId, Constants.AEROSPIKE_DATA_SET, farmId);
             final Key[] keys = LongStream.range(sweepPointer, sweepPointer + SWEEP_BATCH_SIZE).boxed()
                     .map(i -> new Key(namespace, magazineDataSetName,
-                            Utils.createMagazineAerospikeKey(i, shard, magazineIdentifier)))
+                            Utils.createMagazineAerospikeKey(i, magazineShard, magazineIdentifier)))
                     .toArray(Key[]::new);
             final List<Record> records = Arrays.stream(client.get(batchPolicy, keys))
                     .collect(Collectors.toList());
@@ -323,7 +336,7 @@ public final class AerospikeQueueService implements QueueService {
                     break;
                 }
                 // Reload the message to sideline magazine
-                sidelineMagazine.load(record.getString(com.phonepe.magazine.common.Constants.DATA));
+                sidelineMagazine.load(record.getString(Constants.MAGAZINE_DATA_BIN));
                 // Delete the data from main magazine
                 client.delete(client.getWritePolicyDefault(), keys[i]);
                 sweptCounter++;

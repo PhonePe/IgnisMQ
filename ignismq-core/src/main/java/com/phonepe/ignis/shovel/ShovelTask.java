@@ -20,7 +20,7 @@ import com.codepoetics.protonpack.StreamUtils;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.common.MagazineData;
+import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
 import lombok.extern.slf4j.Slf4j;

@@ -23,10 +23,10 @@ import com.phonepe.ignis.util.AerospikeTestBase;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.Utils;
 import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.common.MagazineData;
+import com.phonepe.magazine.entity.MagazineData;
+import com.phonepe.magazine.entity.MagazineScope;
 import com.phonepe.magazine.impl.aerospike.AerospikeStorage;
 import com.phonepe.magazine.impl.aerospike.AerospikeStorageConfig;
-import com.phonepe.magazine.scope.MagazineScope;
 import org.junit.Before;
 import org.junit.Test;
 

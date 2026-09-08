@@ -39,7 +39,7 @@ import java.util.List;
 @Slf4j
 public abstract class AerospikeTestBase {
     public static final String AEROSPIKE_HOST = "localhost";
-    public static final String AEROSPIKE_DOCKER_IMAGE = "aerospike/aerospike-server:6.1.0.7";
+    public static final String AEROSPIKE_DOCKER_IMAGE = "aerospike/aerospike-server:6.2.0.7";
     public static final String AEROSPIKE_NAMESPACE = "ignismq";
     public static final int AEROSPIKE_PORT = 3000;
     public static final String CLIENT_ID = "CLIENT_ID";

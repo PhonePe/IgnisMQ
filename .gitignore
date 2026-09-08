@@ -1,5 +1,6 @@
 /.idea/
 */target/
+**/target/
 *.iml
 *.ipr
 *.iws
@@ -8,3 +9,5 @@
 .settings/
 target/*
 /bin/
+/PLAN.md
+/ignis-benchmark/

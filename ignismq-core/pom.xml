@@ -15,7 +15,7 @@
     <dependencies>
         <dependency>
             <groupId>com.phonepe</groupId>
-            <artifactId>magazine</artifactId>
+            <artifactId>magazine-core</artifactId>
             <version>${magazine.version}</version>
             <exclusions>
                 <exclusion>
@@ -97,4 +97,3 @@
         </plugins>
     </build>
 </project>
-

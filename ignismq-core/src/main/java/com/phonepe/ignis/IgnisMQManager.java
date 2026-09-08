@@ -35,10 +35,10 @@ import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
+import com.phonepe.ignis.storage.StorageVisitor;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.ErrorMessage;
 import com.phonepe.ignis.utils.Utils;
-import com.phonepe.magazine.core.StorageTypeVisitor;
 import io.appform.functionmetrics.MonitoredFunction;
 import io.dropwizard.lifecycle.Managed;
 import lombok.Getter;
@@ -264,19 +264,10 @@ public final class IgnisMQManager implements Managed {
     @Override
     public void start() throws Exception {
         if (Objects.isNull(storageClient)) {
-            storage.getStorageType().accept(new StorageTypeVisitor<Void>() {
+            storageClient = storage.accept(new StorageVisitor<>() {
                 @Override
-                public Void visitAerospike() {
-                    AerospikeStorage aerospikeMagazineStorage = (AerospikeStorage) storage;
-                    storageClient = new AerospikeStoreClient(aerospikeMagazineStorage.getConfiguration());
-                    return null;
-                }
-
-                @Override
-                public Void visitHBase() {
-                    throw IgnisMQException.builder()
-                            .errorCode(ErrorCode.NOT_IMPLEMENTED)
-                            .build();
+                public StorageClient visit(final AerospikeStorage aerospikeStorage) {
+                    return new AerospikeStoreClient(aerospikeStorage.getConfiguration());
                 }
             });
             this.queueService = buildQueueCommands(storage, storageClient);
@@ -418,10 +409,9 @@ public final class IgnisMQManager implements Managed {
 
     @MonitoredFunction
     private QueueService buildQueueCommands(final BaseStorage storage, final StorageClient storageClient) throws Exception {
-        return storage.getStorageType().accept(new StorageTypeVisitor<>() {
+        return storage.accept(new StorageVisitor<>() {
             @Override
-            public QueueService visitAerospike() {
-                AerospikeStorage aerospikeStorage = (AerospikeStorage) storage;
+            public QueueService visit(final AerospikeStorage aerospikeStorage) {
                 return new AerospikeQueueService(
                         (IAerospikeClient) storageClient.getClient(),
                         aerospikeStorage.getConfiguration(),
@@ -429,13 +419,6 @@ public final class IgnisMQManager implements Managed {
                         clientId,
                         farmId
                 );
-            }
-
-            @Override
-            public QueueService visitHBase() {
-                throw IgnisMQException.builder()
-                        .errorCode(ErrorCode.NOT_IMPLEMENTED)
-                        .build();
             }
         });
     }

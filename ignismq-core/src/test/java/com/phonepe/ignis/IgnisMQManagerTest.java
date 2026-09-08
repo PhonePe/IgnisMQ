@@ -36,8 +36,8 @@ import com.phonepe.ignis.util.IgnisExceptionMatcher;
 import com.phonepe.ignis.util.RequestFactory;
 import com.phonepe.ignis.util.TestMessageHandler;
 import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.common.MagazineData;
-import com.phonepe.magazine.common.MetaData;
+import com.phonepe.magazine.entity.MagazineData;
+import com.phonepe.magazine.entity.MetaData;
 import com.phonepe.magazine.exception.MagazineException;
 import org.apache.curator.framework.CuratorFramework;
 import org.junit.Assert;
@@ -363,6 +363,22 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         task.run();
         // Non-NOTHING_TO_FIRE MagazineException causes fireFromMagazine to return null, stopping takeWhile after 1 call
         Mockito.verify(magazine, Mockito.times(1)).fire();
+    }
+
+    @Test
+    public void testRetriesExhaustedStopsCurrentDrainWithoutDeletingData() {
+        Magazine<String> magazine = Mockito.mock(Magazine.class);
+        Mockito.when(magazine.fire()).thenThrow(new MagazineException(
+                com.phonepe.magazine.exception.ErrorCode.RETRIES_EXHAUSTED,
+                "data may remain", null));
+        MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
+                magazine, magazine, new TestMessageHandler(),
+                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService, null);
+
+        task.run();
+
+        Mockito.verify(magazine).fire();
+        Mockito.verify(magazine, Mockito.never()).delete(any());
     }
 
     @Test

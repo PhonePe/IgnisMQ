@@ -41,14 +41,16 @@ public class QueueStatGuageTest extends AerospikeTestBase {
 
     private AerospikeQueueService queueService;
     private IgnisMQManager ignisMQManager;
+    private SimpleMeterRegistry meterRegistry;
 
     @Before
     public void setUp() throws Exception {
         StorageClient storageClient = Mockito.mock(StorageClient.class);
         Mockito.when(storageClient.getClient()).thenReturn(aerospikeClient);
 
+        meterRegistry = new SimpleMeterRegistry();
         ignisMQManager = new IgnisMQManager(
-                CLIENT_ID, createBaseStorage(), new ObjectMapper(), new SimpleMeterRegistry(),
+                CLIENT_ID, createBaseStorage(), new ObjectMapper(), meterRegistry,
                 storageClient, Mockito.mock(CuratorFramework.class), FARM_ID);
         queueService = Mockito.spy(createQueueService());
 
@@ -64,7 +66,7 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         messageHandlerMap.put("handler", new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
         ignisMQManager.initialiseMessageHandlers(messageHandlerMap);
 
-        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager);
+        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager::getAllQueues);
         doReturn(Collections.emptyMap()).when(queueService).getQueues(true);
 
         var result = guage.get();
@@ -84,7 +86,7 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         dbQueues.put("QUEUE_1", QueueEntity.builder().active(true).build());
         doReturn(dbQueues).when(queueService).getQueues(true);
 
-        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager);
+        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager::getAllQueues);
         var result = guage.get();
         assertNotNull(result);
         assertEquals(1, result.size());
@@ -93,7 +95,7 @@ public class QueueStatGuageTest extends AerospikeTestBase {
 
     @Test
     public void testLoadValueException() {
-        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager);
+        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager::getAllQueues);
         doThrow(new RuntimeException("error")).when(queueService).getQueues(true);
 
         var result = guage.get();
@@ -107,7 +109,7 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         messageHandlerMap.put("handler", new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
         ignisMQManager.initialiseMessageHandlers(messageHandlerMap);
 
-        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager);
+        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager::getAllQueues);
         Map<String, QueueEntity> dbQueues = new HashMap<>();
         dbQueues.put("QUEUE_1", QueueEntity.builder().active(true).build());
         doReturn(dbQueues).when(queueService).getQueues(true);
@@ -115,5 +117,50 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         var result = guage.get();
         assertNotNull(result);
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testRefreshIssuesTwoMetadataBatchReadsPerQueue() throws Exception {
+        Map<String, Map.Entry<Class, MessageHandler>> messageHandlerMap = new HashMap<>();
+        messageHandlerMap.put("handler", new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
+        ignisMQManager.initialiseMessageHandlers(messageHandlerMap);
+
+        ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_READS", "handler"));
+        Map<String, QueueEntity> dbQueues = new HashMap<>();
+        dbQueues.put("QUEUE_READS", QueueEntity.builder().active(true).build());
+        doReturn(dbQueues).when(queueService).getQueues(true);
+
+        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager::getAllQueues);
+        guage.get(); // warm active-shard discovery so it does not pollute the measured refresh
+
+        final double before = metadataBatchReads();
+        assertEquals(1, guage.get().size());
+        assertEquals(2.0, metadataBatchReads() - before, 0.0);
+    }
+
+    @Test
+    public void testUnconsumedIsDerivedFromTheSameSnapshot() throws Exception {
+        Map<String, Map.Entry<Class, MessageHandler>> messageHandlerMap = new HashMap<>();
+        messageHandlerMap.put("handler", new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
+        ignisMQManager.initialiseMessageHandlers(messageHandlerMap);
+
+        ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_UNCONSUMED", "handler"));
+        ignisMQManager.<String>getQueue("QUEUE_UNCONSUMED").publish("one");
+        ignisMQManager.<String>getQueue("QUEUE_UNCONSUMED").publish("two");
+
+        Map<String, QueueEntity> dbQueues = new HashMap<>();
+        dbQueues.put("QUEUE_UNCONSUMED", QueueEntity.builder().active(true).build());
+        doReturn(dbQueues).when(queueService).getQueues(true);
+
+        var stat = new QueueStatGuage(queueService, ignisMQManager::getAllQueues).get().get(0);
+        assertEquals(2L, stat.getPublished());
+        assertEquals(2L, stat.getUnConsumed());
+        assertEquals(stat.getPublished() - stat.getConsumed(), stat.getUnConsumed());
+    }
+
+    private double metadataBatchReads() {
+        return meterRegistry.find("magazine.aerospike.calls")
+                .tag("operation", "batch_read_metadata")
+                .counters().stream().mapToDouble(io.micrometer.core.instrument.Counter::count).sum();
     }
 }

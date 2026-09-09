@@ -83,7 +83,7 @@ public final class IgnisMQManager {
 
         this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
                 storage, storageClient, farmId, magazineMeterRegistry);
-        this.queueStatGuage = new QueueStatGuage(queueService, this);
+        this.queueStatGuage = new QueueStatGuage(queueService, this::getAllQueues);
         scheduleWatcher();
     }
 
@@ -100,7 +100,7 @@ public final class IgnisMQManager {
         this.queueService = buildQueueCommands(storage, storageClient);
         this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
                 storage, storageClient, farmId, magazineMeterRegistry);
-        this.queueStatGuage = new QueueStatGuage(queueService, this);
+        this.queueStatGuage = new QueueStatGuage(queueService, this::getAllQueues);
         scheduleWatcher();
     }
 

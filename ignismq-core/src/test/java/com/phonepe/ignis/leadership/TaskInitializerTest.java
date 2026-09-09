@@ -25,6 +25,7 @@ import org.apache.zookeeper.CreateMode;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.lang.reflect.Field;
 
@@ -57,14 +58,14 @@ public class TaskInitializerTest extends AerospikeTestBase {
     @Test
     public void testConstructor() {
         TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID);
+                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
         assertNotNull(taskInitializer);
     }
 
     @Test
     public void testStartAndStop() throws Exception {
         TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID);
+                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
 
         // Deep stubs on curatorFramework handle the full create chain automatically
         when(curatorFramework.create().creatingParentContainersIfNeeded()
@@ -82,7 +83,7 @@ public class TaskInitializerTest extends AerospikeTestBase {
     @Test
     public void testStartSetsLeaderElector() throws Exception {
         TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID);
+                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
 
         // Mock create chain
         when(curatorFramework.create().creatingParentContainersIfNeeded()
@@ -96,5 +97,42 @@ public class TaskInitializerTest extends AerospikeTestBase {
         taskInitializer.start();
 
         assertNotNull(leField.get(taskInitializer));
+    }
+
+    /**
+     * A framework lifecycle calls stop even when start never ran or failed part way through.
+     * This used to NPE on the null leader elector.
+     */
+    @Test
+    public void testStopWithoutStartIsSafe() {
+        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
+                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
+
+        taskInitializer.stop();
+    }
+
+    @Test
+    public void testStopIsIdempotentAndCancelsTheSweeperTimer() throws Exception {
+        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
+                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
+        when(curatorFramework.create().creatingParentContainersIfNeeded()
+                .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
+        taskInitializer.start();
+
+        Field timerField = TaskInitializer.class.getDeclaredField("sweeperTimer");
+        timerField.setAccessible(true);
+        assertNotNull(timerField.get(taskInitializer));
+
+        taskInitializer.stop();
+        assertNull("sweeper timer must be released on stop", timerField.get(taskInitializer));
+
+        // Second stop must not throw.
+        taskInitializer.stop();
+    }
+
+    @Test(expected = NullPointerException.class)
+    public void testMeterRegistryIsRequired() {
+        new TaskInitializer(curatorFramework, queueService, CLIENT_ID, storage, storageClient,
+                FARM_ID, null);
     }
 }

@@ -23,6 +23,7 @@ import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.leadership.LoadBalancer;
 import com.phonepe.ignis.storage.BaseStorage;
 import lombok.extern.slf4j.Slf4j;
+import io.micrometer.core.instrument.MeterRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,15 +44,17 @@ public class Sweeper extends TimerTask implements LoadBalancer {
     private final BaseStorage storage;
     private final StorageClient client;
     private final String farmId;
+    private final MeterRegistry meterRegistry;
 
     public Sweeper(final QueueService queueService, final String clientId,
                    final BaseStorage storage, final StorageClient client,
-                   final String farmId) {
+                   final String farmId, final MeterRegistry meterRegistry) {
         this.queueService = queueService;
         this.clientId = clientId;
         this.storage = storage;
         this.client = client;
         this.farmId = farmId;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
@@ -63,7 +66,8 @@ public class Sweeper extends TimerTask implements LoadBalancer {
                 final List<Future<Boolean>> futureList = new ArrayList<>();
                 queues.forEach((queueName, queueEntity) ->
                         futureList.add(Utils.executorService.submit(() -> {
-                            Utils.sweepQueue(queueService, clientId, client, storage, queueName, queueEntity, farmId);
+                            Utils.sweepQueue(queueService, clientId, client, storage, queueName, queueEntity, farmId,
+                                    meterRegistry);
                             return true;
                         })));
                 Utils.waitForRequestsCompletion(futureList);

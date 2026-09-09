@@ -24,7 +24,7 @@ import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.storage.BaseStorage;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MetaData;
-import io.appform.functionmetrics.MonitoredFunction;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -79,18 +79,17 @@ public class Utils {
         return String.format(Constants.MAGAZINE_LOCAL_SET_FORMAT, farmId, getMagazineSet(clientId, setName));
     }
 
-    @MonitoredFunction
     public static void sweepQueue(
             final QueueService queueService, final String clientId, final StorageClient client,
             final BaseStorage storage, final String queueName, final QueueEntity queueEntity,
-            final String farmId) {
+            final String farmId, final MeterRegistry meterRegistry) {
         try {
             long sweepTillFireTS = System.currentTimeMillis() - queueEntity.getSweepDuration();
             final Magazine<String> sidelineMagazine = Magazine.<String>builder()
                     .baseMagazineStorage(storage.accept(new MagazineStorageVisitor(
                             clientId, queueEntity.getMessageExpiry(),
                             queueEntity.getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
-                            client, queueEntity.getShards(), farmId)))
+                            client, queueEntity.getShards(), farmId, meterRegistry)))
                     .magazineIdentifier(Utils.getSidelineQueueName(queueName))
                     .build();
             log.info("Sweeping queue {}", queueName);
@@ -121,7 +120,6 @@ public class Utils {
         futureList.clear();
     }
 
-    @MonitoredFunction
     public static long getMagazineCount(final Collection<MetaData> allShardsMetaData,
                                         final Function<MetaData, Long> mappingFunction) {
         return allShardsMetaData.stream()

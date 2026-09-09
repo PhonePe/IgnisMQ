@@ -36,7 +36,6 @@ import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
-import io.appform.functionmetrics.MonitoredFunction;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
@@ -97,7 +96,6 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    @MonitoredFunction
     public boolean exists(final String name) {
         try {
             return (Boolean) retryer.call(() ->
@@ -109,7 +107,6 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    @MonitoredFunction
     public Optional<QueueEntity> get(final String name) {
         try {
             final Record record = (Record) retryer.call(() ->
@@ -124,7 +121,6 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    @MonitoredFunction
     public void store(final String name, final QueueEntity entity, final int ttl) {
         try {
             retryer.call(() -> {
@@ -153,7 +149,6 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    @MonitoredFunction
     public void updateState(final String name, final boolean active) {
         try {
             retryer.call(() -> {
@@ -169,7 +164,6 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    @MonitoredFunction
     public void updateConcurrency(final String name, final int concurrency) {
         try {
             retryer.call(() -> {
@@ -185,7 +179,6 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    @MonitoredFunction
     public void updateShovelConfig(final String name, final int shovelConcurrency, final int shovelTimeInterval) {
         try {
             retryer.call(() -> {
@@ -202,7 +195,6 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    @MonitoredFunction
     public Map<String, QueueEntity> getQueues(final boolean active) {
         final Map<String, QueueEntity> activeQueuesMap = new HashMap<>();
         final Statement statement = new Statement();
@@ -226,7 +218,6 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    @MonitoredFunction
     public void addFireTimestamp(final MagazineData<String> magazineData, final long timestamp) {
         try {
             retryer.call(() -> {
@@ -251,7 +242,6 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    @MonitoredFunction
     public void sweep(final String queueName, final int shard,
                       final long sweepTillFireTimestamp,
                       final Magazine<String> sidelineMagazine) {
@@ -426,7 +416,6 @@ public final class AerospikeQueueService implements QueueService {
         return writePolicy;
     }
 
-    @MonitoredFunction
     private void createIndex(final String indexName, final String bin, final IndexType indexType) {
         try {
             client.createIndex(null, namespace, setName, indexName, bin, indexType).waitTillComplete();

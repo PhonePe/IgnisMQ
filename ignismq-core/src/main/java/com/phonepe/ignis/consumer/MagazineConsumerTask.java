@@ -16,7 +16,6 @@
 
 package com.phonepe.ignis.consumer;
 
-import com.codahale.metrics.Timer;
 import com.codepoetics.protonpack.StreamUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,6 +33,7 @@ import lombok.val;
 
 import java.util.List;
 import java.util.Objects;
+import io.micrometer.core.instrument.Timer;
 import java.util.TimerTask;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -49,7 +49,7 @@ public final class MagazineConsumerTask<M> extends TimerTask {
     private final MessageHandler<M> messageHandler;
     private final ObjectMapper mapper;
     private final Class<M> clazz;
-    private final com.codahale.metrics.Timer consumeMetricTimer;
+    private final Timer consumeMetricTimer;
     private final QueueService queueService;
     private final BatchingConfig batchingConfig;
 
@@ -140,34 +140,33 @@ public final class MagazineConsumerTask<M> extends TimerTask {
     }
 
     private void consume(final List<MagazineData<String>> magazineDataList) {
-        final Timer.Context timerContext = consumeMetricTimer.time();
-        try {
-            log.debug("Consuming messages {}", magazineDataList);
-            final Boolean success = handle(magazineDataList.stream()
-                    .map(magazineData -> {
-                        if (Objects.nonNull(magazineData.getData())) {
-                            if (clazz.isPrimitive() || clazz == String.class) {
-                                return (M) magazineData.getData();
+        consumeMetricTimer.record(() -> {
+            try {
+                log.debug("Consuming messages {}", magazineDataList);
+                final Boolean success = handle(magazineDataList.stream()
+                        .map(magazineData -> {
+                            if (Objects.nonNull(magazineData.getData())) {
+                                if (clazz.isPrimitive() || clazz == String.class) {
+                                    return (M) magazineData.getData();
+                                }
+                                try {
+                                    return mapper.readValue(magazineData.getData(), clazz);
+                                } catch (JsonProcessingException e) {
+                                    handleException(magazineData, e);
+                                }
                             }
-                            try {
-                                return mapper.readValue(magazineData.getData(), clazz);
-                            } catch (JsonProcessingException e) {
-                                handleException(magazineData, e);
-                            }
-                        }
-                        return null;
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList()));
-            if (!Boolean.TRUE.equals(success)) {
-                sidelineMessages(magazineDataList);
+                            return null;
+                        })
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList()));
+                if (!Boolean.TRUE.equals(success)) {
+                    sidelineMessages(magazineDataList);
+                }
+                magazineDataList.forEach(magazine::delete);
+            } catch (Exception e) {
+                magazineDataList.forEach(magazineData -> handleException(magazineData, e));
             }
-            magazineDataList.forEach(magazine::delete);
-        } catch (Exception e) {
-            magazineDataList.forEach(magazineData -> handleException(magazineData, e));
-        } finally {
-            timerContext.stop();
-        }
+        });
     }
 
     private void handleException(final MagazineData<String> magazineData,

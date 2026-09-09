@@ -137,9 +137,8 @@ classDiagram
     }
 
     class QueueStatGauge {
-        <<CachedGauge~Map~>>
-        -timeout: 3 min
-        +loadValue() Map
+        <<Supplier~List~>>
+        +get() List
     }
 
     class QueueService {
@@ -175,7 +174,8 @@ classDiagram
     Magazine --> QueueService
     QueueService <|.. AerospikeQueueService : permits
     AerospikeQueueService --> AerospikeStoreClient
-    IgnisMQManager --> QueueStatGauge : registers
+    IgnisMQManager --> QueueStatGauge : reads
+    IgnisMQBundle --> QueueStatGauge : exposes as CachedGauge
 ```
 
 !!! note "ConcurrentHashMap"
@@ -460,15 +460,22 @@ The same pattern is used inside `MagazineQueue` — `MagazineStorageVisitor` bui
 
 ## 7. Metrics
 
-IgnisMQ integrates with Dropwizard Metrics for observability.
+Core records metrics through Micrometer. `ignismq-dw-bundle` bridges them into the application's
+Dropwizard `MetricRegistry` and supplies Dropwizard-specific gauges and lifecycle adapters.
 
 ### Registered Metrics
 
 | Metric Name Pattern | Type | Description |
 |---|---|---|
-| `commands.{farmId}_{clientId}_{queueName}_publisher.all` | Timer | Latency and throughput of publish operations |
-| `commands.{farmId}_{clientId}_{queueName}_consumer.all` | Timer | Latency and throughput of consume operations |
-| `QueueStatGauge` per queue | CachedGauge (3 min TTL) | Reports `published`, `consumed`, `unconsumed`, `sidelined`, `shovelled` counts |
+| `commands.{queueName}_publish.all` | Timer | Latency and throughput of publish operations |
+| `commands.{queueName}_consume.all` | Timer | Latency and throughput of consume operations |
+| `magazine.*` | Counters and timers | Magazine's own instrumentation, tagged by magazine and outcome |
+| `ignis.queue.stats` | CachedGauge (3 min TTL, bundle only) | Reports `published`, `consumed`, `unconsumed`, `sidelined`, `shovelled` counts |
+
+Dropwizard has no notion of tags, so the bundle's bridge flattens each Micrometer tag into the
+metric name. `magazine.fire.outcomes` tagged `magazine=orders, outcome=delivered` is published as
+`magazine.fire.outcomes.magazine.orders.outcome.delivered`. Untagged meters, including the
+`commands.*` timers above, keep their names unchanged.
 
 ### QueueStatGauge
 
@@ -483,9 +490,13 @@ flowchart LR
     G --> D
 ```
 
-### FunctionMetrics (AspectJ)
+### Method-level metrics
 
-IgnisMQ uses AspectJ weaving via the `@FunctionMetrics` annotation to automatically add timing metrics to annotated methods without manual instrumentation code.
+Earlier versions wove `@MonitoredFunction` timers into most public methods with AspectJ. That was
+removed along with the Dropwizard coupling: it pulled AspectJ and a build-time weaving step into
+`ignismq-core`, and the resulting timers measured method entry and exit rather than anything
+operationally meaningful. Deliberate instrumentation is being added back in its place; until then
+the `commands.*` timers and Magazine's `magazine.*` meters are the supported surface.
 
 ---
 

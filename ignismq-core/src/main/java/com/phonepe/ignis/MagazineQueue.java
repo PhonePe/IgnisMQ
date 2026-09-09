@@ -39,7 +39,8 @@ import com.phonepe.magazine.core.BaseMagazineStorage;
 import com.phonepe.magazine.entity.MagazineScope;
 import com.phonepe.magazine.entity.MetaData;
 import com.phonepe.magazine.impl.aerospike.AerospikeStorageConfig;
-import io.appform.functionmetrics.MonitoredFunction;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -48,7 +49,7 @@ import lombok.val;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Timer;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
 /**
@@ -59,15 +60,15 @@ public final class MagazineQueue<M> implements IQueue<M> {
     private final Magazine<String> magazine;
     private final Magazine<String> sidelineMagazine;
     private final MessageHandler<M> messageHandler;
-    private final List<Timer> consumers = new ArrayList<>();
-    private final List<Timer> sidelineConsumers = new ArrayList<>();
+    private final List<java.util.Timer> consumers = new ArrayList<>();
+    private final List<java.util.Timer> sidelineConsumers = new ArrayList<>();
     private final ObjectMapper mapper;
     private final Class<M> clazz;
     @Getter
     private final ShovelConfig shovelConfig;
     private final QueueService queueService;
-    private final com.codahale.metrics.Timer publishMetricTimer;
-    private final com.codahale.metrics.Timer consumeMetricTimer;
+    private final Timer publishMetricTimer;
+    private final Timer consumeMetricTimer;
     private final BatchingConfig batchingConfig;
 
     MagazineQueue(
@@ -86,8 +87,9 @@ public final class MagazineQueue<M> implements IQueue<M> {
             final Class<M> clazz,
             final QueueService queueService,
             final BatchingConfig batchingConfig,
-            final com.codahale.metrics.Timer publishMetricTimer,
-            final com.codahale.metrics.Timer consumeMetricTimer) throws Exception {
+            final Timer publishMetricTimer,
+            final Timer consumeMetricTimer,
+            final MeterRegistry meterRegistry) throws Exception {
         this.messageHandler = messageHandler;
         this.mapper = mapper;
         this.clazz = clazz;
@@ -96,12 +98,14 @@ public final class MagazineQueue<M> implements IQueue<M> {
         this.batchingConfig = batchingConfig;
         this.magazine = Magazine.<String>builder()
                 .baseMagazineStorage(storage.accept(new MagazineStorageVisitor(
-                        clientId, recordTtlInSeconds, metaDataTtlInSeconds, client, queueShards, farmId)))
+                        clientId, recordTtlInSeconds, metaDataTtlInSeconds, client, queueShards, farmId,
+                        meterRegistry)))
                 .magazineIdentifier(queueName)
                 .build();
         this.sidelineMagazine = Magazine.<String>builder()
                 .baseMagazineStorage(storage.accept(new MagazineStorageVisitor(
-                        clientId, recordTtlInSeconds, metaDataTtlInSeconds, client, queueShards, farmId)))
+                        clientId, recordTtlInSeconds, metaDataTtlInSeconds, client, queueShards, farmId,
+                        meterRegistry)))
                 .magazineIdentifier(Utils.getSidelineQueueName(queueName))
                 .build();
         this.queueService = queueService;
@@ -113,19 +117,19 @@ public final class MagazineQueue<M> implements IQueue<M> {
     }
 
     @Override
-    @MonitoredFunction
     public boolean publish(final M message) throws JsonProcessingException {
         log.debug("Publishing '{}' message in queue '{}'", message, magazine.getMagazineIdentifier());
-        final com.codahale.metrics.Timer.Context timerContext = publishMetricTimer.time();
+        // Timed by hand rather than through Timer.recordCallable, which would force the checked
+        // JsonProcessingException through a wrapper and change what callers catch.
+        final long startNanos = System.nanoTime();
         try {
             return magazine.load(mapper.writeValueAsString(message));
         } finally {
-            timerContext.stop();
+            publishMetricTimer.record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
         }
     }
 
     @Override
-    @MonitoredFunction
     public long getUnconsumedCount() {
         val allShardsMetaData = magazine.getMetaData().values();
         long unConsumedCount =
@@ -135,7 +139,6 @@ public final class MagazineQueue<M> implements IQueue<M> {
     }
 
     @Override
-    @MonitoredFunction
     public QueueMetaData getMetaData() {
         val allShardsMetaData = magazine.getMetaData().values();
         val allSidelineShardsMetaData = sidelineMagazine.getMetaData().values();
@@ -150,7 +153,6 @@ public final class MagazineQueue<M> implements IQueue<M> {
                 .build();
     }
 
-    @MonitoredFunction
     void createConsumers(final int count) {
         if (consumers.size() + count >= Constants.MAX_CONSUMERS_ALLOWED) {
             throw IgnisMQException.builder()
@@ -160,7 +162,7 @@ public final class MagazineQueue<M> implements IQueue<M> {
 
         IntStream.range(0, count).boxed()
                 .forEach(i -> {
-                    Timer consumer = new Timer();
+                    java.util.Timer consumer = new java.util.Timer();
                     consumer.schedule(
                             new MagazineConsumerTask<>(magazine, sidelineMagazine, messageHandler,
                                     mapper, clazz, consumeMetricTimer, queueService, batchingConfig),
@@ -173,22 +175,19 @@ public final class MagazineQueue<M> implements IQueue<M> {
                 count, magazine.getMagazineIdentifier(), consumers.size());
     }
 
-    @MonitoredFunction
     int getNoOfConsumers() {
         return consumers.size();
     }
 
-    @MonitoredFunction
     int getNoOfShovelConsumers() {
         return sidelineConsumers.size();
     }
 
-    @MonitoredFunction
     void stopConsumers(final int count) {
         final int consumerToStopCount = Math.min(count, consumers.size());
         IntStream.range(0, consumerToStopCount).boxed()
                 .forEach(i -> {
-                    Timer consumer = consumers.get(consumers.size() - 1);
+                    java.util.Timer consumer = consumers.get(consumers.size() - 1);
                     consumer.cancel();
                     consumer.purge();
                     consumers.remove(consumer);
@@ -198,17 +197,14 @@ public final class MagazineQueue<M> implements IQueue<M> {
     }
 
     @Override
-    @MonitoredFunction
     public void shovel(final int concurrency) {
         createShovel(concurrency, true, 0);
     }
 
-    @MonitoredFunction
     void scheduleShoveling(int concurrency, int timeIntervalInSecs) {
         createShovel(concurrency, false, timeIntervalInSecs);
     }
 
-    @MonitoredFunction
     private void createShovel(int concurrency, boolean autoDelete, int timeIntervalInSecs) {
         if (timeIntervalInSecs > Constants.MAX_ALLOWED_SHOVEL_TIME_INTERVAL_IN_SECONDS || timeIntervalInSecs < 0) {
             throw IgnisMQException.builder()
@@ -223,7 +219,7 @@ public final class MagazineQueue<M> implements IQueue<M> {
         log.info("Creating {} shoveling task for queue '{}'", concurrency, magazine.getMagazineIdentifier());
         IntStream.range(0, concurrency).boxed()
                 .forEach(i -> {
-                    final Timer shovel = new Timer();
+                    final java.util.Timer shovel = new java.util.Timer();
                     final ShovelTask shovelTask = new ShovelTask(magazine, sidelineMagazine, queueService, autoDelete);
                     if (autoDelete) {
                         shovel.schedule(
@@ -242,12 +238,11 @@ public final class MagazineQueue<M> implements IQueue<M> {
         log.info("All shovels tasks scheduled.");
     }
 
-    @MonitoredFunction
     void stopShovelConsumers(final int count) {
         final int consumerToStopCount = Math.min(count, sidelineConsumers.size());
         IntStream.range(0, consumerToStopCount).boxed()
                 .forEach(i -> {
-                    Timer consumer = sidelineConsumers.get(sidelineConsumers.size() - 1);
+                    java.util.Timer consumer = sidelineConsumers.get(sidelineConsumers.size() - 1);
                     consumer.cancel();
                     consumer.purge();
                     sidelineConsumers.remove(consumer);
@@ -264,6 +259,7 @@ public final class MagazineQueue<M> implements IQueue<M> {
         private final StorageClient client;
         private final int shards;
         private final String farmId;
+        private final MeterRegistry meterRegistry;
 
         @Override
         public BaseMagazineStorage<String> visit(final AerospikeStorage storage) {
@@ -282,6 +278,7 @@ public final class MagazineQueue<M> implements IQueue<M> {
                     .farmId(farmId)
                     .scope(MagazineScope.LOCAL)
                     .clientId(clientId)
+                    .meterRegistry(meterRegistry)
                     .build();
         }
     }

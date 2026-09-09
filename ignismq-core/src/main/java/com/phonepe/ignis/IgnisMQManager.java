@@ -17,7 +17,6 @@
 package com.phonepe.ignis;
 
 import com.aerospike.client.IAerospikeClient;
-import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.phonepe.ignis.client.StorageClient;
@@ -27,8 +26,9 @@ import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
-import com.phonepe.ignis.guage.QueueStatGuage;
 import com.phonepe.ignis.leadership.TaskInitializer;
+import com.phonepe.ignis.guage.QueueStatGuage;
+import com.phonepe.ignis.metric.QueueStat;
 import com.phonepe.ignis.request.CreateQueueRequest;
 import com.phonepe.ignis.request.ShovelConfig;
 import com.phonepe.ignis.service.AerospikeQueueService;
@@ -39,8 +39,8 @@ import com.phonepe.ignis.storage.StorageVisitor;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.ErrorMessage;
 import com.phonepe.ignis.utils.Utils;
-import io.appform.functionmetrics.MonitoredFunction;
-import io.dropwizard.lifecycle.Managed;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
@@ -48,15 +48,14 @@ import org.apache.curator.framework.CuratorFramework;
 import javax.validation.Valid;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author shantanu.tiwari
  */
 @Slf4j
-public final class IgnisMQManager implements Managed {
+public final class IgnisMQManager {
     private static final String METRIC_TIMER_FORMAT = "commands.%s_%s.all";
-    private final MetricRegistry metricRegistry;
+    private final MeterRegistry magazineMeterRegistry;
     private final Map<String, IQueue<?>> ignisMQMap = new ConcurrentHashMap<>();
     private final String clientId;
     private final BaseStorage storage;
@@ -67,34 +66,41 @@ public final class IgnisMQManager implements Managed {
     private Map<String, Map.Entry<Class, MessageHandler>> messageHandlers = new HashMap<>();
     private QueueService queueService;
     private StorageClient storageClient;
+    /** True only when this manager built the storage client and is therefore responsible for it. */
+    private boolean ownsStorageClient;
+    private java.util.Timer watcherTimer;
+    private final QueueStatGuage queueStatGuage;
 
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
-                          final MetricRegistry metricRegistry, final CuratorFramework curatorFramework,
+                          final MeterRegistry meterRegistry, final CuratorFramework curatorFramework,
                           final String farmId) throws Exception {
         this.clientId = clientId;
         this.storage = storage;
         this.mapper = mapper;
-        this.metricRegistry = metricRegistry;
+        this.magazineMeterRegistry = Objects.requireNonNull(meterRegistry, "Meter registry is required.");
         this.farmId = farmId;
         this.start();
 
         this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
-                storage, storageClient, farmId);
+                storage, storageClient, farmId, magazineMeterRegistry);
+        this.queueStatGuage = new QueueStatGuage(queueService, this);
         scheduleWatcher();
     }
 
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
-                          final MetricRegistry metricRegistry, final StorageClient storageClient,
+                          final MeterRegistry meterRegistry, final StorageClient storageClient,
                           final CuratorFramework curatorFramework, final String farmId) throws Exception {
         this.clientId = clientId;
         this.farmId = farmId;
         this.storage = storage;
         this.mapper = mapper;
-        this.metricRegistry = metricRegistry;
+        this.magazineMeterRegistry = Objects.requireNonNull(meterRegistry, "Meter registry is required.");
         this.storageClient = storageClient;
+        this.ownsStorageClient = false;
         this.queueService = buildQueueCommands(storage, storageClient);
         this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
-                storage, storageClient, farmId);
+                storage, storageClient, farmId, magazineMeterRegistry);
+        this.queueStatGuage = new QueueStatGuage(queueService, this);
         scheduleWatcher();
     }
 
@@ -103,7 +109,14 @@ public final class IgnisMQManager implements Managed {
         Preconditions.checkArgument(this.messageHandlers.isEmpty(), "Message handler map is already initialised.");
         this.messageHandlers = messageHandlers;
         refreshQueues();
-        metricRegistry.register("ignis.queue.stats", new QueueStatGuage(3, TimeUnit.MINUTES, queueService, this));
+    }
+
+    /**
+     * Point-in-time statistics for every active queue. Callers are expected to cache this: it
+     * issues metadata reads per queue and is not meant for a hot path.
+     */
+    public List<QueueStat> getQueueStats() {
+        return queueStatGuage.get();
     }
 
     /**
@@ -111,7 +124,6 @@ public final class IgnisMQManager implements Managed {
      * @return IQueue -> Instance of Magazine queue which can be used to publish the message.
      * @throws IgnisMQException with ErrorCode QUEUE_NOT_FOUND if queue doesn't exist in the ignisMQMap.
      */
-    @MonitoredFunction
     public <M> IQueue<M> getQueue(final String name) {
         final IQueue<M> queue = (IQueue<M>) ignisMQMap.get(name);
         if (Objects.isNull(queue)) {
@@ -127,7 +139,6 @@ public final class IgnisMQManager implements Managed {
      *
      * @return ignisMQMap
      */
-    @MonitoredFunction
     public Map<String, IQueue<?>> getAllQueues() {
         return ignisMQMap;
     }
@@ -137,7 +148,6 @@ public final class IgnisMQManager implements Managed {
      *
      * @return ignisMQMap
      */
-    @MonitoredFunction
     public Set<String> getAllQueuesFromDB() {
         return new HashSet<>(queueService.getQueues(true).keySet());
     }
@@ -150,7 +160,6 @@ public final class IgnisMQManager implements Managed {
      * @throws IgnisMQException with ErrorCode QUEUE_ALREADY_EXISTS if queue already exists in the ignisMQMap.
      * @throws Exception        if magazine creation has failed.
      */
-    @MonitoredFunction
     public void createQueue(final CreateQueueRequest queueRequest) throws Exception {
         validateRequest(queueRequest);
         IQueue<?> queue = createMagazine(
@@ -195,7 +204,6 @@ public final class IgnisMQManager implements Managed {
      *
      * @param queueName: Name of the queue to be deleted
      */
-    @MonitoredFunction
     public void deactivateQueue(final String queueName) {
         log.info("Deactivating queue '{}'", queueName);
         if (ignisMQMap.containsKey(queueName)) {
@@ -218,7 +226,6 @@ public final class IgnisMQManager implements Managed {
      * @param queueName -> Name of the queue
      * @param count     -> The number of consumers to be created
      */
-    @MonitoredFunction
     public void increaseConsumers(final String queueName, final int count) {
         final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
         queue.createConsumers(count);
@@ -231,7 +238,6 @@ public final class IgnisMQManager implements Managed {
      * @param queueName -> Name of the queue
      * @param count     -> The number of consumers to be stopped
      */
-    @MonitoredFunction
     public void decreaseConsumers(final String queueName, final int count) {
         final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
         queue.stopConsumers(count);
@@ -245,7 +251,6 @@ public final class IgnisMQManager implements Managed {
      * @param queueName    -> Name of the queue
      * @param shovelConfig -> Shovel config
      */
-    @MonitoredFunction
     public void scheduleShoveling(final String queueName, @Valid final ShovelConfig shovelConfig) {
         final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
         queue.scheduleShoveling(shovelConfig.getConcurrency(), shovelConfig.getTimeIntervalInSecs());
@@ -258,10 +263,10 @@ public final class IgnisMQManager implements Managed {
             log.info("Queue {} doesn't exist", queueName);
             return;
         }
-        Utils.sweepQueue(queueService, clientId, storageClient, storage, queueName, queueEntity, farmId);
+        Utils.sweepQueue(queueService, clientId, storageClient, storage, queueName, queueEntity, farmId,
+                magazineMeterRegistry);
     }
 
-    @Override
     public void start() throws Exception {
         if (Objects.isNull(storageClient)) {
             storageClient = storage.accept(new StorageVisitor<>() {
@@ -270,16 +275,30 @@ public final class IgnisMQManager implements Managed {
                     return new AerospikeStoreClient(aerospikeStorage.getConfiguration());
                 }
             });
+            this.ownsStorageClient = true;
             this.queueService = buildQueueCommands(storage, storageClient);
         }
     }
 
-    @Override
+    /**
+     * Releases everything this manager owns: the queue-refresh watcher and, when the manager
+     * created the storage client itself, the client's connection pool. Safe to call more than
+     * once. A caller that supplied its own {@link StorageClient} keeps ownership of it.
+     */
     public void stop() {
-        // Nothing to stop
+        if (Objects.nonNull(watcherTimer)) {
+            watcherTimer.cancel();
+            watcherTimer = null;
+        }
+        if (ownsStorageClient && Objects.nonNull(storageClient)) {
+            try {
+                storageClient.stop();
+            } catch (Exception e) {
+                log.error("Error while closing the storage client", e);
+            }
+        }
     }
 
-    @MonitoredFunction
     public void refreshQueues() {
         if (messageHandlers.isEmpty()) {
             log.info("No message handlers registered, so queue refreshing is not possible, gracefully ignoring.");
@@ -367,7 +386,8 @@ public final class IgnisMQManager implements Managed {
         Queue can be created only once, and this watcher will then have a role to create the active queue and deactivate inactive ones.
      */
     private void scheduleWatcher() {
-        new Timer().schedule(new TimerTask() {
+        watcherTimer = new java.util.Timer("ignismq-queue-watcher", true);
+        watcherTimer.schedule(new TimerTask() {
             @Override
             public void run() {
                 try {
@@ -379,7 +399,6 @@ public final class IgnisMQManager implements Managed {
         }, Constants.WATCHER_INITIAL_DELAY_IN_MS, Constants.REFRESH_INTERVAL_IN_MS);
     }
 
-    @MonitoredFunction
     private <M> IQueue<M> createMagazine(final String queueName,
                                          final int queueShards,
                                          final int recordTtlInSeconds,
@@ -395,19 +414,18 @@ public final class IgnisMQManager implements Managed {
                     .build();
         }
 
-        final com.codahale.metrics.Timer publishMetricTimer =
-                metricRegistry.timer(String.format(METRIC_TIMER_FORMAT, queueName, "publish"));
-        final com.codahale.metrics.Timer consumeMetricTimer =
-                metricRegistry.timer(String.format(METRIC_TIMER_FORMAT, queueName, "consume"));
+        final Timer publishMetricTimer =
+                magazineMeterRegistry.timer(String.format(METRIC_TIMER_FORMAT, queueName, "publish"));
+        final Timer consumeMetricTimer =
+                magazineMeterRegistry.timer(String.format(METRIC_TIMER_FORMAT, queueName, "consume"));
         return new MagazineQueue<M>(
                 clientId, farmId, queueName, queueShards, recordTtlInSeconds, metaDataTtlInSeconds,
                 storageClient, storage, concurrency, messageHandlers.get(messageHandlerType).getValue(),
                 shovelConfig, mapper, messageHandlers.get(messageHandlerType).getKey(), queueService,
-                batchingConfig, publishMetricTimer, consumeMetricTimer
+                batchingConfig, publishMetricTimer, consumeMetricTimer, magazineMeterRegistry
         );
     }
 
-    @MonitoredFunction
     private QueueService buildQueueCommands(final BaseStorage storage, final StorageClient storageClient) throws Exception {
         return storage.accept(new StorageVisitor<>() {
             @Override
@@ -423,7 +441,6 @@ public final class IgnisMQManager implements Managed {
         });
     }
 
-    @MonitoredFunction
     private void validateRequest(final CreateQueueRequest queueRequest) {
         if (!queueRequest.isValid()) {
             throw IgnisMQException.builder()

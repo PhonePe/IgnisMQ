@@ -16,8 +16,6 @@
 
 package com.phonepe.ignis;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableSet;
 import com.phonepe.ignis.client.StorageClient;
@@ -46,12 +44,15 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.mockito.Mockito;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.lang.reflect.Field;
 import java.util.*;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 public class IgnisMQManagerTest extends AerospikeTestBase {
     private static final String MESSAGE_HANDLER_TYPE = "messageHandler";
@@ -62,14 +63,16 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     private StorageClient<com.aerospike.client.IAerospikeClient> storageClient;
     private IgnisMQManager ignisMQManager;
     private AerospikeQueueService aerospikeQueueService;
+    private SimpleMeterRegistry metricRegistry;
 
     @Before
     public void setUp() throws Exception {
         storageClient = Mockito.mock(StorageClient.class);
         Mockito.when(storageClient.getClient()).thenReturn(aerospikeClient);
 
+        metricRegistry = new SimpleMeterRegistry();
         ignisMQManager = new IgnisMQManager(
-                CLIENT_ID, createBaseStorage(), new ObjectMapper(), new MetricRegistry(),
+                CLIENT_ID, createBaseStorage(), new ObjectMapper(), metricRegistry,
                 storageClient, Mockito.mock(CuratorFramework.class), FARM_ID);
         aerospikeQueueService = Mockito.spy(createQueueService());
 
@@ -90,6 +93,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         boolean success = ignisMQManager.getQueue("QUEUE_1").publish("true");
         Assert.assertTrue(success);
+        Assert.assertEquals(1, metricRegistry.find("magazine.load.outcomes")
+                .tag("magazine", "QUEUE_1").tag("outcome", "loaded").counter().count(), 0);
     }
 
     @Test
@@ -288,7 +293,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Mockito.when(magazine.fire()).thenReturn(trueData, falseData, nullData, null);
         MagazineConsumerTask<String> magazineConsumerTask = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService, null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService, null);
         magazineConsumerTask.run();
         Mockito.verify(magazine, Mockito.times(4)).fire();
         Mockito.verify(magazine, Mockito.times(1)).load(any());
@@ -321,7 +326,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         };
         MagazineConsumerTask<Integer> magazineConsumerTask = new MagazineConsumerTask<>(
                 magazine, magazine, messageHandler, new ObjectMapper(), Integer.class,
-                new Timer(), aerospikeQueueService, null);
+                metricRegistry.timer("consume"), aerospikeQueueService, null);
         magazineConsumerTask.run();
         Mockito.verify(magazine, Mockito.times(5)).fire();
         Mockito.verify(magazine, Mockito.times(1)).load(any());
@@ -341,7 +346,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Mockito.when(magazine.fire()).thenReturn(trueData, falseData, trueData, trueData, trueData, trueData, nullData, null);
         MagazineConsumerTask<String> magazineConsumerTask = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService,
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService,
                 BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(10).build());
         magazineConsumerTask.run();
         Mockito.verify(magazine, Mockito.times(8)).fire();
@@ -359,7 +364,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                 .thenReturn(null);
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService, null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService, null);
         task.run();
         // Non-NOTHING_TO_FIRE MagazineException causes fireFromMagazine to return null, stopping takeWhile after 1 call
         Mockito.verify(magazine, Mockito.times(1)).fire();
@@ -373,7 +378,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                 "data may remain", null));
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService, null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService, null);
 
         task.run();
 
@@ -389,7 +394,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                 .thenReturn(null);
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService, null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService, null);
         task.run();
         // Generic exception causes fireFromMagazine to return null, stopping takeWhile after 1 call
         Mockito.verify(magazine, Mockito.times(1)).fire();
@@ -420,7 +425,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, failingHandler,
-                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService, null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService, null);
         task.run();
         // Exception in consume -> handleException -> sidelineMessage
         Mockito.verify(magazine, Mockito.times(1)).load(any());
@@ -452,7 +457,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, handler,
-                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService, null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService, null);
         task.run();
         // Ignorable exception => no sideline
         Mockito.verify(magazine, never()).load(any());
@@ -485,7 +490,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         MagazineConsumerTask<Integer> task = new MagazineConsumerTask<>(
                 magazine, magazine, handler,
-                new ObjectMapper(), Integer.class, new Timer(), aerospikeQueueService, null);
+                new ObjectMapper(), Integer.class, metricRegistry.timer("consume"), aerospikeQueueService, null);
         task.run();
         // JsonProcessingException is ignorable, so no sideline via sidelineMessage but handleException calls it
         // Actually handleException checks isExceptionIgnorable — JsonProcessingException is ignorable, so no sidelineMessage
@@ -518,7 +523,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, handler,
-                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService, null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService, null);
         task.run();
         Mockito.verify(magazine, Mockito.times(1)).delete(any());
         Mockito.verify(magazine, never()).load(any());
@@ -544,7 +549,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Mockito.when(sc.getClient()).thenReturn(aerospikeClient);
 
         IgnisMQManager manager = new IgnisMQManager(
-                CLIENT_ID, createBaseStorage(), new ObjectMapper(), new MetricRegistry(),
+                CLIENT_ID, createBaseStorage(), new ObjectMapper(), new SimpleMeterRegistry(),
                 sc, Mockito.mock(CuratorFramework.class), FARM_ID);
         // Don't initialize message handlers
         manager.refreshQueues(); // Should log "No message handlers registered" and return
@@ -690,8 +695,42 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
     @Test
     public void testStopMethod() {
-        // stop() is a no-op
         ignisMQManager.stop();
+    }
+
+    /**
+     * The manager did not build this storage client, so it must not close it: the caller that
+     * supplied it may still be using it.
+     */
+    @Test
+    public void testStopDoesNotCloseAnExternallyOwnedStorageClient() {
+        ignisMQManager.stop();
+        Mockito.verify(storageClient, never()).stop();
+    }
+
+    @Test
+    public void testStopIsIdempotent() {
+        ignisMQManager.stop();
+        ignisMQManager.stop();
+        Mockito.verify(storageClient, never()).stop();
+    }
+
+    @Test
+    public void testStopCancelsTheQueueWatcher() throws Exception {
+        Field watcherField = IgnisMQManager.class.getDeclaredField("watcherTimer");
+        watcherField.setAccessible(true);
+        assertNotNull("watcher should be scheduled by the constructor",
+                watcherField.get(ignisMQManager));
+
+        ignisMQManager.stop();
+
+        assertNull("watcher timer must be released on stop", watcherField.get(ignisMQManager));
+    }
+
+    @Test(expected = NullPointerException.class)
+    public void testMeterRegistryIsRequired() throws Exception {
+        new IgnisMQManager(CLIENT_ID, createBaseStorage(), new ObjectMapper(), null,
+                storageClient, Mockito.mock(CuratorFramework.class), FARM_ID);
     }
 
     @Test
@@ -719,7 +758,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         BatchingConfig batchingConfig = BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(1).build();
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, new Timer(), aerospikeQueueService, batchingConfig);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService, batchingConfig);
         // Should not throw — caught internally
         task.run();
     }

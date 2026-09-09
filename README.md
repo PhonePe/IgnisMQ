@@ -24,8 +24,9 @@ A distributed, persistent message queue built on top of [Magazine](https://githu
 - **Dead-letter queue (DLQ)** support with configurable retry policies
 - **Shoveling** — automatic transfer of messages between queues
 - **Sweeping** — periodic cleanup and reprocessing of stale messages
-- **Dropwizard integration** via `ignismq-dw-bundle`
-- **Function metrics** with AspectJ-based instrumentation
+- **Micrometer instrumentation** in a framework-agnostic core
+- **Dropwizard integration** via `ignismq-dw-bundle`, which bridges those meters into the
+  application's `MetricRegistry`
 
 ## Getting Started
 

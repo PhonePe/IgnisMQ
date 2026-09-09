@@ -87,6 +87,7 @@
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
         <maven.gpg.plugin.version>1.6</maven.gpg.plugin.version>
         <maven.sonar.plugin.version>3.9.1.2184</maven.sonar.plugin.version>
+        <maven.enforcer.plugin.version>3.5.0</maven.enforcer.plugin.version>
         <sonatype.central.publishing.maven.plugin.version>0.5.0</sonatype.central.publishing.maven.plugin.version>
         <jacoco.maven.plugin.version>0.8.11</jacoco.maven.plugin.version>
         <lombok.maven.version>1.18.20.0</lombok.maven.version>
@@ -96,18 +97,18 @@
         <!-- Dependency Versions -->
         <lombok.version>1.18.38</lombok.version>
         <dropwizard.version>2.1.12</dropwizard.version>
-        <metrics-core.version>4.1.23</metrics-core.version>
+        <!-- Must track the metrics-core that ${dropwizard.version} ships, since the bundle
+             consumes it at provided scope from the application's Dropwizard distribution. -->
+        <metrics-core.version>4.2.25</metrics-core.version>
         <slf4j.version>1.7.36</slf4j.version>
-        <aspectjrt.version>1.9.8</aspectjrt.version>
-        <function-metrics.version>1.0.6</function-metrics.version>
         <protonpack.version>1.16</protonpack.version>
         <magazine.version>2.0.0-SNAPSHOT</magazine.version>
+        <micrometer.version>1.14.4</micrometer.version>
+        <jackson.version>2.13.5</jackson.version>
+        <validation-api.version>2.0.1.Final</validation-api.version>
         <zookeeper.version>3.4.13</zookeeper.version>
         <curator.version>4.2.0</curator.version>
         <aerospike.bundle.version>v1.0.0-2</aerospike.bundle.version>
-
-        <!-- Build Plugins -->
-        <aspectj-maven-plugin.version>1.13.1</aspectj-maven-plugin.version>
 
         <!-- Testing -->
         <junit.version>4.12</junit.version>
@@ -133,33 +134,7 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.dropwizard</groupId>
-            <artifactId>dropwizard-core</artifactId>
-            <version>${dropwizard.version}</version>
             <scope>provided</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.commons</groupId>
-                    <artifactId>commons-lang3</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>io.appform.functionmetrics</groupId>
-            <artifactId>function-metrics</artifactId>
-            <version>${function-metrics.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.aspectj</groupId>
-            <artifactId>aspectjrt</artifactId>
-            <version>${aspectjrt.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-core</artifactId>
-            <version>${metrics-core.version}</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -179,37 +154,19 @@
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>io.appform.testcontainer</groupId>
-            <artifactId>junit-testcontainer-commons</artifactId>
-            <version>${junit.testcontainer.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.appform.testcontainer</groupId>
-            <artifactId>junit-testcontainer-aerospike</artifactId>
-            <version>${junit.testcontainer.version}</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.aerospike</groupId>
-                    <artifactId>aerospike-client</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.dropwizard</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>net.java.dev.jna</groupId>
-            <artifactId>jna</artifactId>
-            <version>${jna.version}</version>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>${maven.enforcer.plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -265,50 +222,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.plugin.version}</version>
-            </plugin>
-            <plugin>
-                <groupId>dev.aspectj</groupId>
-                <artifactId>aspectj-maven-plugin</artifactId>
-                <version>${aspectj-maven-plugin.version}</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.aspectj</groupId>
-                        <artifactId>aspectjrt</artifactId>
-                        <version>${aspectjrt.version}</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>org.aspectj</groupId>
-                        <artifactId>aspectjtools</artifactId>
-                        <version>${aspectjrt.version}</version>
-                    </dependency>
-                </dependencies>
-                <configuration>
-                    <complianceLevel>17</complianceLevel>
-                    <source>${jdk.source.version}</source>
-                    <target>${jdk.target.version}</target>
-                    <showWeaveInfo>true</showWeaveInfo>
-                    <forceAjcCompile>true</forceAjcCompile>
-                    <sources/>
-                    <weaveDirectories>
-                        <weaveDirectory>${project.build.directory}/classes</weaveDirectory>
-                    </weaveDirectories>
-                    <verbose>true</verbose>
-                    <Xlint>ignore</Xlint>
-                    <aspectLibraries>
-                        <aspectLibrary>
-                            <groupId>io.appform.functionmetrics</groupId>
-                            <artifactId>function-metrics</artifactId>
-                        </aspectLibrary>
-                    </aspectLibraries>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>process-classes</phase>
-                        <goals>
-                            <goal>compile</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>org.sonatype.central</groupId>

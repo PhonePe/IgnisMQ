@@ -115,7 +115,7 @@ sequenceDiagram
     BaseStorage storage = new AerospikeStorage(aerospikeConfig, "my-ns");
     IgnisMQManager manager = new IgnisMQManager(
         "my-client", storage, new ObjectMapper(),
-        new MetricRegistry(), curatorFramework, "farm-1"
+        new SimpleMeterRegistry(), curatorFramework, "farm-1"
     );
 
     // 2. Register handlers

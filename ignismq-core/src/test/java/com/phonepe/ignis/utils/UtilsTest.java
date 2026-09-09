@@ -26,6 +26,7 @@ import com.phonepe.magazine.entity.MetaData;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -131,7 +132,7 @@ public class UtilsTest extends AerospikeTestBase {
 
         // Call sweepQueue - should not throw
         Utils.sweepQueue(queueService, CLIENT_ID, storageClient, storage,
-                "UTIL_SWEEP_Q", entity, FARM_ID);
+                "UTIL_SWEEP_Q", entity, FARM_ID, new SimpleMeterRegistry());
     }
 
     @Test
@@ -151,7 +152,7 @@ public class UtilsTest extends AerospikeTestBase {
 
         // Should not throw - exception caught internally
         Utils.sweepQueue(queueService, CLIENT_ID, brokenClient, storage,
-                "NON_EXISTENT", entity, FARM_ID);
+                "NON_EXISTENT", entity, FARM_ID, new SimpleMeterRegistry());
     }
 
     @Test

@@ -16,7 +16,6 @@
 
 package com.phonepe.ignis.guage;
 
-import com.codahale.metrics.CachedGauge;
 import com.phonepe.ignis.IQueue;
 import com.phonepe.ignis.IgnisMQManager;
 import com.phonepe.ignis.metric.QueueStat;
@@ -26,27 +25,25 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
  * @author shantanu.tiwari
  */
 @Slf4j
-public class QueueStatGuage extends CachedGauge<List<QueueStat>> {
+public class QueueStatGuage implements Supplier<List<QueueStat>> {
     private final QueueService queueService;
     private final IgnisMQManager ignisMQManager;
 
-    public QueueStatGuage(final long timeout, final TimeUnit timeoutUnit,
-                          final QueueService queueService,
+    public QueueStatGuage(final QueueService queueService,
                           final IgnisMQManager ignisMQManager) {
-        super(timeout, timeoutUnit);
         this.queueService = queueService;
         this.ignisMQManager = ignisMQManager;
     }
 
     @Override
-    protected List<QueueStat> loadValue() {
+    public List<QueueStat> get() {
         try {
             Map<String, IQueue<?>> cachedQueues = ignisMQManager.getAllQueues();
             return queueService.getQueues(true).entrySet()

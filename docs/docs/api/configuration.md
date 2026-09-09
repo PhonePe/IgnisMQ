@@ -13,7 +13,7 @@ The `IgnisMQManager` is the primary entry point. All parameters are required.
 | `clientId`         | `String`           | Unique identifier for this application. Used in Aerospike set names (`{farmId}_{clientId}_ignis_queues`), ZooKeeper paths (`/{clientId}-ignis-workers/`), and metric names. |
 | `storage`          | `BaseStorage`      | Storage backend implementation. Currently only `AerospikeStorage` is supported.                                    |
 | `mapper`           | `ObjectMapper`     | Jackson `ObjectMapper` used for message serialization and deserialization.                                          |
-| `metricRegistry`   | `MetricRegistry`   | Dropwizard `MetricRegistry` for publishing timers and gauges.                                                      |
+| `meterRegistry`    | `MeterRegistry`    | Micrometer registry for publishing ignisMQ and Magazine timers and counters.                                       |
 | `curatorFramework` | `CuratorFramework` | Apache Curator client for ZooKeeper-based leader election.                                                         |
 | `farmId`           | `String`           | Deployment or datacenter identifier. Used as a prefix in Aerospike set names and metric names.                     |
 
@@ -142,7 +142,7 @@ A typical production setup with shovelling and batching enabled:
 
 ```java
 ObjectMapper mapper = new ObjectMapper();
-MetricRegistry metricRegistry = new MetricRegistry();
+MeterRegistry meterRegistry = new SimpleMeterRegistry();
 CuratorFramework curator = CuratorFrameworkFactory.newClient(
     "zk1.prod:2181,zk2.prod:2181,zk3.prod:2181",
     new RetryNTimes(3, 1000)
@@ -162,7 +162,7 @@ IgnisMQManager manager = new IgnisMQManager(
     "order-service",   // clientId
     storage,
     mapper,
-    metricRegistry,
+    meterRegistry,
     curator,
     "us-east-1"        // farmId
 );
@@ -197,7 +197,7 @@ IgnisMQManager manager = new IgnisMQManager(
     "my-app",
     storage,
     new ObjectMapper(),
-    new MetricRegistry(),
+    new SimpleMeterRegistry(),
     curator,
     "local"
 );

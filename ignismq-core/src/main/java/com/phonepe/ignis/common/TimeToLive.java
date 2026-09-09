@@ -20,12 +20,12 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.phonepe.ignis.utils.Constants;
-import io.dropwizard.validation.ValidationMethod;
 import lombok.Builder;
 import lombok.Getter;
 
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
+import javax.validation.constraints.AssertTrue;
 
 /**
  * @author shantanu.tiwari
@@ -49,7 +49,7 @@ public class TimeToLive {
         return timeUnit.toSeconds(duration);
     }
 
-    @ValidationMethod(message = "Time duration is more than allowed")
+    @AssertTrue(message = "Time duration is more than allowed")
     @JsonIgnore
     public boolean isValid() {
         return timeUnit.toSeconds(duration) <= Constants.MAX_DURATION_ALLOWED_IN_SECONDS;

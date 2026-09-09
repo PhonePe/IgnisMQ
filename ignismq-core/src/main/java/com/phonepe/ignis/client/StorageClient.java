@@ -17,8 +17,21 @@
 package com.phonepe.ignis.client;
 
 /**
+ * A connection holder for a storage backend.
+ * <p>
+ * Implementations connect eagerly on construction. {@link #stop()} exists so that whoever created
+ * the client can release its connection pool; it is deliberately a no-op by default so that
+ * callers who pass in an externally owned client are not forced to implement teardown.
+ *
  * @author shantanu.tiwari
  */
 public interface StorageClient<T> {
     T getClient();
+
+    /**
+     * Releases any resources held by this client. Must be idempotent.
+     */
+    default void stop() {
+        // No-op: externally managed clients are torn down by their owner.
+    }
 }

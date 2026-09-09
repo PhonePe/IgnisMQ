@@ -16,17 +16,24 @@
 
 package com.phonepe.ignis;
 
-import com.phonepe.ignis.IgnisMQManager;
+import com.codahale.metrics.CachedGauge;
+import com.phonepe.ignis.metric.DropwizardMagazineMetrics;
+import com.phonepe.ignis.metric.QueueStat;
 import com.phonepe.ignis.storage.BaseStorage;
 import io.dropwizard.Configuration;
 import io.dropwizard.ConfiguredBundle;
+import io.dropwizard.lifecycle.Managed;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
+
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author shantanu.tiwari
@@ -37,13 +44,41 @@ public abstract class IgnisMQBundle<T extends Configuration> implements Configur
     @Getter
     private IgnisMQManager ignisMQManager;
 
+    static final String QUEUE_STATS_METRIC = "ignis.queue.stats";
+    private static final int QUEUE_STATS_TTL_MINUTES = 3;
+
     @Override
     public void run(T config, Environment environment) throws Exception {
+        final MeterRegistry meterRegistry = DropwizardMagazineMetrics.bridgedTo(environment.metrics());
         this.ignisMQManager = new IgnisMQManager(getClientId(config), getStorage(config),
-                environment.getObjectMapper(), environment.metrics(), getCuratorFramework(),
+                environment.getObjectMapper(), meterRegistry, getCuratorFramework(),
                 getFarmId(config));
-        environment.lifecycle().manage(ignisMQManager);
-        environment.lifecycle().manage(ignisMQManager.getTaskInitializer());
+
+        // Cached because each load issues metadata reads per queue against the storage backend.
+        environment.metrics().register(QUEUE_STATS_METRIC,
+                new CachedGauge<List<QueueStat>>(QUEUE_STATS_TTL_MINUTES, TimeUnit.MINUTES) {
+                    @Override
+                    protected List<QueueStat> loadValue() {
+                        return ignisMQManager.getQueueStats();
+                    }
+                });
+
+        environment.lifecycle().manage(new Managed() {
+            @Override
+            public void start() throws Exception {
+                ignisMQManager.start();
+                ignisMQManager.getTaskInitializer().start();
+            }
+
+            @Override
+            public void stop() {
+                // Jetty invokes stop even when start failed part way through, so every step
+                // here has to tolerate never having been started.
+                ignisMQManager.getTaskInitializer().stop();
+                ignisMQManager.stop();
+                meterRegistry.close();
+            }
+        });
     }
 
     @Override

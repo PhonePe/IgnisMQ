@@ -24,6 +24,7 @@ import com.phonepe.ignis.util.AerospikeTestBase;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.util.Collections;
 
@@ -35,6 +36,7 @@ public class SweeperTest extends AerospikeTestBase {
     private StorageClient storageClient;
     private AerospikeStorage storage;
     private Sweeper sweeper;
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @Before
     public void setUp() {
@@ -42,7 +44,7 @@ public class SweeperTest extends AerospikeTestBase {
         storageClient = Mockito.mock(StorageClient.class);
         when(storageClient.getClient()).thenReturn(aerospikeClient);
         storage = (AerospikeStorage) createBaseStorage();
-        sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID);
+        sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID, meterRegistry);
     }
 
     @Test
@@ -99,7 +101,7 @@ public class SweeperTest extends AerospikeTestBase {
         Mockito.reset(queueService);
         // Re-spy the service
         queueService = Mockito.spy(createQueueService());
-        sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID);
+        sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID, meterRegistry);
         sweeper.activate();
 
         sweeper.run();

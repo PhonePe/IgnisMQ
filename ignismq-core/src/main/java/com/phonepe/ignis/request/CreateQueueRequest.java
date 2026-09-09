@@ -24,7 +24,6 @@ import com.phonepe.ignis.common.TimeUnit;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.ErrorMessage;
-import io.dropwizard.validation.ValidationMethod;
 import lombok.Builder;
 import lombok.Data;
 
@@ -33,6 +32,7 @@ import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
+import javax.validation.constraints.AssertTrue;
 import java.util.Objects;
 
 /**
@@ -91,7 +91,7 @@ public class CreateQueueRequest {
                 .build();
     }
 
-    @ValidationMethod(message = ErrorMessage.QUEUE_EXPIRY_VALIDATION_MESSAGE)
+    @AssertTrue(message = ErrorMessage.QUEUE_EXPIRY_VALIDATION_MESSAGE)
     @JsonIgnore
     public boolean isValid() {
         return queueExpiry.isValid()

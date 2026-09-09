@@ -142,7 +142,7 @@ public class OrderEventHandler implements MessageHandler<OrderEvent> {
         "my-service",               // clientId — identifies this application
         storage,                     // Aerospike storage
         new ObjectMapper(),          // Jackson mapper for serialization
-        new MetricRegistry(),        // Dropwizard metrics
+        new SimpleMeterRegistry(),   // Micrometer metrics
         curatorFramework,            // ZooKeeper curator client
         "datacenter-1"              // farmId — identifies this deployment
     );

@@ -22,10 +22,17 @@ The primary interface for interacting with a queue. Generic parameter `M` is the
 ## IgnisMQManager
 
 ```java
-public final class IgnisMQManager implements Managed
+public final class IgnisMQManager
 ```
 
-Central manager for all queue lifecycle operations. Implements Dropwizard `Managed` for start/stop hooks.
+Central manager for all queue lifecycle operations. Framework integrations adapt its `start()` and
+`stop()` methods to their own lifecycle APIs; `ignismq-dw-bundle` does this with a Dropwizard
+`Managed`.
+
+`stop()` cancels the queue-refresh watcher and, **only when the manager created the storage client
+itself**, closes that client. If you passed your own `StorageClient` to the constructor, you retain
+ownership of it and are responsible for closing it. `stop()` is safe to call more than once, and
+safe to call when `start()` never ran.
 
 ### Constructors
 
@@ -34,7 +41,7 @@ public IgnisMQManager(
     String clientId,
     BaseStorage storage,
     ObjectMapper mapper,
-    MetricRegistry metricRegistry,
+    MeterRegistry meterRegistry,
     CuratorFramework curatorFramework,
     String farmId
 ) throws Exception
@@ -47,7 +54,7 @@ public IgnisMQManager(
     String clientId,
     BaseStorage storage,
     ObjectMapper mapper,
-    MetricRegistry metricRegistry,
+    MeterRegistry meterRegistry,
     StorageClient storageClient,
     CuratorFramework curatorFramework,
     String farmId
@@ -64,7 +71,7 @@ Creates the manager with an externally managed `StorageClient`, allowing the cal
 void initialiseMessageHandlers(Map<String, Map.Entry<Class, MessageHandler>> messageHandlers)
 ```
 
-Registers all message handler mappings. **Must be called exactly once** before any call to `createQueue`. Subsequent calls will fail. Internally calls `refreshQueues()` to sync state from the database and registers a `QueueStatGauge` for metrics.
+Registers all message handler mappings. **Must be called exactly once** before any call to `createQueue`. Subsequent calls will fail. Internally calls `refreshQueues()` to sync state from the database. Framework integrations may expose `getQueueStats()` through their metrics system.
 
 > [!WARNING]
 > Calling this method more than once will throw an exception. Ensure all handlers are collected into a single map before invoking.
@@ -422,13 +429,14 @@ Generic interface for obtaining a database client handle.
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `getClient` | `T getClient()` | Returns the underlying client instance. |
+| `stop` | `default void stop()` | Releases the client's resources. Idempotent, and a no-op by default so that externally owned clients are torn down by their owner. |
 
 ---
 
 ## AerospikeStoreClient
 
 ```java
-public final class AerospikeStoreClient implements StorageClient<IAerospikeClient>, Managed
+public final class AerospikeStoreClient implements StorageClient<IAerospikeClient>
 ```
 
 Aerospike client wrapper that auto-starts on construction.

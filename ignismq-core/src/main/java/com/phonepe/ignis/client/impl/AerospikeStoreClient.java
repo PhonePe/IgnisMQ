@@ -24,7 +24,6 @@ import com.google.common.base.Strings;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import com.phonepe.aerospike.config.AerospikeHost;
-import io.dropwizard.lifecycle.Managed;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
@@ -38,7 +37,7 @@ import java.util.stream.Collectors;
  * @author shantanu.tiwari
  */
 @Slf4j
-public final class AerospikeStoreClient implements StorageClient<IAerospikeClient>, Managed {
+public final class AerospikeStoreClient implements StorageClient<IAerospikeClient> {
     private final AerospikeConfiguration config;
     private IAerospikeClient client;
 
@@ -52,7 +51,6 @@ public final class AerospikeStoreClient implements StorageClient<IAerospikeClien
         return client;
     }
 
-    @Override
     public void start() {
         if (Objects.nonNull(this.client)) {
             return;
@@ -77,6 +75,7 @@ public final class AerospikeStoreClient implements StorageClient<IAerospikeClien
         log.info("Killing aerospike connection");
         if (Objects.nonNull(client)) {
             client.close();
+            client = null;
         }
     }
 

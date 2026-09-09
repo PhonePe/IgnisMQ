@@ -16,7 +16,6 @@
 
 package com.phonepe.ignis.guage;
 
-import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.IgnisMQManager;
 import com.phonepe.ignis.client.StorageClient;
@@ -30,10 +29,10 @@ import org.apache.curator.framework.CuratorFramework;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.lang.reflect.Field;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -49,7 +48,7 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         Mockito.when(storageClient.getClient()).thenReturn(aerospikeClient);
 
         ignisMQManager = new IgnisMQManager(
-                CLIENT_ID, createBaseStorage(), new ObjectMapper(), new MetricRegistry(),
+                CLIENT_ID, createBaseStorage(), new ObjectMapper(), new SimpleMeterRegistry(),
                 storageClient, Mockito.mock(CuratorFramework.class), FARM_ID);
         queueService = Mockito.spy(createQueueService());
 
@@ -65,10 +64,10 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         messageHandlerMap.put("handler", new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
         ignisMQManager.initialiseMessageHandlers(messageHandlerMap);
 
-        QueueStatGuage guage = new QueueStatGuage(1, TimeUnit.SECONDS, queueService, ignisMQManager);
+        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager);
         doReturn(Collections.emptyMap()).when(queueService).getQueues(true);
 
-        var result = guage.getValue();
+        var result = guage.get();
         assertNotNull(result);
         assertTrue(result.isEmpty());
     }
@@ -85,8 +84,8 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         dbQueues.put("QUEUE_1", QueueEntity.builder().active(true).build());
         doReturn(dbQueues).when(queueService).getQueues(true);
 
-        QueueStatGuage guage = new QueueStatGuage(1, TimeUnit.SECONDS, queueService, ignisMQManager);
-        var result = guage.getValue();
+        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager);
+        var result = guage.get();
         assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals("QUEUE_1", result.get(0).getName());
@@ -94,10 +93,10 @@ public class QueueStatGuageTest extends AerospikeTestBase {
 
     @Test
     public void testLoadValueException() {
-        QueueStatGuage guage = new QueueStatGuage(1, TimeUnit.SECONDS, queueService, ignisMQManager);
+        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager);
         doThrow(new RuntimeException("error")).when(queueService).getQueues(true);
 
-        var result = guage.getValue();
+        var result = guage.get();
         assertNotNull(result);
         assertTrue(result.isEmpty());
     }
@@ -108,12 +107,12 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         messageHandlerMap.put("handler", new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
         ignisMQManager.initialiseMessageHandlers(messageHandlerMap);
 
-        QueueStatGuage guage = new QueueStatGuage(1, TimeUnit.SECONDS, queueService, ignisMQManager);
+        QueueStatGuage guage = new QueueStatGuage(queueService, ignisMQManager);
         Map<String, QueueEntity> dbQueues = new HashMap<>();
         dbQueues.put("QUEUE_1", QueueEntity.builder().active(true).build());
         doReturn(dbQueues).when(queueService).getQueues(true);
 
-        var result = guage.getValue();
+        var result = guage.get();
         assertNotNull(result);
         assertTrue(result.isEmpty());
     }

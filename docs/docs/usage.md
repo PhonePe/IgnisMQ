@@ -157,7 +157,7 @@ If you're not using Dropwizard, create an `IgnisMQManager` directly.
             "my-service",           // clientId
             storage,                // BaseStorage
             new ObjectMapper(),     // Jackson ObjectMapper
-            new MetricRegistry(),   // Dropwizard MetricRegistry
+            new SimpleMeterRegistry(), // Micrometer MeterRegistry
             curator,                // CuratorFramework
             "datacenter-1"          // farmId
     );
@@ -186,7 +186,7 @@ If you're not using Dropwizard, create an `IgnisMQManager` directly.
             "my-service",           // clientId
             storage,                // BaseStorage
             new ObjectMapper(),     // Jackson ObjectMapper
-            new MetricRegistry(),   // Dropwizard MetricRegistry
+            new SimpleMeterRegistry(), // Micrometer MeterRegistry
             storageClient,          // Pre-built StorageClient
             curator,                // CuratorFramework
             "datacenter-1"          // farmId
@@ -599,18 +599,20 @@ log.info("Shovelled:  {}", meta.getShovelled());
 
 ### Automatic Metrics
 
-IgnisMQ automatically registers metrics with the Dropwizard `MetricRegistry`:
+Core records metrics through the supplied Micrometer `MeterRegistry`. The Dropwizard bundle bridges
+those meters into `Environment.metrics()` and registers the cached queue-stat gauge:
 
 | Metric | Type | Description |
 |--------|------|-------------|
 | `commands.{queueName}_publish.all` | Timer | Latency of publish operations |
 | `commands.{queueName}_consume.all` | Timer | Latency of consume operations |
-| `ignis.queue.stats` | Gauge | `QueueStatGuage` — reports queue statistics every 3 minutes |
+| `ignis.queue.stats` | Gauge | Bundle-only cached queue statistics, refreshed every 3 minutes |
 
 ```java
-// Access metrics programmatically
-Timer publishTimer = metricRegistry.timer("commands.order-events_publish.all");
-log.info("Publish p99: {} ms", publishTimer.getSnapshot().get99thPercentile() / 1_000_000);
+// Access core metrics programmatically
+io.micrometer.core.instrument.Timer publishTimer =
+        meterRegistry.find("commands.order-events_publish.all").timer();
+log.info("Publish mean: {} ms", publishTimer.mean(java.util.concurrent.TimeUnit.MILLISECONDS));
 ```
 
 ---

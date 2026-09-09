@@ -36,9 +36,9 @@ import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
 import com.phonepe.ignis.storage.StorageVisitor;
+import com.phonepe.ignis.sweep.QueueSweeper;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.ErrorMessage;
-import com.phonepe.ignis.utils.Utils;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
@@ -70,6 +70,8 @@ public final class IgnisMQManager {
     private boolean ownsStorageClient;
     private java.util.Timer watcherTimer;
     private final QueueStatGuage queueStatGuage;
+    /** Stateless, so one instance serves every on-demand sweep. */
+    private final QueueSweeper queueSweeper;
 
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
                           final MeterRegistry meterRegistry, final CuratorFramework curatorFramework,
@@ -84,6 +86,8 @@ public final class IgnisMQManager {
         this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
                 storage, storageClient, farmId, magazineMeterRegistry);
         this.queueStatGuage = new QueueStatGuage(queueService, this::getAllQueues);
+        this.queueSweeper = new QueueSweeper(queueService, clientId, storage, storageClient, farmId,
+                magazineMeterRegistry);
         scheduleWatcher();
     }
 
@@ -101,6 +105,8 @@ public final class IgnisMQManager {
         this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
                 storage, storageClient, farmId, magazineMeterRegistry);
         this.queueStatGuage = new QueueStatGuage(queueService, this::getAllQueues);
+        this.queueSweeper = new QueueSweeper(queueService, clientId, storage, storageClient, farmId,
+                magazineMeterRegistry);
         scheduleWatcher();
     }
 
@@ -162,11 +168,12 @@ public final class IgnisMQManager {
      */
     public void createQueue(final CreateQueueRequest queueRequest) throws Exception {
         validateRequest(queueRequest);
+        final long sweepDuration = queueRequest.getSweepDurationInMins() * 60 * 1000L;
         IQueue<?> queue = createMagazine(
                 queueRequest.getName(), queueRequest.getShards(), queueRequest.getMessageExpiry().toSeconds(),
                 queueRequest.getQueueExpiry().toSeconds() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
                 queueRequest.getConcurrency(), queueRequest.getMessageHandlerType(), queueRequest.getShovelConfig(),
-                queueRequest.getBatchingConfig()
+                queueRequest.getBatchingConfig(), sweepDuration
         );
 
         //Storing the queue details
@@ -183,7 +190,7 @@ public final class IgnisMQManager {
                                 ? queueRequest.getShovelConfig().getTimeIntervalInSecs() : -1)
                         .messageHandlerType(queueRequest.getMessageHandlerType())
                         .active(true)
-                        .sweepDuration(queueRequest.getSweepDurationInMins() * 60 * 1000L)
+                        .sweepDuration(sweepDuration)
                         .createdAt(System.currentTimeMillis())
                         .batchingConfig(queueRequest.getBatchingConfig())
                         .build(),
@@ -263,8 +270,7 @@ public final class IgnisMQManager {
             log.info("Queue {} doesn't exist", queueName);
             return;
         }
-        Utils.sweepQueue(queueService, clientId, storageClient, storage, queueName, queueEntity, farmId,
-                magazineMeterRegistry);
+        queueSweeper.sweepQueue(queueName, queueEntity);
     }
 
     public void start() throws Exception {
@@ -341,7 +347,8 @@ public final class IgnisMQManager {
                                 entry.getKey(), entry.getValue().getShards(), entry.getValue().getMessageExpiry(),
                                 entry.getValue().getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
                                 entry.getValue().getConcurrency(), entry.getValue().getMessageHandlerType(),
-                                shovelConfig, entry.getValue().getBatchingConfig());
+                                shovelConfig, entry.getValue().getBatchingConfig(),
+                                entry.getValue().getSweepDuration());
                         ignisMQMap.put(entry.getKey(), queue);
                         log.info("Queue '{}' successfully created", entry.getKey());
                     } catch (Exception e) {
@@ -406,7 +413,8 @@ public final class IgnisMQManager {
                                          final int concurrency,
                                          final String messageHandlerType,
                                          final ShovelConfig shovelConfig,
-                                         final BatchingConfig batchingConfig) throws Exception {
+                                         final BatchingConfig batchingConfig,
+                                         final long sweepDurationInMillis) throws Exception {
         if (!messageHandlers.containsKey(messageHandlerType)) {
             throw IgnisMQException.builder()
                     .errorCode(ErrorCode.INVALID_MESSAGE_HANDLER)
@@ -421,8 +429,9 @@ public final class IgnisMQManager {
         return new MagazineQueue<M>(
                 clientId, farmId, queueName, queueShards, recordTtlInSeconds, metaDataTtlInSeconds,
                 storageClient, storage, concurrency, messageHandlers.get(messageHandlerType).getValue(),
-                shovelConfig, mapper, messageHandlers.get(messageHandlerType).getKey(), queueService,
-                batchingConfig, publishMetricTimer, consumeMetricTimer, magazineMeterRegistry
+                shovelConfig, mapper, messageHandlers.get(messageHandlerType).getKey(),
+                batchingConfig, sweepDurationInMillis, publishMetricTimer, consumeMetricTimer,
+                magazineMeterRegistry
         );
     }
 

@@ -27,7 +27,6 @@ import com.phonepe.ignis.consumer.MagazineConsumerTask;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.request.ShovelConfig;
-import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.shovel.ShovelTask;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
@@ -66,7 +65,6 @@ public final class MagazineQueue<M> implements IQueue<M> {
     private final Class<M> clazz;
     @Getter
     private final ShovelConfig shovelConfig;
-    private final QueueService queueService;
     private final Timer publishMetricTimer;
     private final Timer consumeMetricTimer;
     private final BatchingConfig batchingConfig;
@@ -85,8 +83,8 @@ public final class MagazineQueue<M> implements IQueue<M> {
             final ShovelConfig shovelConfig,
             final ObjectMapper mapper,
             final Class<M> clazz,
-            final QueueService queueService,
             final BatchingConfig batchingConfig,
+            final long sweepDurationInMillis,
             final Timer publishMetricTimer,
             final Timer consumeMetricTimer,
             final MeterRegistry meterRegistry) throws Exception {
@@ -99,16 +97,15 @@ public final class MagazineQueue<M> implements IQueue<M> {
         this.magazine = Magazine.<String>builder()
                 .baseMagazineStorage(storage.accept(new MagazineStorageVisitor(
                         clientId, recordTtlInSeconds, metaDataTtlInSeconds, client, queueShards, farmId,
-                        meterRegistry)))
+                        meterRegistry, sweepDurationInMillis)))
                 .magazineIdentifier(queueName)
                 .build();
         this.sidelineMagazine = Magazine.<String>builder()
                 .baseMagazineStorage(storage.accept(new MagazineStorageVisitor(
                         clientId, recordTtlInSeconds, metaDataTtlInSeconds, client, queueShards, farmId,
-                        meterRegistry)))
+                        meterRegistry, sweepDurationInMillis)))
                 .magazineIdentifier(Utils.getSidelineQueueName(queueName))
                 .build();
-        this.queueService = queueService;
         createConsumers(concurrency);
         this.shovelConfig = shovelConfig;
         if (Objects.nonNull(shovelConfig)) {
@@ -165,7 +162,7 @@ public final class MagazineQueue<M> implements IQueue<M> {
                     java.util.Timer consumer = new java.util.Timer();
                     consumer.schedule(
                             new MagazineConsumerTask<>(magazine, sidelineMagazine, messageHandler,
-                                    mapper, clazz, consumeMetricTimer, queueService, batchingConfig),
+                                    mapper, clazz, consumeMetricTimer, batchingConfig),
                             Constants.INITIAL_DELAY_IN_MS,
                             Constants.DELAY_PERIOD_IN_MS
                     );
@@ -220,7 +217,7 @@ public final class MagazineQueue<M> implements IQueue<M> {
         IntStream.range(0, concurrency).boxed()
                 .forEach(i -> {
                     final java.util.Timer shovel = new java.util.Timer();
-                    final ShovelTask shovelTask = new ShovelTask(magazine, sidelineMagazine, queueService, autoDelete);
+                    final ShovelTask shovelTask = new ShovelTask(magazine, sidelineMagazine, autoDelete);
                     if (autoDelete) {
                         shovel.schedule(
                                 shovelTask,
@@ -260,6 +257,7 @@ public final class MagazineQueue<M> implements IQueue<M> {
         private final int shards;
         private final String farmId;
         private final MeterRegistry meterRegistry;
+        private final long sweepDurationInMillis;
 
         @Override
         public BaseMagazineStorage<String> visit(final AerospikeStorage storage) {
@@ -272,6 +270,15 @@ public final class MagazineQueue<M> implements IQueue<M> {
                             .shards(shards)
                             .recordTtl(recordTtlInSeconds)
                             .metaDataTtl(metaDataTtlInSeconds)
+                            // Delivery-time watermarking. Every magazine ignisMQ builds records it,
+                            // including the ones the consumers hold: checkpoints are written from
+                            // Magazine's own active-shard refresh, so a magazine that is only
+                            // published to and consumed from is exactly the one that must be
+                            // recording. Switching it on only for the sweeper's own handles would
+                            // leave nothing for the sweeper to read.
+                            .fireHistoryEnabled(true)
+                            .fireHistoryWindowSeconds(Utils.fireHistoryWindowSeconds(sweepDurationInMillis))
+                            .fireHistoryEntries(Constants.FIRE_HISTORY_ENTRIES)
                             .build())
                     .aerospikeClient((IAerospikeClient) client.getClient())
                     .enableDeDupe(false)

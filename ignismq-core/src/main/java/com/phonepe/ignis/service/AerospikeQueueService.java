@@ -20,7 +20,6 @@ import com.aerospike.client.Record;
 import com.aerospike.client.*;
 import com.aerospike.client.cdt.MapOperation;
 import com.aerospike.client.cdt.MapPolicy;
-import com.aerospike.client.policy.BatchPolicy;
 import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.client.query.Filter;
 import com.aerospike.client.query.IndexType;
@@ -30,18 +29,12 @@ import com.github.rholder.retry.*;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
-import com.phonepe.ignis.utils.Constants;
-import com.phonepe.ignis.utils.Utils;
 import com.phonepe.ignis.entity.QueueEntity;
-import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.LongStream;
 
 /**
  * @author shantanu.tiwari
@@ -58,23 +51,19 @@ public final class AerospikeQueueService implements QueueService {
     private static final String SHOVEL_TIME_INTERVAL_IN_SECS_BIN = "shovelInterval";
     private static final String SHOVEL_CONCURRENCY_BIN = "shovelConcur";
     private static final String CREATED_AT_BIN = "createdAt";
-    private static final String MAGAZINE_FIRE_TS_BIN = "fireTS";
     private static final String SWEEP_POINTERS_BIN = "sweepPointers";
     private static final String SWEPT_COUNTER_BIN = "sweptCounter";
     private static final String SIDELINE_SWEEP_POINTERS_BIN = "sidelineSweep";
     private static final String SIDELINE_SWEPT_COUNTER_BIN = "sidelineSwept";
     private static final String SWEEP_DURATION_BIN = "sweepDuration";
-    private static final int SWEEP_BATCH_SIZE = 1000;
     private static final String MAX_BATCH_SIZE = "maxBatchSize";
     private static final String MAX_WAIT_TIME = "maxWaitTime";
     private static final String SET_FORMAT = "%s_%s_ignis_queues";
 
     private final IAerospikeClient client;
     private final String namespace;
-    private final String clientId;
     private final String setName;
     private final Retryer<Object> retryer;
-    private final String farmId;
 
     public AerospikeQueueService(final IAerospikeClient client,
                                  final AerospikeConfiguration configuration,
@@ -83,8 +72,6 @@ public final class AerospikeQueueService implements QueueService {
                                  final String farmId) {
         this.client = client;
         this.namespace = namespace;
-        this.clientId = clientId;
-        this.farmId = farmId;
         this.setName = getSetName(farmId, clientId);
         this.retryer = RetryerBuilder.newBuilder()
                 .retryIfExceptionOfType(AerospikeException.class)
@@ -218,189 +205,29 @@ public final class AerospikeQueueService implements QueueService {
     }
 
     @Override
-    public void addFireTimestamp(final MagazineData<String> magazineData, final long timestamp) {
+    public void updateSweepProgress(final String queueName, final boolean isSideline,
+                                    final Map<String, Long> shardPointers, final long sweptCounter) {
+        if (shardPointers.isEmpty()) {
+            return;
+        }
+        final String sweepPointersBin = isSideline ? SIDELINE_SWEEP_POINTERS_BIN : SWEEP_POINTERS_BIN;
+        final String sweptCounterBin = isSideline ? SIDELINE_SWEPT_COUNTER_BIN : SWEPT_COUNTER_BIN;
         try {
             retryer.call(() -> {
-                final List<Bin> binList = new ArrayList<>();
-                binList.add(new Bin(MAGAZINE_FIRE_TS_BIN, timestamp));
-
-                final String magazineDataSetName = Utils.resolveLocalMagazineSet(
-                        clientId, Constants.AEROSPIKE_DATA_SET, farmId);
-                client.put(
-                        createWritePolicy(DO_NOT_UPDATE_TTL),
-                        new Key(namespace, magazineDataSetName, Utils.createMagazineAerospikeKey(
-                                magazineData.getFirePointer(), magazineData.getShard(),
-                                magazineData.getMagazineIdentifier())),
-                        binList.toArray(new Bin[0])
-                );
+                final List<Operation> operations = new ArrayList<>();
+                shardPointers.forEach((shardId, pointer) -> operations.add(
+                        MapOperation.put(new MapPolicy(), sweepPointersBin,
+                                new Value.StringValue(shardId), new Value.LongValue(pointer))));
+                operations.add(Operation.put(new Bin(sweptCounterBin, sweptCounter)));
+                client.operate(createWritePolicy(DO_NOT_UPDATE_TTL),
+                        new Key(namespace, setName, queueName),
+                        operations.toArray(new Operation[0]));
                 return true;
             });
         } catch (Exception e) {
-            log.error("Error adding fire timestamp in AS", e);
+            log.error("Error updating sweep progress in AS", e);
             throw IgnisMQException.propagate(ErrorCode.AEROSPIKE_ERROR, e);
         }
-    }
-
-    @Override
-    public void sweep(final String queueName, final int shard,
-                      final long sweepTillFireTimestamp,
-                      final Magazine<String> sidelineMagazine) {
-        final QueueEntity queueEntity = get(queueName)
-                .orElseThrow(() -> IgnisMQException.builder()
-                        .errorCode(ErrorCode.QUEUE_NOT_FOUND)
-                        .build());
-
-        sweepMagazine(queueName, queueName, shard, sweepTillFireTimestamp,
-                sidelineMagazine, queueEntity, false);
-        final long lastShovelTS = System.currentTimeMillis() - (queueEntity.getShovelTimeIntervalInSecs() * 2 * 1000L);
-        sweepMagazine(queueName, Utils.getSidelineQueueName(queueName), shard,
-                Math.min(sweepTillFireTimestamp, lastShovelTS),
-                sidelineMagazine, queueEntity, true);
-    }
-
-    private void sweepMagazine(final String queueName, final String magazineIdentifier,
-                               final int shard, final long sweepTillFireTimestamp,
-                               final Magazine<String> sidelineMagazine,
-                               final QueueEntity queueEntity,
-                               final boolean isSideline) {
-        final BatchPolicy batchPolicy = new BatchPolicy(client.getBatchPolicyDefault());
-        batchPolicy.maxConcurrentThreads = 5; // Revisit
-
-        final String magazineMetaSetName = Utils.resolveLocalMagazineSet(
-                clientId, Constants.AEROSPIKE_META_SET, farmId);
-        final Record shardConfiguration = client.get(client.getReadPolicyDefault(),
-                new Key(namespace, magazineMetaSetName, Utils.createShardConfigurationKey(magazineIdentifier)));
-        final int persistedShards = Objects.nonNull(shardConfiguration)
-                ? shardConfiguration.getInt(Constants.MAGAZINE_SHARDS_BIN)
-                : queueEntity.getShards();
-        final int schemaVersion = Objects.nonNull(shardConfiguration)
-                ? shardConfiguration.getInt(Constants.MAGAZINE_METADATA_SCHEMA_VERSION_BIN)
-                : 0;
-        final String metadataSuffix = schemaVersion == Constants.MAGAZINE_UNIFIED_METADATA_SCHEMA_VERSION
-                ? Constants.MAGAZINE_UNIFIED_METADATA_SUFFIX
-                : Constants.MAGAZINE_LEGACY_METADATA_SUFFIX;
-        final Integer magazineShard = persistedShards > 1 ? shard : null;
-        final Record magazineMetaRecord = client.get(client.getReadPolicyDefault(),
-                new Key(namespace, magazineMetaSetName,
-                        Utils.createMetadataKey(magazineIdentifier, magazineShard, metadataSuffix)));
-        if (Objects.isNull(magazineMetaRecord)) {
-            log.debug("Null meta record for queue {} and shard {}", magazineIdentifier, shard);
-            return;
-        }
-
-        final String sweepPointersBin = isSideline ? SIDELINE_SWEEP_POINTERS_BIN : SWEEP_POINTERS_BIN;
-        final String sweptCounterBin = isSideline ? SIDELINE_SWEPT_COUNTER_BIN : SWEPT_COUNTER_BIN;
-        final long currentFirePointer = magazineMetaRecord
-                .getLong(Constants.MAGAZINE_FIRE_POINTER_BIN);
-        long sweepPointer = getSweepPointer(
-                queueName, shard, queueEntity, isSideline, sweepPointersBin, sweptCounterBin);
-        long sweptCounter = isSideline ? queueEntity.getSidelineSweptCounter() : queueEntity.getSweptCounter();
-        if (sweepPointer >= currentFirePointer) {
-            log.debug("Sweeping not required as sweep pointer {} >= {} current fire pointer", sweepPointer, currentFirePointer);
-            return;
-        }
-
-        while (true) {
-            final String magazineDataSetName = Utils.resolveLocalMagazineSet(
-                    clientId, Constants.AEROSPIKE_DATA_SET, farmId);
-            // Never read past the fire pointer. Magazine claims a record by incrementing the fire
-            // pointer and then reading at it, so indices up to and including currentFirePointer have
-            // been delivered and everything beyond it has been loaded but never claimed by any
-            // consumer. Those carry no fire timestamp, and sweeping them would delete a message that
-            // was never delivered.
-            final long batchEnd = Math.min(sweepPointer + SWEEP_BATCH_SIZE, currentFirePointer + 1);
-            final Key[] keys = LongStream.range(sweepPointer, batchEnd).boxed()
-                    .map(i -> new Key(namespace, magazineDataSetName,
-                            Utils.createMagazineAerospikeKey(i, magazineShard, magazineIdentifier)))
-                    .toArray(Key[]::new);
-            final List<Record> records = Arrays.stream(client.get(batchPolicy, keys))
-                    .collect(Collectors.toList());
-
-            boolean stopSweeping = false;
-            for (int i = 0; i < keys.length; i++) {
-                // Ignore the already consumed message
-                if (Objects.isNull(records.get(i))) {
-                    continue;
-                }
-
-                final Record record = records.get(i);
-                final Object fireTimestamp = record.getValue(MAGAZINE_FIRE_TS_BIN);
-                if (Objects.isNull(fireTimestamp)) {
-                    // The fire pointer moves before the fire timestamp is written, so a record below
-                    // the fire pointer can briefly have no timestamp. Unknown fire time must never be
-                    // read as "fired long ago": stop without advancing and let the next sweep retry.
-                    log.warn("Message with no fire timestamp below the fire pointer. Stopping this " +
-                                    "sweeping process [queue: {}_SHARD_{}, pointer: {}]",
-                            magazineIdentifier, shard, sweepPointer + i);
-                    stopSweeping = true;
-                    break;
-                }
-                if (((Number) fireTimestamp).longValue() >= sweepTillFireTimestamp) {
-                    log.debug("Encountered a message with {}ms >= {}ms (allowed sweep till fire timestamp). " +
-                                    "Stopping this sweeping process [queue: {}_SHARD_{}]",
-                            fireTimestamp, sweepTillFireTimestamp, magazineIdentifier, shard);
-                    stopSweeping = true;
-                    break;
-                }
-                // Reload the message to sideline magazine. The source record is deleted only once the
-                // sideline has actually accepted it, otherwise the message would exist nowhere.
-                if (!sidelineMagazine.load(record.getString(Constants.MAGAZINE_DATA_BIN))) {
-                    log.error("Sideline magazine rejected the message. Leaving it in place and stopping " +
-                                    "this sweeping process [queue: {}_SHARD_{}, pointer: {}]",
-                            magazineIdentifier, shard, sweepPointer + i);
-                    stopSweeping = true;
-                    break;
-                }
-                // Delete the data from main magazine
-                client.delete(client.getWritePolicyDefault(), keys[i]);
-                sweptCounter++;
-            }
-
-            // Loop breaking condition i.e sweeping till allowed fire TS is done
-            if (stopSweeping) {
-                log.debug("Sweeping till allowed fire TS is completed. [queue: {}_SHARD_{}]. Swept {} messages",
-                        magazineIdentifier, shard, sweptCounter);
-                return;
-            }
-
-            // Update the sweep pointer and swept counter
-            client.operate(createWritePolicy(DO_NOT_UPDATE_TTL), new Key(namespace, setName, queueName),
-                    MapOperation.increment(new MapPolicy(),
-                            sweepPointersBin,
-                            new Value.StringValue(Utils.getShardId(shard)),
-                            new Value.IntegerValue(Math.min(SWEEP_BATCH_SIZE, (int) (currentFirePointer - sweepPointer)))
-                    ),
-                    Operation.put(new Bin(sweptCounterBin, sweptCounter)));
-
-            // To update the correct sweep pointer
-            sweepPointer = Math.min(sweepPointer + SWEEP_BATCH_SIZE, currentFirePointer);
-
-            // Loop breaking condition i.e sweepPointer has reached to the current fire pointer
-            if (sweepPointer >= currentFirePointer) {
-                log.info("Sweeping completed for [queue: {}_SHARD_{}]. Swept {} messages", magazineIdentifier, shard, sweptCounter);
-                return;
-            }
-        }
-    }
-
-    private long getSweepPointer(final String queueName, final int shard,
-                                 final QueueEntity queueEntity, final boolean isSideline,
-                                 final String sweepPointersBin, final String sweptCounterBin) {
-        final Map<String, Long> sweepPointers = isSideline
-                ? queueEntity.getSidelineSweepPointers() : queueEntity.getSweepPointers();
-
-        if (Objects.isNull(sweepPointers)) {
-            client.operate(createWritePolicy(DO_NOT_UPDATE_TTL), new Key(namespace, setName, queueName),
-                    MapOperation.increment(new MapPolicy(),
-                            sweepPointersBin,
-                            new Value.StringValue(Utils.getShardId(shard)),
-                            new Value.IntegerValue(0)
-                    ),
-                    Operation.put(new Bin(sweptCounterBin, 0L)));
-            return 0L;
-        }
-
-        return sweepPointers.getOrDefault(Utils.getShardId(shard), 0L);
     }
 
     private QueueEntity buildQueueEntity(final Record record) {

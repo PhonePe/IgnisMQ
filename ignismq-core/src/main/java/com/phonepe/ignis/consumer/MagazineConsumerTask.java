@@ -22,7 +22,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.utils.Utils;
-import com.phonepe.ignis.service.QueueService;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.magazine.entity.MetaData;
@@ -50,7 +49,6 @@ public final class MagazineConsumerTask<M> extends TimerTask {
     private final ObjectMapper mapper;
     private final Class<M> clazz;
     private final Timer consumeMetricTimer;
-    private final QueueService queueService;
     private final BatchingConfig batchingConfig;
 
     public MagazineConsumerTask(final Magazine<String> magazine,
@@ -59,7 +57,6 @@ public final class MagazineConsumerTask<M> extends TimerTask {
                                 final ObjectMapper mapper,
                                 final Class<M> clazz,
                                 final Timer consumeMetricTimer,
-                                final QueueService queueService,
                                 final BatchingConfig batchingConfig) {
         this.magazine = magazine;
         this.sidelineMagazine = sidelineMagazine;
@@ -67,7 +64,6 @@ public final class MagazineConsumerTask<M> extends TimerTask {
         this.mapper = mapper;
         this.clazz = clazz;
         this.consumeMetricTimer = consumeMetricTimer;
-        this.queueService = queueService;
         this.batchingConfig = batchingConfig;
     }
 
@@ -126,7 +122,6 @@ public final class MagazineConsumerTask<M> extends TimerTask {
             if (Objects.isNull(magazineData)) {
                 return null;
             }
-            queueService.addFireTimestamp(magazineData, System.currentTimeMillis());
             return magazineData;
         } catch (MagazineException e) {
             if (e.getErrorCode().equals(ErrorCode.NOTHING_TO_FIRE)) {
@@ -184,9 +179,9 @@ public final class MagazineConsumerTask<M> extends TimerTask {
      * Removes the message from the main magazine only once the sideline magazine has accepted it.
      * <p>
      * If the transfer fails the record is deliberately left in place. It sits below the fire pointer,
-     * so no consumer will see it again, but it still carries a fire timestamp and the sweeper will
-     * retry the same transfer on its next pass. Deleting it here instead would remove the only
-     * remaining copy.
+     * so no consumer will see it again, but that is precisely the range the sweeper scans once the
+     * delivery-time watermark has moved past it, and it will retry the same transfer. Deleting it
+     * here instead would remove the only remaining copy.
      */
     private void sidelineThenDelete(final MagazineData<String> magazineData) {
         if (transferToSideline(magazineData.getData())) {

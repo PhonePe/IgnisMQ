@@ -30,21 +30,31 @@ public class Constants {
     public static final String AEROSPIKE_META_SET = "meta_set";
 
     public static final String MAGAZINE_SET_FORMAT = "%s_%s";
-    public static final String MAGAZINE_LOCAL_SET_FORMAT = "%s_%s";
     public static final String MAGAZINE_SHARD_FORMAT = "%s_%d";
-    public static final String MAGAZINE_DATA_KEY_FORMAT = "%s_SHARD_%d_%d";
-    public static final String MAGAZINE_UNSHARDED_DATA_KEY_FORMAT = "%s_%d";
-    public static final String MAGAZINE_META_KEY_FORMAT = "%s_SHARD_%d_%s";
-    public static final String MAGAZINE_UNSHARDED_META_KEY_FORMAT = "%s_%s";
-    public static final String MAGAZINE_SHARD_CONFIGURATION_KEY_FORMAT = "%s_SHARDS";
     public static final String MAGAZINE_SHARD_PREFIX = "SHARD";
-    public static final String MAGAZINE_LEGACY_METADATA_SUFFIX = "POINTERS";
-    public static final String MAGAZINE_UNIFIED_METADATA_SUFFIX = "METADATA";
-    public static final String MAGAZINE_METADATA_SCHEMA_VERSION_BIN = "META_VERSION";
-    public static final String MAGAZINE_SHARDS_BIN = "SHARDS";
-    public static final String MAGAZINE_FIRE_POINTER_BIN = "FIRE_POINTER";
-    public static final String MAGAZINE_DATA_BIN = "data";
-    public static final int MAGAZINE_UNIFIED_METADATA_SCHEMA_VERSION = 2;
+    public static final int SWEEP_BATCH_SIZE = 1000;
+
+    /**
+     * Checkpoints Magazine retains per shard. Fixed rather than derived: this map rides the fire
+     * pointer record, which is rewritten on every claim, so its size is a hot-path cost and must
+     * not scale with anything.
+     */
+    public static final int FIRE_HISTORY_ENTRIES = 32;
+
+    /**
+     * Checkpoint windows per sweep duration. With {@link #FIRE_HISTORY_ENTRIES} retained, the
+     * nominal span is {@code entries / divisor} sweep durations - four here - so a sweep asking
+     * about {@code now - sweepDuration} is comfortably inside the retained history and can never
+     * trip Magazine's evicted-history failure.
+     */
+    public static final int FIRE_HISTORY_WINDOWS_PER_SWEEP_DURATION = 8;
+
+    /**
+     * Hard ceiling on how far back a sweep may look, per the delivery-time watermark design. The
+     * request-level {@code sweepDurationInMins} bound is stricter still; this is the invariant the
+     * history sizing is allowed to assume.
+     */
+    public static final long MAX_SWEEP_DURATION_IN_MS = 12 * 60 * 60 * 1000L;
 
     public static final int PARALLEL_FACTOR = 64;
 

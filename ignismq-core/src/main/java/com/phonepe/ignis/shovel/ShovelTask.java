@@ -17,7 +17,6 @@
 package com.phonepe.ignis.shovel;
 
 import com.codepoetics.protonpack.StreamUtils;
-import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
@@ -37,16 +36,13 @@ import java.util.stream.Stream;
 public final class ShovelTask extends TimerTask {
     private final Magazine<String> magazine;
     private final Magazine<String> sidelineMagazine;
-    private final QueueService queueService;
     private final boolean autoDelete;
 
     public ShovelTask(final Magazine<String> magazine,
                       final Magazine<String> sidelineMagazine,
-                      final QueueService queueService,
                       final boolean autoDelete) {
         this.magazine = magazine;
         this.sidelineMagazine = sidelineMagazine;
-        this.queueService = queueService;
         this.autoDelete = autoDelete;
     }
 
@@ -63,8 +59,8 @@ public final class ShovelTask extends TimerTask {
                     sidelineMagazine.delete(magazineData);
                 } else {
                     // Neither magazine holds a fresh copy, so the record fired out of the sideline is
-                    // the only one left. Leave it: it stays below the sideline fire pointer with its
-                    // fire timestamp intact, and the sideline sweep will retry it.
+                    // the only one left. Leave it: it stays below the sideline fire pointer, which is
+                    // exactly where the sideline sweep looks, and the transfer is retried from there.
                     log.error("Could not move message into the main magazine nor return it to the " +
                                     "sideline for queue '{}'. Leaving the source record for the sweeper",
                             magazine.getMagazineIdentifier());
@@ -79,9 +75,7 @@ public final class ShovelTask extends TimerTask {
 
     private MagazineData<String> fireFromMagazine() {
         try {
-            final MagazineData<String> magazineData = sidelineMagazine.fire();
-            queueService.addFireTimestamp(magazineData, System.currentTimeMillis());
-            return magazineData;
+            return sidelineMagazine.fire();
         } catch (MagazineException e) {
             if (e.getErrorCode().equals(ErrorCode.NOTHING_TO_FIRE)) {
                 return null;
@@ -102,7 +96,7 @@ public final class ShovelTask extends TimerTask {
     private void scheduleNewShovelTask() {
         if (autoDelete) {
             new Timer().schedule(
-                    new ShovelTask(magazine, sidelineMagazine, queueService, true),
+                    new ShovelTask(magazine, sidelineMagazine, true),
                     Constants.SHOVEL_DELAY_IN_MS
             );
         }

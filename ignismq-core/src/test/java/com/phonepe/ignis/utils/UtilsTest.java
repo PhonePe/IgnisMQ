@@ -16,17 +16,9 @@
 
 package com.phonepe.ignis.utils;
 
-import com.phonepe.ignis.client.StorageClient;
-import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.exception.IgnisMQException;
-import com.phonepe.ignis.service.AerospikeQueueService;
-import com.phonepe.ignis.storage.AerospikeStorage;
-import com.phonepe.ignis.util.AerospikeTestBase;
 import com.phonepe.magazine.entity.MetaData;
-import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Mockito;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -37,37 +29,44 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.*;
-import static org.mockito.Mockito.when;
 
-public class UtilsTest extends AerospikeTestBase {
-
-    private AerospikeQueueService queueService;
-    private StorageClient storageClient;
-    private AerospikeStorage storage;
-
-    @Before
-    public void setUp() {
-        queueService = Mockito.spy(createQueueService());
-        storageClient = Mockito.mock(StorageClient.class);
-        when(storageClient.getClient()).thenReturn(aerospikeClient);
-        storage = (AerospikeStorage) createBaseStorage();
-    }
+public class UtilsTest {
 
     @Test
     public void testGetSidelineQueueName() {
         assertEquals("QUEUE_1_SIDELINE", Utils.getSidelineQueueName("QUEUE_1"));
     }
 
+    /**
+     * Reach is traded for resolution: a 20-minute sweep is checkpointed every 150 seconds, so the
+     * 32 retained entries span several sweep durations and the sweeper's question always lands
+     * inside them.
+     */
     @Test
-    public void testCreateMagazineAerospikeKey() {
-        String key = Utils.createMagazineAerospikeKey(5, 2, "QUEUE_1");
-        assertEquals("QUEUE_1_SHARD_2_5", key);
+    public void testFireHistoryWindowDividesTheSweepDuration() {
+        assertEquals(150, Utils.fireHistoryWindowSeconds(20 * 60 * 1000L));
+        assertEquals(450, Utils.fireHistoryWindowSeconds(60 * 60 * 1000L));
     }
 
+    /**
+     * A window narrower than a second is not expressible, and a sweep duration of zero is a valid
+     * request to sweep everything already delivered.
+     */
     @Test
-    public void testCreateMetadataKey() {
-        assertEquals("QUEUE_1_SHARD_3_METADATA", Utils.createMetadataKey("QUEUE_1", 3, "METADATA"));
-        assertEquals("QUEUE_1_POINTERS", Utils.createMetadataKey("QUEUE_1", null, "POINTERS"));
+    public void testFireHistoryWindowNeverCollapsesBelowASecond() {
+        assertEquals(1, Utils.fireHistoryWindowSeconds(0L));
+        assertEquals(1, Utils.fireHistoryWindowSeconds(-1L));
+        assertEquals(1, Utils.fireHistoryWindowSeconds(1000L));
+    }
+
+    /**
+     * Sizing is capped at the sweep duration ignisMQ is willing to honour, so a nonsensical value
+     * cannot silently produce a window so wide the history stops being useful.
+     */
+    @Test
+    public void testFireHistoryWindowIsCappedAtTheMaximumSweepDuration() {
+        assertEquals(Utils.fireHistoryWindowSeconds(Constants.MAX_SWEEP_DURATION_IN_MS),
+                Utils.fireHistoryWindowSeconds(Constants.MAX_SWEEP_DURATION_IN_MS * 10));
     }
 
     @Test
@@ -116,43 +115,6 @@ public class UtilsTest extends AerospikeTestBase {
         futures.add(failedFuture);
 
         Utils.waitForRequestsCompletion(futures);
-    }
-
-    @Test
-    public void testSweepQueueWithRealAerospike() {
-        // Store a queue entity in aerospike
-        QueueEntity entity = QueueEntity.builder()
-                .active(true).shards(1).queueExpiry(600).messageExpiry(300)
-                .concurrency(1).messageHandlerType("handler")
-                .shovelConcurrency(0).shovelTimeIntervalInSecs(0)
-                .createdAt(System.currentTimeMillis())
-                .sweepDuration(20 * 60 * 1000L)
-                .build();
-        queueService.store("UTIL_SWEEP_Q", entity, 1200);
-
-        // Call sweepQueue - should not throw
-        Utils.sweepQueue(queueService, CLIENT_ID, storageClient, storage,
-                "UTIL_SWEEP_Q", entity, FARM_ID, new SimpleMeterRegistry());
-    }
-
-    @Test
-    public void testSweepQueueHandlesExceptionGracefully() {
-        // Use a queue entity that will cause sweepQueue to fail gracefully
-        QueueEntity entity = QueueEntity.builder()
-                .active(true).shards(1).queueExpiry(600).messageExpiry(300)
-                .concurrency(1).messageHandlerType("handler")
-                .shovelConcurrency(0).shovelTimeIntervalInSecs(0)
-                .createdAt(System.currentTimeMillis())
-                .sweepDuration(0L)
-                .build();
-
-        // Use a broken storage client that will cause an exception
-        StorageClient brokenClient = Mockito.mock(StorageClient.class);
-        when(brokenClient.getClient()).thenThrow(new RuntimeException("broken"));
-
-        // Should not throw - exception caught internally
-        Utils.sweepQueue(queueService, CLIENT_ID, brokenClient, storage,
-                "NON_EXISTENT", entity, FARM_ID, new SimpleMeterRegistry());
     }
 
     @Test

@@ -40,21 +40,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Sweeper extends TimerTask implements LoadBalancer {
     private final AtomicBoolean active = new AtomicBoolean(false);
     private final QueueService queueService;
-    private final String clientId;
-    private final BaseStorage storage;
-    private final StorageClient client;
-    private final String farmId;
-    private final MeterRegistry meterRegistry;
+    private final QueueSweeper queueSweeper;
 
     public Sweeper(final QueueService queueService, final String clientId,
                    final BaseStorage storage, final StorageClient client,
                    final String farmId, final MeterRegistry meterRegistry) {
         this.queueService = queueService;
-        this.clientId = clientId;
-        this.storage = storage;
-        this.client = client;
-        this.farmId = farmId;
-        this.meterRegistry = meterRegistry;
+        this.queueSweeper = new QueueSweeper(queueService, clientId, storage, client, farmId, meterRegistry);
     }
 
     @Override
@@ -66,8 +58,7 @@ public class Sweeper extends TimerTask implements LoadBalancer {
                 final List<Future<Boolean>> futureList = new ArrayList<>();
                 queues.forEach((queueName, queueEntity) ->
                         futureList.add(Utils.executorService.submit(() -> {
-                            Utils.sweepQueue(queueService, clientId, client, storage, queueName, queueEntity, farmId,
-                                    meterRegistry);
+                            queueSweeper.sweepQueue(queueName, queueEntity);
                             return true;
                         })));
                 Utils.waitForRequestsCompletion(futureList);

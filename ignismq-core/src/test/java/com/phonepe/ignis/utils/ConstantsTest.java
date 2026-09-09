@@ -41,7 +41,10 @@ public class ConstantsTest {
         assertNotNull(Constants.AEROSPIKE_META_SET);
         assertNotNull(Constants.MAGAZINE_SET_FORMAT);
         assertNotNull(Constants.MAGAZINE_SHARD_FORMAT);
-        assertNotNull(Constants.MAGAZINE_DATA_KEY_FORMAT);
-        assertNotNull(Constants.MAGAZINE_META_KEY_FORMAT);
+        assertNotNull(Constants.MAGAZINE_SHARD_PREFIX);
+        assertEquals(1000, Constants.SWEEP_BATCH_SIZE);
+        assertEquals(32, Constants.FIRE_HISTORY_ENTRIES);
+        assertEquals(8, Constants.FIRE_HISTORY_WINDOWS_PER_SWEEP_DURATION);
+        assertEquals(12 * 60 * 60 * 1000L, Constants.MAX_SWEEP_DURATION_IN_MS);
     }
 }

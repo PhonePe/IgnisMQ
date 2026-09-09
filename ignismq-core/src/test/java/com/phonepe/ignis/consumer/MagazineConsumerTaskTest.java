@@ -18,8 +18,6 @@ package com.phonepe.ignis.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.common.MessageHandler;
-import com.phonepe.ignis.service.QueueService;
-import com.phonepe.ignis.util.AerospikeTestBase;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.magazine.exception.ErrorCode;
@@ -35,28 +33,24 @@ import java.util.List;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 /**
  * Covers the transfer-then-delete contract of the consumer: a message may only leave the main
  * magazine once the handler has accepted it or the sideline magazine has taken responsibility for it.
  */
-public class MagazineConsumerTaskTest extends AerospikeTestBase {
+public class MagazineConsumerTaskTest {
 
     private Magazine<String> magazine;
     private Magazine<String> sidelineMagazine;
-    private QueueService queueService;
     private Timer consumeTimer;
 
     @Before
     public void setUp() {
         magazine = Mockito.mock(Magazine.class);
         sidelineMagazine = Mockito.mock(Magazine.class);
-        queueService = Mockito.spy(createQueueService());
         consumeTimer = new SimpleMeterRegistry().timer("test.consume");
         when(magazine.getMagazineIdentifier()).thenReturn("TEST_QUEUE");
-        doNothing().when(queueService).addFireTimestamp(any(), anyLong());
     }
 
     @Test
@@ -163,7 +157,7 @@ public class MagazineConsumerTaskTest extends AerospikeTestBase {
 
     private MagazineConsumerTask<String> task(final MessageHandler<String> handler) {
         return new MagazineConsumerTask<>(magazine, sidelineMagazine, handler, new ObjectMapper(),
-                String.class, consumeTimer, queueService, null);
+                String.class, consumeTimer, null);
     }
 
     private static MagazineData<String> data(final String message) {

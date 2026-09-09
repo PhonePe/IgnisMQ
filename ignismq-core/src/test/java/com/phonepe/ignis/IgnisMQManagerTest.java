@@ -426,6 +426,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, failingHandler,
                 new ObjectMapper(), String.class, metricRegistry.timer("consume"), aerospikeQueueService, null);
+        // The sideline accepts the message, which is what licenses the delete (B2).
+        Mockito.when(magazine.load(any())).thenReturn(true);
         task.run();
         // Exception in consume -> handleException -> sidelineMessage
         Mockito.verify(magazine, Mockito.times(1)).load(any());

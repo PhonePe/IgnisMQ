@@ -303,14 +303,20 @@ public final class AerospikeQueueService implements QueueService {
         while (true) {
             final String magazineDataSetName = Utils.resolveLocalMagazineSet(
                     clientId, Constants.AEROSPIKE_DATA_SET, farmId);
-            final Key[] keys = LongStream.range(sweepPointer, sweepPointer + SWEEP_BATCH_SIZE).boxed()
+            // Never read past the fire pointer. Magazine claims a record by incrementing the fire
+            // pointer and then reading at it, so indices up to and including currentFirePointer have
+            // been delivered and everything beyond it has been loaded but never claimed by any
+            // consumer. Those carry no fire timestamp, and sweeping them would delete a message that
+            // was never delivered.
+            final long batchEnd = Math.min(sweepPointer + SWEEP_BATCH_SIZE, currentFirePointer + 1);
+            final Key[] keys = LongStream.range(sweepPointer, batchEnd).boxed()
                     .map(i -> new Key(namespace, magazineDataSetName,
                             Utils.createMagazineAerospikeKey(i, magazineShard, magazineIdentifier)))
                     .toArray(Key[]::new);
             final List<Record> records = Arrays.stream(client.get(batchPolicy, keys))
                     .collect(Collectors.toList());
 
-            boolean sweptTillAllowedFireTS = false;
+            boolean stopSweeping = false;
             for (int i = 0; i < keys.length; i++) {
                 // Ignore the already consumed message
                 if (Objects.isNull(records.get(i))) {
@@ -318,22 +324,40 @@ public final class AerospikeQueueService implements QueueService {
                 }
 
                 final Record record = records.get(i);
-                if (record.getLong(MAGAZINE_FIRE_TS_BIN) >= sweepTillFireTimestamp) {
-                    log.debug("Encountered a message with {}ms >= {}ms (allowed sweep till fire timestamp). " +
-                                    "Stopping this sweeping process [queue: {}_SHARD_{}]",
-                            record.getLong(MAGAZINE_FIRE_TS_BIN), sweepTillFireTimestamp, magazineIdentifier, shard);
-                    sweptTillAllowedFireTS = true;
+                final Object fireTimestamp = record.getValue(MAGAZINE_FIRE_TS_BIN);
+                if (Objects.isNull(fireTimestamp)) {
+                    // The fire pointer moves before the fire timestamp is written, so a record below
+                    // the fire pointer can briefly have no timestamp. Unknown fire time must never be
+                    // read as "fired long ago": stop without advancing and let the next sweep retry.
+                    log.warn("Message with no fire timestamp below the fire pointer. Stopping this " +
+                                    "sweeping process [queue: {}_SHARD_{}, pointer: {}]",
+                            magazineIdentifier, shard, sweepPointer + i);
+                    stopSweeping = true;
                     break;
                 }
-                // Reload the message to sideline magazine
-                sidelineMagazine.load(record.getString(Constants.MAGAZINE_DATA_BIN));
+                if (((Number) fireTimestamp).longValue() >= sweepTillFireTimestamp) {
+                    log.debug("Encountered a message with {}ms >= {}ms (allowed sweep till fire timestamp). " +
+                                    "Stopping this sweeping process [queue: {}_SHARD_{}]",
+                            fireTimestamp, sweepTillFireTimestamp, magazineIdentifier, shard);
+                    stopSweeping = true;
+                    break;
+                }
+                // Reload the message to sideline magazine. The source record is deleted only once the
+                // sideline has actually accepted it, otherwise the message would exist nowhere.
+                if (!sidelineMagazine.load(record.getString(Constants.MAGAZINE_DATA_BIN))) {
+                    log.error("Sideline magazine rejected the message. Leaving it in place and stopping " +
+                                    "this sweeping process [queue: {}_SHARD_{}, pointer: {}]",
+                            magazineIdentifier, shard, sweepPointer + i);
+                    stopSweeping = true;
+                    break;
+                }
                 // Delete the data from main magazine
                 client.delete(client.getWritePolicyDefault(), keys[i]);
                 sweptCounter++;
             }
 
             // Loop breaking condition i.e sweeping till allowed fire TS is done
-            if (sweptTillAllowedFireTS) {
+            if (stopSweeping) {
                 log.debug("Sweeping till allowed fire TS is completed. [queue: {}_SHARD_{}]. Swept {} messages",
                         magazineIdentifier, shard, sweptCounter);
                 return;

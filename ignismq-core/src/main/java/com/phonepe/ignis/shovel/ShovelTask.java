@@ -59,19 +59,15 @@ public final class ShovelTask extends TimerTask {
                     Objects::nonNull
             ).forEach(magazineData -> {
                 final String message = magazineData.getData();
-                try {
-                    if (Objects.nonNull(message)) {
-                        final boolean success = magazine.load(message);
-                        if (!success) {
-                            log.warn("Non success response, reloading the message '{}' to sideline magazine...", message);
-                            reloadMessage(message);
-                        }
-                    }
+                if (transferred(message)) {
                     sidelineMagazine.delete(magazineData);
-                } catch (Exception e) {
-                    log.error("Exception in loading the message into main magazine, reloading to sideline magazine and gracefully ignoring", e);
-                    reloadMessage(message);
-                    sidelineMagazine.delete(magazineData);
+                } else {
+                    // Neither magazine holds a fresh copy, so the record fired out of the sideline is
+                    // the only one left. Leave it: it stays below the sideline fire pointer with its
+                    // fire timestamp intact, and the sideline sweep will retry it.
+                    log.error("Could not move message into the main magazine nor return it to the " +
+                                    "sideline for queue '{}'. Leaving the source record for the sweeper",
+                            magazine.getMagazineIdentifier());
                 }
             });
             log.debug("Shovel task completed for queue '{}'", magazine.getMagazineIdentifier());
@@ -112,9 +108,34 @@ public final class ShovelTask extends TimerTask {
         }
     }
 
-    private void reloadMessage(final String message) {
-        if (Objects.nonNull(message)) {
-            sidelineMagazine.reload(message);
+    /**
+     * Attempts to move the payload into the main magazine, falling back to putting it back on the
+     * sideline.
+     *
+     * @return true when a copy of the message is safely stored somewhere and the source record fired
+     *         out of the sideline can therefore be deleted. A null payload is nothing to preserve.
+     */
+    private boolean transferred(final String message) {
+        if (Objects.isNull(message)) {
+            return true;
+        }
+        try {
+            if (magazine.load(message)) {
+                return true;
+            }
+            log.warn("Non success response, reloading the message '{}' to sideline magazine...", message);
+        } catch (Exception e) {
+            log.error("Exception loading the message into the main magazine, reloading to sideline magazine", e);
+        }
+        return reloadMessage(message);
+    }
+
+    private boolean reloadMessage(final String message) {
+        try {
+            return sidelineMagazine.reload(message);
+        } catch (Exception e) {
+            log.error("Exception reloading the message '{}' to the sideline magazine", message, e);
+            return false;
         }
     }
 }

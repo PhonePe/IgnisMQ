@@ -68,11 +68,13 @@ public class ShovelTaskTest extends AerospikeTestBase {
         when(sidelineMagazine.fire()).thenReturn(data1)
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
         when(magazine.load("msg1")).thenReturn(false);
+        when(sidelineMagazine.reload("msg1")).thenReturn(true);
         doNothing().when(queueService).addFireTimestamp(any(), anyLong());
 
         ShovelTask task = new ShovelTask(magazine, sidelineMagazine, queueService, false);
         task.run();
 
+        // The reload put a fresh copy at the tail of the sideline, so the source record may go.
         verify(sidelineMagazine, times(1)).reload("msg1");
         verify(sidelineMagazine, times(1)).delete(data1);
     }
@@ -84,6 +86,7 @@ public class ShovelTaskTest extends AerospikeTestBase {
         when(sidelineMagazine.fire()).thenReturn(data1)
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
         when(magazine.load("msg1")).thenThrow(new RuntimeException("load failed"));
+        when(sidelineMagazine.reload("msg1")).thenReturn(true);
         doNothing().when(queueService).addFireTimestamp(any(), anyLong());
 
         ShovelTask task = new ShovelTask(magazine, sidelineMagazine, queueService, false);
@@ -91,6 +94,67 @@ public class ShovelTaskTest extends AerospikeTestBase {
 
         verify(sidelineMagazine, times(1)).reload("msg1");
         verify(sidelineMagazine, times(1)).delete(data1);
+    }
+
+    /**
+     * B2: the source record fired out of the sideline is the last copy of the message. If it could
+     * not be moved into the main magazine and could not be put back on the sideline either, deleting
+     * it destroys the message.
+     */
+    @Test
+    public void testShovelKeepsSourceRecordWhenLoadAndReloadBothFail() {
+        MagazineData<String> data1 = buildMagazineData("msg1");
+
+        when(sidelineMagazine.fire()).thenReturn(data1)
+                .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+        when(magazine.load("msg1")).thenReturn(false);
+        when(sidelineMagazine.reload("msg1")).thenReturn(false);
+        doNothing().when(queueService).addFireTimestamp(any(), anyLong());
+
+        new ShovelTask(magazine, sidelineMagazine, queueService, false).run();
+
+        verify(sidelineMagazine, times(1)).reload("msg1");
+        verify(sidelineMagazine, never()).delete(any());
+    }
+
+    /**
+     * B2: same contract when the fallback reload throws rather than returning false. Against
+     * Magazine 2's Aerospike storage this is the reachable failure mode; the boolean rarely is.
+     */
+    @Test
+    public void testShovelKeepsSourceRecordWhenReloadThrows() {
+        MagazineData<String> data1 = buildMagazineData("msg1");
+
+        when(sidelineMagazine.fire()).thenReturn(data1)
+                .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+        when(magazine.load("msg1")).thenThrow(new RuntimeException("load failed"));
+        when(sidelineMagazine.reload("msg1")).thenThrow(new RuntimeException("reload failed"));
+        doNothing().when(queueService).addFireTimestamp(any(), anyLong());
+
+        new ShovelTask(magazine, sidelineMagazine, queueService, false).run();
+
+        verify(sidelineMagazine, never()).delete(any());
+    }
+
+    /**
+     * A failure on one message must not abandon the rest of the drain.
+     */
+    @Test
+    public void testShovelContinuesAfterAFailedMessage() {
+        MagazineData<String> data1 = buildMagazineData("msg1");
+        MagazineData<String> data2 = buildMagazineData("msg2");
+
+        when(sidelineMagazine.fire()).thenReturn(data1, data2)
+                .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+        when(magazine.load("msg1")).thenThrow(new RuntimeException("load failed"));
+        when(sidelineMagazine.reload("msg1")).thenReturn(false);
+        when(magazine.load("msg2")).thenReturn(true);
+        doNothing().when(queueService).addFireTimestamp(any(), anyLong());
+
+        new ShovelTask(magazine, sidelineMagazine, queueService, false).run();
+
+        verify(sidelineMagazine, never()).delete(data1);
+        verify(sidelineMagazine, times(1)).delete(data2);
     }
 
     @Test

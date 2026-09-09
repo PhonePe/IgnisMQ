@@ -159,10 +159,11 @@ public final class MagazineConsumerTask<M> extends TimerTask {
                         })
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList()));
-                if (!Boolean.TRUE.equals(success)) {
-                    sidelineMessages(magazineDataList);
+                if (Boolean.TRUE.equals(success)) {
+                    magazineDataList.forEach(magazine::delete);
+                } else {
+                    magazineDataList.forEach(this::sidelineThenDelete);
                 }
-                magazineDataList.forEach(magazine::delete);
             } catch (Exception e) {
                 magazineDataList.forEach(magazineData -> handleException(magazineData, e));
             }
@@ -172,10 +173,45 @@ public final class MagazineConsumerTask<M> extends TimerTask {
     private void handleException(final MagazineData<String> magazineData,
                                  final Exception e) {
         log.error("Exception in handling the message {}", magazineData.getData(), e);
-        if (!isExceptionIgnorable(e)) {
-            sidelineMessage(magazineData.getData());
+        if (isExceptionIgnorable(e)) {
+            magazine.delete(magazineData);
+            return;
         }
-        magazine.delete(magazineData);
+        sidelineThenDelete(magazineData);
+    }
+
+    /**
+     * Removes the message from the main magazine only once the sideline magazine has accepted it.
+     * <p>
+     * If the transfer fails the record is deliberately left in place. It sits below the fire pointer,
+     * so no consumer will see it again, but it still carries a fire timestamp and the sweeper will
+     * retry the same transfer on its next pass. Deleting it here instead would remove the only
+     * remaining copy.
+     */
+    private void sidelineThenDelete(final MagazineData<String> magazineData) {
+        if (transferToSideline(magazineData.getData())) {
+            magazine.delete(magazineData);
+        } else {
+            log.error("Could not sideline message from queue {}; leaving it in the main magazine for " +
+                    "the sweeper rather than deleting it", magazine.getMagazineIdentifier());
+        }
+    }
+
+    /**
+     * @return true when the payload is safely in the sideline magazine, or when there is no payload
+     *         to preserve in the first place.
+     */
+    private boolean transferToSideline(final String message) {
+        if (Objects.isNull(message) || message.isEmpty()) {
+            return true;
+        }
+        try {
+            log.warn("Sidelining the messages '{}' to sideline magazine...", message);
+            return sidelineMagazine.load(message);
+        } catch (Exception e) {
+            log.error("Exception sidelining message '{}'", message, e);
+            return false;
+        }
     }
 
     private void logExceptionInFiring(Exception e) {
@@ -185,20 +221,6 @@ public final class MagazineConsumerTask<M> extends TimerTask {
 
     private boolean isMaxWaitTimeNotElapsed(long startTime) {
         return (System.currentTimeMillis() - startTime) <= batchingConfig.getMaxWaitTimeInSecs() * 1000L;
-    }
-
-    private void sidelineMessages(final List<MagazineData<String>> magazineDataList) {
-        if (Objects.nonNull(magazineDataList)) {
-            magazineDataList.forEach(magazineData ->
-                    sidelineMessage(magazineData.getData()));
-        }
-    }
-
-    private void sidelineMessage(final String message) {
-        if (Objects.nonNull(message) && !message.isEmpty()) {
-            log.warn("Sidelining the messages '{}' to sideline magazine...", message);
-            sidelineMagazine.load(message);
-        }
     }
 
     private Boolean handle(final List<M> messages) throws Exception {

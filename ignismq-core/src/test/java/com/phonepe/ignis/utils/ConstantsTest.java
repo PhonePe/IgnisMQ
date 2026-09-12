@@ -24,11 +24,11 @@ public class ConstantsTest {
 
     @Test
     public void testConstants() {
-        assertEquals(32, Constants.DEFAULT_SHARDS);
+        assertEquals(8, Constants.DEFAULT_SHARDS);
         assertEquals(64, Constants.PARALLEL_FACTOR);
         assertEquals(100, Constants.MAX_CONSUMERS_ALLOWED);
         assertEquals(2, Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY);
-        assertEquals(2 * 60 * 1000, Constants.INITIAL_DELAY_IN_MS);
+        assertEquals(1000, Constants.INITIAL_DELAY_IN_MS);
         assertEquals(1000, Constants.DELAY_PERIOD_IN_MS);
         assertEquals(10 * 1000, Constants.SHOVEL_DELAY_IN_MS);
         assertEquals(24 * 60 * 60, Constants.MAX_ALLOWED_SHOVEL_TIME_INTERVAL_IN_SECONDS);

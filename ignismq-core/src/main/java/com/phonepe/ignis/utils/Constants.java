@@ -24,7 +24,7 @@ import lombok.NoArgsConstructor;
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class Constants {
-    public static final int DEFAULT_SHARDS = 32;
+    public static final int DEFAULT_SHARDS = 8;
 
     public static final String AEROSPIKE_DATA_SET = "data_set";
     public static final String AEROSPIKE_META_SET = "meta_set";
@@ -58,7 +58,7 @@ public class Constants {
 
     public static final int PARALLEL_FACTOR = 64;
 
-    public static final int INITIAL_DELAY_IN_MS = 2 * 60 * 1000; // 2 minutes
+    public static final int INITIAL_DELAY_IN_MS = 1000; // 1 second
     public static final int WATCHER_INITIAL_DELAY_IN_MS = 60 * 1000; // 1 minute
     public static final int DELAY_PERIOD_IN_MS = 1000; // 1 second
     public static final int SHOVEL_DELAY_IN_MS = 10 * 1000; // 10 seconds
@@ -69,4 +69,13 @@ public class Constants {
     public static final int REFRESH_INTERVAL_IN_MS = 5 * 60 * 1000; // 5 minutes
     public static final int MAX_CONSUMERS_ALLOWED = 100;
     public static final int TTL_FACTOR_FOR_QUEUE_EXPIRY = 2;
+
+    public static final int SCHEDULER_BASE_THREADS = 2;
+    public static final int SCHEDULER_MAX_THREADS = 256;
+    public static final int SCHEDULER_CONTROL_THREADS = 2;
+    public static final long SCHEDULER_SHUTDOWN_GRACE_IN_MS = 10_000L;
+
+    public static final long CONSUMER_RUN_BUDGET_IN_MS = 30_000L;
+
+    public static final int ACTIVE_SHARD_REFRESH_SECONDS = 5;
 }

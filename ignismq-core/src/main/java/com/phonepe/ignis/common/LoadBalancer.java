@@ -14,9 +14,15 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.leadership;
+package com.phonepe.ignis.common;
 
 /**
+ * A worker whose activity is gated by leader election.
+ * <p>
+ * Lives in {@code common} rather than beside the elector: the elector drives implementations and
+ * implementations know the contract, so housing the contract with the elector made the two packages
+ * mutually dependent - a cycle the architecture rules reject.
+ *
  * @author shantanu.tiwari
  * Created on 14/03/22
  */

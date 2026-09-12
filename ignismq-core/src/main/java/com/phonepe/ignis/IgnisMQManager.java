@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.client.impl.AerospikeStoreClient;
+import com.phonepe.ignis.common.MagazineRegistry;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.entity.QueueEntity;
@@ -31,6 +32,7 @@ import com.phonepe.ignis.guage.QueueStatGuage;
 import com.phonepe.ignis.metric.QueueStat;
 import com.phonepe.ignis.request.CreateQueueRequest;
 import com.phonepe.ignis.request.ShovelConfig;
+import com.phonepe.ignis.scheduler.IgnisSchedulers;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
@@ -66,12 +68,11 @@ public final class IgnisMQManager {
     private Map<String, Map.Entry<Class, MessageHandler>> messageHandlers = new HashMap<>();
     private QueueService queueService;
     private StorageClient storageClient;
-    /** True only when this manager built the storage client and is therefore responsible for it. */
     private boolean ownsStorageClient;
-    private java.util.Timer watcherTimer;
     private final QueueStatGuage queueStatGuage;
-    /** Stateless, so one instance serves every on-demand sweep. */
     private final QueueSweeper queueSweeper;
+
+    private final IgnisSchedulers schedulers = new IgnisSchedulers();
 
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
                           final MeterRegistry meterRegistry, final CuratorFramework curatorFramework,
@@ -84,10 +85,11 @@ public final class IgnisMQManager {
         this.start();
 
         this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
-                storage, storageClient, farmId, magazineMeterRegistry);
+                storage, storageClient, farmId, magazineMeterRegistry, schedulers.getControl(),
+                this::lookupMagazines);
         this.queueStatGuage = new QueueStatGuage(queueService, this::getAllQueues);
         this.queueSweeper = new QueueSweeper(queueService, clientId, storage, storageClient, farmId,
-                magazineMeterRegistry);
+                magazineMeterRegistry, this::lookupMagazines);
         scheduleWatcher();
     }
 
@@ -103,10 +105,11 @@ public final class IgnisMQManager {
         this.ownsStorageClient = false;
         this.queueService = buildQueueCommands(storage, storageClient);
         this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
-                storage, storageClient, farmId, magazineMeterRegistry);
+                storage, storageClient, farmId, magazineMeterRegistry, schedulers.getControl(),
+                this::lookupMagazines);
         this.queueStatGuage = new QueueStatGuage(queueService, this::getAllQueues);
         this.queueSweeper = new QueueSweeper(queueService, clientId, storage, storageClient, farmId,
-                magazineMeterRegistry);
+                magazineMeterRegistry, this::lookupMagazines);
         scheduleWatcher();
     }
 
@@ -138,6 +141,15 @@ public final class IgnisMQManager {
                     .build();
         }
         return queue;
+    }
+
+    private MagazineRegistry.QueueMagazines lookupMagazines(final String queueName) {
+        final IQueue<?> queue = ignisMQMap.get(queueName);
+        if (!(queue instanceof MagazineQueue<?> magazineQueue)) {
+            return null;
+        }
+        return new MagazineRegistry.QueueMagazines(magazineQueue.mainMagazine(),
+                magazineQueue.sidelineMagazine());
     }
 
     /**
@@ -287,15 +299,13 @@ public final class IgnisMQManager {
     }
 
     /**
-     * Releases everything this manager owns: the queue-refresh watcher and, when the manager
-     * created the storage client itself, the client's connection pool. Safe to call more than
-     * once. A caller that supplied its own {@link StorageClient} keeps ownership of it.
+     * Releases everything this manager owns: every scheduled task - consumers, shovels, the queue
+     * watcher - and, when the manager created the storage client itself, the client's connection
+     * pool. Safe to call more than once. A caller that supplied its own {@link StorageClient} keeps
+     * ownership of it.
      */
     public void stop() {
-        if (Objects.nonNull(watcherTimer)) {
-            watcherTimer.cancel();
-            watcherTimer = null;
-        }
+        schedulers.stop();
         if (ownsStorageClient && Objects.nonNull(storageClient)) {
             try {
                 storageClient.stop();
@@ -393,17 +403,8 @@ public final class IgnisMQManager {
         Queue can be created only once, and this watcher will then have a role to create the active queue and deactivate inactive ones.
      */
     private void scheduleWatcher() {
-        watcherTimer = new java.util.Timer("ignismq-queue-watcher", true);
-        watcherTimer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                try {
-                    refreshQueues();
-                } catch (Exception e) {
-                    log.error("Fatal!!! Error refreshing queues...", e);
-                }
-            }
-        }, Constants.WATCHER_INITIAL_DELAY_IN_MS, Constants.REFRESH_INTERVAL_IN_MS);
+        schedulers.getControl().scheduleRepeating(this::refreshQueues,
+                Constants.WATCHER_INITIAL_DELAY_IN_MS, Constants.REFRESH_INTERVAL_IN_MS);
     }
 
     private <M> IQueue<M> createMagazine(final String queueName,
@@ -430,8 +431,8 @@ public final class IgnisMQManager {
                 clientId, farmId, queueName, queueShards, recordTtlInSeconds, metaDataTtlInSeconds,
                 storageClient, storage, concurrency, messageHandlers.get(messageHandlerType).getValue(),
                 shovelConfig, mapper, messageHandlers.get(messageHandlerType).getKey(),
-                batchingConfig, sweepDurationInMillis, publishMetricTimer, consumeMetricTimer,
-                magazineMeterRegistry
+                batchingConfig, sweepDurationInMillis, schedulers.getWorker(), publishMetricTimer,
+                consumeMetricTimer, magazineMeterRegistry
         );
     }
 

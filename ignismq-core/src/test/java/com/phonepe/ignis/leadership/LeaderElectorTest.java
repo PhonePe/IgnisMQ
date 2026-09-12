@@ -16,6 +16,8 @@
 
 package com.phonepe.ignis.leadership;
 
+import com.phonepe.ignis.common.LoadBalancer;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;

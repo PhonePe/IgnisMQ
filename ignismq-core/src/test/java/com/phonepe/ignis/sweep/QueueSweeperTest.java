@@ -17,6 +17,7 @@
 package com.phonepe.ignis.sweep;
 
 import com.phonepe.ignis.client.StorageClient;
+import com.phonepe.ignis.common.MagazineRegistry;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.BaseStorage;
@@ -282,6 +283,56 @@ public class QueueSweeperTest extends AerospikeTestBase {
         assertNothingToFire(sideline);
         assertEquals("progress must move past a range that held nothing",
                 Long.valueOf(3L), reload(queue).getSweepPointers().get("SHARD_0"));
+    }
+
+    /**
+     * C7: the manager already holds a live pair for every queue this process serves, so the sweeper
+     * uses those rather than constructing a throwaway pair per pass. Building its own also builds a
+     * fresh checkpoint-claim map, which re-issues a write per shard the consumers already made.
+     */
+    @Test
+    public void testSweepQueueReusesMagazinesTheProcessAlreadyHolds() {
+        final String queue = "SWEEP_REUSE";
+        final QueueEntity entity = store(queue, 0L);
+        final Magazine<String> main = Mockito.spy(magazine(queue));
+        final Magazine<String> sideline = Mockito.spy(magazine(Utils.getSidelineQueueName(queue)));
+        final QueueSweeper reusing = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient,
+                FARM_ID, new SimpleMeterRegistry(),
+                name -> new MagazineRegistry.QueueMagazines(main, sideline));
+
+        main.load("orphan");
+        main.fire();
+
+        awaitWindowRollover();
+        reusing.sweepQueue(queue, entity);
+        reusing.sweepQueue(queue, reload(queue));
+
+        // The registry's magazines were used, not freshly built ones.
+        Mockito.verify(main, Mockito.atLeastOnce()).firePointerBefore(Mockito.any());
+        assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
+    }
+
+    /**
+     * A queue created on another instance is genuinely absent here until the watcher catches up, on
+     * a five-minute cycle. Absent must mean "build one", never "skip the queue" - silently not
+     * sweeping would be worse than the allocation it saves.
+     */
+    @Test
+    public void testSweepQueueBuildsItsOwnWhenTheRegistryHasNothing() {
+        final String queue = "SWEEP_REGISTRY_MISS";
+        final QueueEntity entity = store(queue, 0L);
+        final QueueSweeper missing = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient,
+                FARM_ID, new SimpleMeterRegistry(), name -> null);
+
+        final Magazine<String> magazine = magazine(queue);
+        magazine.load("orphan");
+        magazine.fire();
+
+        awaitWindowRollover();
+        missing.sweepQueue(queue, entity);
+        missing.sweepQueue(queue, reload(queue));
+
+        assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
     }
 
     /**

@@ -20,7 +20,8 @@ import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.utils.Utils;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.entity.QueueEntity;
-import com.phonepe.ignis.leadership.LoadBalancer;
+import com.phonepe.ignis.common.LoadBalancer;
+import com.phonepe.ignis.common.MagazineRegistry;
 import com.phonepe.ignis.storage.BaseStorage;
 import lombok.extern.slf4j.Slf4j;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -28,7 +29,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.TimerTask;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Created on 12/03/22
  */
 @Slf4j
-public class Sweeper extends TimerTask implements LoadBalancer {
+public class Sweeper implements Runnable, LoadBalancer {
     private final AtomicBoolean active = new AtomicBoolean(false);
     private final QueueService queueService;
     private final QueueSweeper queueSweeper;
@@ -45,8 +45,16 @@ public class Sweeper extends TimerTask implements LoadBalancer {
     public Sweeper(final QueueService queueService, final String clientId,
                    final BaseStorage storage, final StorageClient client,
                    final String farmId, final MeterRegistry meterRegistry) {
+        this(queueService, clientId, storage, client, farmId, meterRegistry, null);
+    }
+
+    public Sweeper(final QueueService queueService, final String clientId,
+                   final BaseStorage storage, final StorageClient client,
+                   final String farmId, final MeterRegistry meterRegistry,
+                   final MagazineRegistry magazineRegistry) {
         this.queueService = queueService;
-        this.queueSweeper = new QueueSweeper(queueService, clientId, storage, client, farmId, meterRegistry);
+        this.queueSweeper = new QueueSweeper(queueService, clientId, storage, client, farmId,
+                meterRegistry, magazineRegistry);
     }
 
     @Override

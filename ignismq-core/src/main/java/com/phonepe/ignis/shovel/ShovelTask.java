@@ -17,6 +17,7 @@
 package com.phonepe.ignis.shovel;
 
 import com.codepoetics.protonpack.StreamUtils;
+import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
@@ -25,25 +26,32 @@ import com.phonepe.magazine.exception.MagazineException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Objects;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.stream.Stream;
 
 /**
  * @author shantanu.tiwari
  */
 @Slf4j
-public final class ShovelTask extends TimerTask {
+public final class ShovelTask implements Runnable {
     private final Magazine<String> magazine;
     private final Magazine<String> sidelineMagazine;
     private final boolean autoDelete;
+    private final IgnisSchedulerCommands scheduler;
 
     public ShovelTask(final Magazine<String> magazine,
                       final Magazine<String> sidelineMagazine,
                       final boolean autoDelete) {
+        this(magazine, sidelineMagazine, autoDelete, null);
+    }
+
+    public ShovelTask(final Magazine<String> magazine,
+                      final Magazine<String> sidelineMagazine,
+                      final boolean autoDelete,
+                      final IgnisSchedulerCommands scheduler) {
         this.magazine = magazine;
         this.sidelineMagazine = sidelineMagazine;
         this.autoDelete = autoDelete;
+        this.scheduler = scheduler;
     }
 
     @Override
@@ -93,12 +101,15 @@ public final class ShovelTask extends TimerTask {
                 magazine.getMagazineIdentifier(), e);
     }
 
+    /**
+     * A one-shot shovel that failed gets one more attempt, on the shared scheduler rather than on a
+     * brand new {@code Timer} thread that nothing owned and nothing could shut down.
+     */
     private void scheduleNewShovelTask() {
-        if (autoDelete) {
-            new Timer().schedule(
-                    new ShovelTask(magazine, sidelineMagazine, true),
-                    Constants.SHOVEL_DELAY_IN_MS
-            );
+        if (autoDelete && Objects.nonNull(scheduler) && !scheduler.isStopped()) {
+            scheduler.scheduleOnce(
+                    new ShovelTask(magazine, sidelineMagazine, true, scheduler),
+                    Constants.SHOVEL_DELAY_IN_MS);
         }
     }
 

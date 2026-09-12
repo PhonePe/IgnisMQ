@@ -16,6 +16,8 @@
 
 package com.phonepe.ignis.leadership;
 
+import com.phonepe.ignis.common.LoadBalancer;
+
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import lombok.extern.slf4j.Slf4j;

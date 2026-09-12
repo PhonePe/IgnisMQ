@@ -16,7 +16,6 @@
 
 package com.phonepe.ignis;
 
-import com.aerospike.client.IAerospikeClient;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.client.StorageClient;
@@ -27,20 +26,17 @@ import com.phonepe.ignis.consumer.MagazineConsumerTask;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.request.ShovelConfig;
+import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
 import com.phonepe.ignis.shovel.ShovelTask;
-import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
-import com.phonepe.ignis.storage.StorageVisitor;
+import com.phonepe.ignis.storage.MagazineStorageVisitor;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.Utils;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.core.BaseMagazineStorage;
-import com.phonepe.magazine.entity.MagazineScope;
 import com.phonepe.magazine.entity.MetaData;
-import com.phonepe.magazine.impl.aerospike.AerospikeStorageConfig;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -48,6 +44,7 @@ import lombok.val;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
@@ -59,8 +56,9 @@ public final class MagazineQueue<M> implements IQueue<M> {
     private final Magazine<String> magazine;
     private final Magazine<String> sidelineMagazine;
     private final MessageHandler<M> messageHandler;
-    private final List<java.util.Timer> consumers = new ArrayList<>();
-    private final List<java.util.Timer> sidelineConsumers = new ArrayList<>();
+    private final List<ScheduledFuture<?>> consumers = new ArrayList<>();
+    private final List<ScheduledFuture<?>> sidelineConsumers = new ArrayList<>();
+    private final IgnisSchedulerCommands scheduler;
     private final ObjectMapper mapper;
     private final Class<M> clazz;
     @Getter
@@ -85,6 +83,7 @@ public final class MagazineQueue<M> implements IQueue<M> {
             final Class<M> clazz,
             final BatchingConfig batchingConfig,
             final long sweepDurationInMillis,
+            final IgnisSchedulerCommands scheduler,
             final Timer publishMetricTimer,
             final Timer consumeMetricTimer,
             final MeterRegistry meterRegistry) throws Exception {
@@ -94,16 +93,20 @@ public final class MagazineQueue<M> implements IQueue<M> {
         this.publishMetricTimer = publishMetricTimer;
         this.consumeMetricTimer = consumeMetricTimer;
         this.batchingConfig = batchingConfig;
+        this.scheduler = scheduler;
+        // One storage, two magazines. Every cache Magazine keeps - key layout, active shards,
+        // checkpoint claims - is keyed by MagazineContext, so a storage is explicitly designed to
+        // serve several magazines. Building one per magazine doubled the object graph and the
+        // Caffeine caches held for the lifetime of the queue, and bought nothing.
+        final BaseMagazineStorage<String> magazineStorage = storage.accept(new MagazineStorageVisitor(
+                clientId, recordTtlInSeconds, metaDataTtlInSeconds, client, queueShards, farmId,
+                meterRegistry, sweepDurationInMillis));
         this.magazine = Magazine.<String>builder()
-                .baseMagazineStorage(storage.accept(new MagazineStorageVisitor(
-                        clientId, recordTtlInSeconds, metaDataTtlInSeconds, client, queueShards, farmId,
-                        meterRegistry, sweepDurationInMillis)))
+                .baseMagazineStorage(magazineStorage)
                 .magazineIdentifier(queueName)
                 .build();
         this.sidelineMagazine = Magazine.<String>builder()
-                .baseMagazineStorage(storage.accept(new MagazineStorageVisitor(
-                        clientId, recordTtlInSeconds, metaDataTtlInSeconds, client, queueShards, farmId,
-                        meterRegistry, sweepDurationInMillis)))
+                .baseMagazineStorage(magazineStorage)
                 .magazineIdentifier(Utils.getSidelineQueueName(queueName))
                 .build();
         createConsumers(concurrency);
@@ -158,16 +161,11 @@ public final class MagazineQueue<M> implements IQueue<M> {
         }
 
         IntStream.range(0, count).boxed()
-                .forEach(i -> {
-                    java.util.Timer consumer = new java.util.Timer();
-                    consumer.schedule(
-                            new MagazineConsumerTask<>(magazine, sidelineMagazine, messageHandler,
-                                    mapper, clazz, consumeMetricTimer, batchingConfig),
-                            Constants.INITIAL_DELAY_IN_MS,
-                            Constants.DELAY_PERIOD_IN_MS
-                    );
-                    consumers.add(consumer);
-                });
+                .forEach(i -> consumers.add(scheduler.scheduleRepeating(
+                        new MagazineConsumerTask<>(magazine, sidelineMagazine, messageHandler,
+                                mapper, clazz, consumeMetricTimer, batchingConfig),
+                        Constants.INITIAL_DELAY_IN_MS,
+                        Constants.DELAY_PERIOD_IN_MS)));
         log.info("Created {} new consumers of queue '{}', Total consumers = {}",
                 count, magazine.getMagazineIdentifier(), consumers.size());
     }
@@ -183,12 +181,10 @@ public final class MagazineQueue<M> implements IQueue<M> {
     void stopConsumers(final int count) {
         final int consumerToStopCount = Math.min(count, consumers.size());
         IntStream.range(0, consumerToStopCount).boxed()
-                .forEach(i -> {
-                    java.util.Timer consumer = consumers.get(consumers.size() - 1);
-                    consumer.cancel();
-                    consumer.purge();
-                    consumers.remove(consumer);
-                });
+                // Through the scheduler, not the future: cancelling the future alone would stop the
+                // task but leave the pool sized for it, so scaling a queue down and up repeatedly
+                // would ratchet the thread count up for demand that no longer exists.
+                .forEach(i -> scheduler.cancelRepeating(consumers.remove(consumers.size() - 1)));
         log.info("Stopped {} consumers of queue '{}', Total consumers = {}",
                 consumerToStopCount, magazine.getMagazineIdentifier(), consumers.size());
     }
@@ -216,77 +212,38 @@ public final class MagazineQueue<M> implements IQueue<M> {
         log.info("Creating {} shoveling task for queue '{}'", concurrency, magazine.getMagazineIdentifier());
         IntStream.range(0, concurrency).boxed()
                 .forEach(i -> {
-                    final java.util.Timer shovel = new java.util.Timer();
-                    final ShovelTask shovelTask = new ShovelTask(magazine, sidelineMagazine, autoDelete);
-                    if (autoDelete) {
-                        shovel.schedule(
-                                shovelTask,
-                                Constants.INITIAL_DELAY_IN_MS
-                        );
-                    } else {
-                        shovel.schedule(
-                                shovelTask,
-                                Constants.INITIAL_DELAY_IN_MS,
-                                timeIntervalInSecs == 0 ? Constants.DELAY_PERIOD_IN_MS : timeIntervalInSecs * 1000L
-                        );
-                    }
-                    sidelineConsumers.add(shovel);
+                    final ShovelTask shovelTask =
+                            new ShovelTask(magazine, sidelineMagazine, autoDelete, scheduler);
+                    sidelineConsumers.add(autoDelete
+                            ? scheduler.scheduleOnce(shovelTask, Constants.INITIAL_DELAY_IN_MS)
+                            : scheduler.scheduleRepeating(shovelTask, Constants.INITIAL_DELAY_IN_MS,
+                                    timeIntervalInSecs == 0
+                                            ? Constants.DELAY_PERIOD_IN_MS : timeIntervalInSecs * 1000L));
                 });
         log.info("All shovels tasks scheduled.");
+    }
+
+    /**
+     * The live magazines behind this queue.
+     * <p>
+     * Package-private on purpose: the sweeper needs them, users of {@link IQueue} must not have
+     * them. {@code IgnisMQManager} reaches these from the same package and exposes them no further
+     * than the internal {@code MagazineRegistry} lambda.
+     */
+    Magazine<String> mainMagazine() {
+        return magazine;
+    }
+
+    Magazine<String> sidelineMagazine() {
+        return sidelineMagazine;
     }
 
     void stopShovelConsumers(final int count) {
         final int consumerToStopCount = Math.min(count, sidelineConsumers.size());
         IntStream.range(0, consumerToStopCount).boxed()
-                .forEach(i -> {
-                    java.util.Timer consumer = sidelineConsumers.get(sidelineConsumers.size() - 1);
-                    consumer.cancel();
-                    consumer.purge();
-                    sidelineConsumers.remove(consumer);
-                });
+                .forEach(i -> scheduler.cancelRepeating(
+                        sidelineConsumers.remove(sidelineConsumers.size() - 1)));
         log.info("Stopped {} consumers of sideline queue '{}', Total consumers = {}",
                 consumerToStopCount, magazine.getMagazineIdentifier(), sidelineConsumers.size());
-    }
-
-    @AllArgsConstructor
-    public static class MagazineStorageVisitor implements StorageVisitor<BaseMagazineStorage<String>> {
-        private final String clientId;
-        private final int recordTtlInSeconds;
-        private final int metaDataTtlInSeconds;
-        private final StorageClient client;
-        private final int shards;
-        private final String farmId;
-        private final MeterRegistry meterRegistry;
-        private final long sweepDurationInMillis;
-
-        @Override
-        public BaseMagazineStorage<String> visit(final AerospikeStorage storage) {
-            return com.phonepe.magazine.impl.aerospike.AerospikeStorage.<String>builder()
-                    .clazz(String.class)
-                    .storageConfig(AerospikeStorageConfig.builder()
-                            .dataSetName(Utils.getMagazineSet(clientId, Constants.AEROSPIKE_DATA_SET))
-                            .metaSetName(Utils.getMagazineSet(clientId, Constants.AEROSPIKE_META_SET))
-                            .namespace(storage.getNamespace())
-                            .shards(shards)
-                            .recordTtl(recordTtlInSeconds)
-                            .metaDataTtl(metaDataTtlInSeconds)
-                            // Delivery-time watermarking. Every magazine ignisMQ builds records it,
-                            // including the ones the consumers hold: checkpoints are written from
-                            // Magazine's own active-shard refresh, so a magazine that is only
-                            // published to and consumed from is exactly the one that must be
-                            // recording. Switching it on only for the sweeper's own handles would
-                            // leave nothing for the sweeper to read.
-                            .fireHistoryEnabled(true)
-                            .fireHistoryWindowSeconds(Utils.fireHistoryWindowSeconds(sweepDurationInMillis))
-                            .fireHistoryEntries(Constants.FIRE_HISTORY_ENTRIES)
-                            .build())
-                    .aerospikeClient((IAerospikeClient) client.getClient())
-                    .enableDeDupe(false)
-                    .farmId(farmId)
-                    .scope(MagazineScope.LOCAL)
-                    .clientId(clientId)
-                    .meterRegistry(meterRegistry)
-                    .build();
-        }
     }
 }

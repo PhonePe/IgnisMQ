@@ -112,6 +112,7 @@
 
         <!-- Testing -->
         <junit.version>4.12</junit.version>
+        <archunit.version>1.4.1</archunit.version>
         <mockito-core.version>4.3.1</mockito-core.version>
         <junit.testcontainer.version>1.0.6</junit.testcontainer.version>
         <jna.version>5.13.0</jna.version>

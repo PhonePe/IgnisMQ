@@ -16,14 +16,16 @@
 
 package com.phonepe.ignis.sweep;
 
-import com.phonepe.ignis.MagazineQueue.MagazineStorageVisitor;
+import com.phonepe.ignis.storage.MagazineStorageVisitor;
 import com.phonepe.ignis.client.StorageClient;
+import com.phonepe.ignis.common.MagazineRegistry;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.storage.BaseStorage;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.Utils;
 import com.phonepe.magazine.Magazine;
+import com.phonepe.magazine.core.BaseMagazineStorage;
 import com.phonepe.magazine.entity.FireCheckpoint;
 import com.phonepe.magazine.entity.MagazineData;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -75,6 +77,8 @@ public final class QueueSweeper {
     private final StorageClient client;
     private final String farmId;
     private final MeterRegistry meterRegistry;
+    /** Optional: absent means always build, which is what a standalone sweeper does. */
+    private final MagazineRegistry magazineRegistry;
 
     public QueueSweeper(final QueueService queueService,
                         final String clientId,
@@ -82,6 +86,17 @@ public final class QueueSweeper {
                         final StorageClient client,
                         final String farmId,
                         final MeterRegistry meterRegistry) {
+        this(queueService, clientId, storage, client, farmId, meterRegistry, null);
+    }
+
+    public QueueSweeper(final QueueService queueService,
+                        final String clientId,
+                        final BaseStorage storage,
+                        final StorageClient client,
+                        final String farmId,
+                        final MeterRegistry meterRegistry,
+                        final MagazineRegistry magazineRegistry) {
+        this.magazineRegistry = magazineRegistry;
         this.queueService = queueService;
         this.clientId = clientId;
         this.storage = storage;
@@ -99,9 +114,22 @@ public final class QueueSweeper {
     public void sweepQueue(final String queueName, final QueueEntity queueEntity) {
         try {
             log.info("Sweeping queue {}", queueName);
+            final MagazineRegistry.QueueMagazines existing = Objects.isNull(magazineRegistry)
+                    ? null : magazineRegistry.find(queueName);
+            if (Objects.nonNull(existing)) {
+                // Reusing the live pair also reuses its checkpoint claims, so this pass does not
+                // repeat a write per shard that the consumers already made this window.
+                sweep(queueName, queueEntity, existing.main(), existing.sideline());
+                return;
+            }
+            // Not held locally - a queue created on another instance, before the watcher has caught
+            // up. One storage for both magazines: its caches are keyed by MagazineContext, so it is
+            // built to serve more than one.
+            log.debug("Queue {} is not cached in this process; building magazines for the sweep", queueName);
+            final BaseMagazineStorage<String> magazineStorage = buildStorage(queueEntity);
             sweep(queueName, queueEntity,
-                    buildMagazine(queueName, queueEntity),
-                    buildMagazine(Utils.getSidelineQueueName(queueName), queueEntity));
+                    magazine(magazineStorage, queueName),
+                    magazine(magazineStorage, Utils.getSidelineQueueName(queueName)));
         } catch (Exception e) {
             log.error("Sweeping failed for queue {}", queueName, e);
         }
@@ -300,13 +328,18 @@ public final class QueueSweeper {
         }
     }
 
-    private Magazine<String> buildMagazine(final String magazineIdentifier, final QueueEntity queueEntity) {
+    private BaseMagazineStorage<String> buildStorage(final QueueEntity queueEntity) {
+        return storage.accept(new MagazineStorageVisitor(
+                clientId, queueEntity.getMessageExpiry(),
+                queueEntity.getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
+                client, queueEntity.getShards(), farmId, meterRegistry,
+                queueEntity.getSweepDuration()));
+    }
+
+    private static Magazine<String> magazine(final BaseMagazineStorage<String> magazineStorage,
+                                             final String magazineIdentifier) {
         return Magazine.<String>builder()
-                .baseMagazineStorage(storage.accept(new MagazineStorageVisitor(
-                        clientId, queueEntity.getMessageExpiry(),
-                        queueEntity.getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
-                        client, queueEntity.getShards(), farmId, meterRegistry,
-                        queueEntity.getSweepDuration())))
+                .baseMagazineStorage(magazineStorage)
                 .magazineIdentifier(magazineIdentifier)
                 .build();
     }

@@ -16,33 +16,30 @@
 
 package com.phonepe.ignis.consumer;
 
-import com.codepoetics.protonpack.StreamUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.config.BatchingConfig;
-import com.phonepe.ignis.utils.Utils;
+import com.phonepe.ignis.utils.Constants;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
-import com.phonepe.magazine.entity.MetaData;
 import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import io.micrometer.core.instrument.Timer;
-import java.util.TimerTask;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * @author shantanu.tiwari
  */
 @Slf4j
-public final class MagazineConsumerTask<M> extends TimerTask {
-    private static final int DEFAULT_WAIT_TIME = 5000;
+public final class MagazineConsumerTask<M> implements Runnable {
+
+    private static final long POLL_INTERVAL_IN_MS = 200L;
     private final Magazine<String> magazine;
     private final Magazine<String> sidelineMagazine;
     private final MessageHandler<M> messageHandler;
@@ -50,6 +47,7 @@ public final class MagazineConsumerTask<M> extends TimerTask {
     private final Class<M> clazz;
     private final Timer consumeMetricTimer;
     private final BatchingConfig batchingConfig;
+    private final long runBudgetMillis;
 
     public MagazineConsumerTask(final Magazine<String> magazine,
                                 final Magazine<String> sidelineMagazine,
@@ -58,6 +56,19 @@ public final class MagazineConsumerTask<M> extends TimerTask {
                                 final Class<M> clazz,
                                 final Timer consumeMetricTimer,
                                 final BatchingConfig batchingConfig) {
+        this(magazine, sidelineMagazine, messageHandler, mapper, clazz, consumeMetricTimer,
+                batchingConfig, Constants.CONSUMER_RUN_BUDGET_IN_MS);
+    }
+
+    public MagazineConsumerTask(final Magazine<String> magazine,
+                                final Magazine<String> sidelineMagazine,
+                                final MessageHandler<M> messageHandler,
+                                final ObjectMapper mapper,
+                                final Class<M> clazz,
+                                final Timer consumeMetricTimer,
+                                final BatchingConfig batchingConfig,
+                                final long runBudgetMillis) {
+        this.runBudgetMillis = runBudgetMillis;
         this.magazine = magazine;
         this.sidelineMagazine = sidelineMagazine;
         this.messageHandler = messageHandler;
@@ -71,10 +82,11 @@ public final class MagazineConsumerTask<M> extends TimerTask {
     public void run() {
         try {
             log.debug("Started consumer for queue {}", magazine.getMagazineIdentifier());
+            final long startTime = System.currentTimeMillis();
             if (Objects.nonNull(batchingConfig)) {
-                batchConsume(System.currentTimeMillis());
+                batchConsume(startTime);
             } else {
-                consumeSingleMessage();
+                consumeSingleMessage(startTime + runBudgetMillis);
             }
             log.debug("Completed consumption for queue {}", magazine.getMagazineIdentifier());
         } catch (InterruptedException e) {
@@ -85,35 +97,85 @@ public final class MagazineConsumerTask<M> extends TimerTask {
         }
     }
 
-    private void consumeSingleMessage() {
-        StreamUtils.takeWhile(
-                Stream.generate(this::fireFromMagazine),
-                Objects::nonNull
-        ).forEach(magazineData -> consume(List.of(magazineData)));
+    /**
+     * Consumes one message at a time until the magazine is empty or the run budget expires.
+     *
+     * @param deadline when this invocation must hand its thread back.
+     */
+    private void consumeSingleMessage(final long deadline) {
+        while (!Thread.currentThread().isInterrupted()) {
+            final MagazineData<String> magazineData = fireFromMagazine();
+            if (Objects.isNull(magazineData)) {
+                return;
+            }
+            // Consume first, check the budget second. A message is claimed the moment fire()
+            // returns it, so abandoning it here would leave it below the fire pointer with no
+            // consumer coming - recoverable only by the sweeper, one sweepDuration later. The
+            // budget bounds the turn; it must never cost a delivery.
+            consume(List.of(magazineData));
+            if (budgetExhausted(deadline)) {
+                return;
+            }
+        }
     }
 
+    /**
+     * Fills batches from the magazine, flushing on whichever comes first: a full batch, or the
+     * configured wait elapsing.
+     */
     private void batchConsume(final long startTime) throws InterruptedException {
-        val allShardsMetaData = magazine.getMetaData().values();
-        val loadPointer = Utils.getMagazineCount(allShardsMetaData, MetaData::getLoadPointer);
-        val firePointer = Utils.getMagazineCount(allShardsMetaData, MetaData::getFirePointer);
+        final long lingerMillis = batchingConfig.getMaxWaitTimeInSecs() * 1000L;
+        final long lingerDeadline = startTime + lingerMillis;
+        final long runDeadline = startTime + Math.max(lingerMillis, runBudgetMillis);
+        final List<MagazineData<String>> batch = new ArrayList<>(batchingConfig.getMaxBatchSize());
 
-        // If batch size messages aren't present in queue or max wait time is not elapsed then wait for some time and then recheck
-        if (loadPointer - firePointer <= batchingConfig.getMaxBatchSize()
-                && isMaxWaitTimeNotElapsed(startTime)) {
-            log.debug("Ignis queue is waiting for batching to complete or max time to elapse. Waiting for {}ms", DEFAULT_WAIT_TIME);
-            Thread.sleep(DEFAULT_WAIT_TIME);
-            batchConsume(startTime);
-        } else {
-            StreamUtils.windowed(
-                    StreamUtils.takeWhile(
-                            Stream.generate(this::fireFromMagazine),
-                            Objects::nonNull
-                    ),
-                    batchingConfig.getMaxBatchSize(),
-                    batchingConfig.getMaxBatchSize(),
-                    true
-            ).forEach(this::consume);
+        while (!Thread.currentThread().isInterrupted()) {
+            final MagazineData<String> magazineData = fireFromMagazine();
+            if (Objects.nonNull(magazineData)) {
+                batch.add(magazineData);
+                // A full batch goes now. The old code compared depth with <=, so it slept for five
+                // more seconds at exactly the moment a complete batch had become available (B5).
+                if (batch.size() >= batchingConfig.getMaxBatchSize()) {
+                    consume(List.copyOf(batch));
+                    batch.clear();
+                    // Checked here and not on every fire: a batch already in hand is finished
+                    // rather than abandoned, so the budget bounds the turn without splitting a
+                    // batch the caller asked for.
+                    if (budgetExhausted(runDeadline)) {
+                        return;
+                    }
+                }
+                continue;
+            }
+
+            // Nothing pending means nothing to wait for. Lingering here would hold the thread for
+            // the whole configured wait on an idle queue, which is the opposite of what the setting
+            // is for: it bounds how long a *partial* batch may be held open, not how long an empty
+            // consumer should block.
+            if (batch.isEmpty()) {
+                break;
+            }
+            final long remaining = lingerDeadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                break;
+            }
+            // Never sleep past the deadline. A fixed five-second sleep could overshoot the caller's
+            // stated wait by almost its whole length.
+            Thread.sleep(Math.min(POLL_INTERVAL_IN_MS, remaining));
         }
+
+        if (!batch.isEmpty()) {
+            consume(List.copyOf(batch));
+        }
+    }
+
+    private boolean budgetExhausted(final long deadline) {
+        if (System.currentTimeMillis() < deadline) {
+            return false;
+        }
+        log.debug("Consumer for queue {} reached its run budget; yielding its thread and resuming " +
+                "on the next scheduled run", magazine.getMagazineIdentifier());
+        return true;
     }
 
     private MagazineData<String> fireFromMagazine() {
@@ -212,10 +274,6 @@ public final class MagazineConsumerTask<M> extends TimerTask {
     private void logExceptionInFiring(Exception e) {
         log.error("Magazine exception in consumer task of queue {}. Gracefully ignoring..." +
                 " New task will be created once this is completed", magazine.getMagazineIdentifier(), e);
-    }
-
-    private boolean isMaxWaitTimeNotElapsed(long startTime) {
-        return (System.currentTimeMillis() - startTime) <= batchingConfig.getMaxWaitTimeInSecs() * 1000L;
     }
 
     private Boolean handle(final List<M> messages) throws Exception {

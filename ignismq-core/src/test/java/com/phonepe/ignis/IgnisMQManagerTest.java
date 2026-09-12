@@ -28,6 +28,7 @@ import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.request.CreateQueueRequest;
 import com.phonepe.ignis.request.ShovelConfig;
+import com.phonepe.ignis.scheduler.IgnisSchedulers;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.util.AerospikeTestBase;
 import com.phonepe.ignis.util.IgnisExceptionMatcher;
@@ -51,7 +52,9 @@ import java.util.*;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNull;
 
 public class IgnisMQManagerTest extends AerospikeTestBase {
@@ -333,12 +336,17 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Mockito.verify(magazine, Mockito.times(4)).delete(any());
     }
 
+    /**
+     * Seven messages at a batch size of three: two full batches and a remainder held until the
+     * batching deadline.
+     * <p>
+     * C2 changed how the consumer decides it is ready. It no longer reads magazine depth first -
+     * the messages themselves are the signal - so the exact number of {@code fire()} calls is now a
+     * function of the poll interval and not something worth pinning. What the messages did is.
+     */
     @Test
     public void queueBatchConsumeTest() {
         Magazine<String> magazine = Mockito.mock(Magazine.class);
-        Mockito.when(magazine.getMetaData()).thenReturn(
-                Map.of("SHARD_1", MetaData.builder().firePointer(0).loadPointer(1).build()),
-                Map.of("SHARD_1", MetaData.builder().firePointer(1).loadPointer(5).build()));
         Mockito.when(magazine.load(any())).thenReturn(true);
         MagazineData<String> trueData = buildMagazineData("true");
         MagazineData<String> falseData = buildMagazineData("false");
@@ -347,11 +355,13 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         MagazineConsumerTask<String> magazineConsumerTask = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
                 new ObjectMapper(), String.class, metricRegistry.timer("consume"),
-                BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(10).build());
+                BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(1).build());
         magazineConsumerTask.run();
-        Mockito.verify(magazine, Mockito.times(8)).fire();
+        // The rejected batch is sidelined message by message; both accepted batches are deleted.
         Mockito.verify(magazine, Mockito.times(3)).load(any());
         Mockito.verify(magazine, Mockito.times(7)).delete(any());
+        // Depth is never consulted: that read was one per consumer per wait, with nothing to do.
+        Mockito.verify(magazine, Mockito.never()).getMetaData();
     }
 
     @Test
@@ -717,16 +727,33 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Mockito.verify(storageClient, never()).stop();
     }
 
+    /**
+     * C5: the manager owns every repeating task in the process, so stopping it must leave none of
+     * its threads running - in <em>both</em> pools, which is why this asserts on each rather than
+     * on the aggregate. A control pool that outlived stop() would keep a watcher and a sweeper
+     * running against a closed storage client.
+     * <p>
+     * Scoped to this manager's own schedulers rather than to every thread whose name looks like one.
+     * A global count is wrong here: each test in this class builds its own manager, so the JVM
+     * holds many live schedulers and the assertion would be about them rather than about stop().
+     */
     @Test
-    public void testStopCancelsTheQueueWatcher() throws Exception {
-        Field watcherField = IgnisMQManager.class.getDeclaredField("watcherTimer");
-        watcherField.setAccessible(true);
-        assertNotNull("watcher should be scheduled by the constructor",
-                watcherField.get(ignisMQManager));
+    public void testStopLeavesNoSchedulerThreadsBehind() throws Exception {
+        final Field schedulersField = IgnisMQManager.class.getDeclaredField("schedulers");
+        schedulersField.setAccessible(true);
+        final IgnisSchedulers schedulers = (IgnisSchedulers) schedulersField.get(ignisMQManager);
+        assertNotNull("the manager must own its schedulers", schedulers);
 
         ignisMQManager.stop();
 
-        assertNull("watcher timer must be released on stop", watcherField.get(ignisMQManager));
+        assertTrue("both pools must be shut down", schedulers.isStopped());
+        final long deadline = System.currentTimeMillis() + 15_000L;
+        while (schedulers.getWorker().poolSize() + schedulers.getControl().poolSize() > 0
+                && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50);
+        }
+        assertEquals("no worker thread may survive stop()", 0, schedulers.getWorker().poolSize());
+        assertEquals("no control thread may survive stop()", 0, schedulers.getControl().poolSize());
     }
 
     @Test(expected = NullPointerException.class)

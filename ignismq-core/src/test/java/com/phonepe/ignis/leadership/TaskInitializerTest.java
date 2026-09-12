@@ -17,6 +17,7 @@
 package com.phonepe.ignis.leadership;
 
 import com.phonepe.ignis.client.StorageClient;
+import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.util.AerospikeTestBase;
@@ -112,22 +113,39 @@ public class TaskInitializerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStopIsIdempotentAndCancelsTheSweeperTimer() throws Exception {
+    public void testStopIsIdempotentAndCancelsTheSweeperTask() throws Exception {
         TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
                 CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
         taskInitializer.start();
 
-        Field timerField = TaskInitializer.class.getDeclaredField("sweeperTimer");
-        timerField.setAccessible(true);
-        assertNotNull(timerField.get(taskInitializer));
+        Field taskField = TaskInitializer.class.getDeclaredField("sweeperTask");
+        taskField.setAccessible(true);
+        assertNotNull(taskField.get(taskInitializer));
 
         taskInitializer.stop();
-        assertNull("sweeper timer must be released on stop", timerField.get(taskInitializer));
+        assertNull("sweeper task must be released on stop", taskField.get(taskInitializer));
 
         // Second stop must not throw.
         taskInitializer.stop();
+    }
+
+    /**
+     * A task initializer given no scheduler builds its own, and must therefore shut it down. One
+     * that is handed the manager's must not, or stopping the sweeper would stop every consumer.
+     */
+    @Test
+    public void testASuppliedSchedulerOutlivesTheTaskInitializer() {
+        final IgnisSchedulerCommands shared = new IgnisSchedulerCommands();
+        final TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
+                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry(), shared, null);
+
+        taskInitializer.stop();
+
+        assertFalse("a scheduler owned by the caller must survive", shared.isStopped());
+        shared.stop();
+        assertTrue(shared.isStopped());
     }
 
     @Test(expected = NullPointerException.class)

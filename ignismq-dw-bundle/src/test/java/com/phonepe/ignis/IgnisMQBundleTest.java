@@ -16,23 +16,20 @@
 
 package com.phonepe.ignis;
 
+import com.phonepe.aerospike.config.AerospikeConfiguration;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
-import com.phonepe.aerospike.config.AerospikeConfiguration;
 import io.dropwizard.Configuration;
 import io.dropwizard.setup.Bootstrap;
-import io.dropwizard.setup.Environment;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.curator.framework.CuratorFramework;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Collections;
-
-import static org.mockito.Mockito.*;
 
 public class IgnisMQBundleTest {
 
@@ -40,7 +37,7 @@ public class IgnisMQBundleTest {
     public void bundleTest() {
         IgnisMQBundle<AppConfig> bundle = createBundle();
         AppConfig appConfig = new AppConfig("SERVICE");
-        Assert.assertEquals("SERVICE", bundle.getClientId(appConfig));
+        Assertions.assertEquals("SERVICE", bundle.getClientId(appConfig));
     }
 
     @Test
@@ -48,20 +45,20 @@ public class IgnisMQBundleTest {
         IgnisMQBundle<AppConfig> bundle = createBundle();
         AppConfig appConfig = new AppConfig("SERVICE");
         BaseStorage storage = bundle.getStorage(appConfig);
-        Assert.assertNotNull(storage);
+        Assertions.assertNotNull(storage);
     }
 
     @Test
     public void testGetFarmId() {
         IgnisMQBundle<AppConfig> bundle = createBundle();
         AppConfig appConfig = new AppConfig("SERVICE");
-        Assert.assertEquals("NB6", bundle.getFarmId(appConfig));
+        Assertions.assertEquals("NB6", bundle.getFarmId(appConfig));
     }
 
     @Test
     public void testGetCuratorFramework() {
         IgnisMQBundle<AppConfig> bundle = createBundle();
-        Assert.assertNotNull(bundle.getCuratorFramework());
+        Assertions.assertNotNull(bundle.getCuratorFramework());
     }
 
     @Test
@@ -75,7 +72,7 @@ public class IgnisMQBundleTest {
     @Test
     public void testGetIgnisMQManagerBeforeRun() {
         IgnisMQBundle<AppConfig> bundle = createBundle();
-        Assert.assertNull(bundle.getIgnisMQManager());
+        Assertions.assertNull(bundle.getIgnisMQManager());
     }
 
     private IgnisMQBundle<AppConfig> createBundle() {

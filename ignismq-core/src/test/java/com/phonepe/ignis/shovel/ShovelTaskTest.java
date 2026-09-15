@@ -20,8 +20,8 @@ import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -32,7 +32,7 @@ public class ShovelTaskTest {
     private Magazine<String> magazine;
     private Magazine<String> sidelineMagazine;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         magazine = Mockito.mock(Magazine.class);
         sidelineMagazine = Mockito.mock(Magazine.class);

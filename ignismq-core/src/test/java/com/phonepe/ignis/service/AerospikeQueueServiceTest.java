@@ -18,28 +18,20 @@ package com.phonepe.ignis.service;
 
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.entity.QueueEntity;
-import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.util.AerospikeTestBase;
-import com.phonepe.ignis.utils.Constants;
-import com.phonepe.ignis.utils.Utils;
-import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.entity.MagazineData;
-import com.phonepe.magazine.entity.MagazineScope;
-import com.phonepe.magazine.impl.aerospike.AerospikeStorage;
-import com.phonepe.magazine.impl.aerospike.AerospikeStorageConfig;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.Optional;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class AerospikeQueueServiceTest extends AerospikeTestBase {
 
     private AerospikeQueueService service;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         service = createQueueService();
     }

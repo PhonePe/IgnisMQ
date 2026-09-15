@@ -16,11 +16,10 @@
 
 package com.phonepe.ignis.leadership;
 
-import com.phonepe.ignis.common.LoadBalancer;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import com.phonepe.ignis.common.LoadBalancer;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.leader.LeaderSelector;
 import org.apache.curator.framework.state.ConnectionState;
@@ -28,8 +27,8 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.data.Stat;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
@@ -38,10 +37,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -51,7 +50,7 @@ public class LeaderElectorTest {
     private CuratorFramework curatorFramework;
     private LoadBalancer loadBalancer;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         curatorFramework = Mockito.mock(CuratorFramework.class, RETURNS_DEEP_STUBS);
         loadBalancer = Mockito.mock(LoadBalancer.class);
@@ -166,6 +165,128 @@ public class LeaderElectorTest {
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
         le.start();
         verify(curatorFramework, atLeastOnce()).create();
+    }
+
+    // --- session handling ---
+
+    /**
+     * {@code LeaderSelector} leaves the election the moment {@code takeLeadership} returns.
+     * Without {@code autoRequeue()} a single connection blip permanently removes this pod from
+     * candidacy - it stays alive, looks healthy, and can never be leader again, so a cluster loses
+     * eligible candidates one blip at a time until nothing sweeps at all.
+     * <p>
+     * Asserted on Curator's own {@code autoRequeue} flag rather than behaviourally. The honest
+     * reason: the behavioural test needs a live ZooKeeper, and this project cannot start one -
+     * ZooKeeper 3.4.13 predates the module system and its embedded {@code TestingServer} will not
+     * come up on JDK 17.
+     */
+    @Test
+    public void testStartEntersTheElectionWithAutoRequeue() throws Exception {
+        final LeaderElector le = createDefaultElector();
+        when(curatorFramework.create().creatingParentContainersIfNeeded()
+                .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
+
+        le.start();
+
+        final LeaderSelector selector = (LeaderSelector) getField(le, "leaderSelector");
+        assertNotNull(selector, "start() must create a selector");
+        final Field autoRequeue = LeaderSelector.class.getDeclaredField("autoRequeue");
+        autoRequeue.setAccessible(true);
+        assertTrue(((AtomicBoolean) autoRequeue.get(selector)).get(), "leadership must not be a one-shot; the selector has to re-queue itself");
+    }
+
+    /**
+     * ZooKeeper deletes the ephemeral membership node when the session expires, and nothing
+     * used to recreate it. The pod stayed up, kept its leadership candidacy, and was invisible to
+     * every peer's partition assignment - a worker that exists but is never assigned anything.
+     */
+    @Test
+    public void testReconnectRecreatesMembership() throws Exception {
+        final LeaderElector le = createDefaultElector();
+        when(curatorFramework.create().creatingParentContainersIfNeeded()
+                .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
+        le.start();
+        Mockito.clearInvocations(curatorFramework);
+
+        le.stateChanged(curatorFramework, ConnectionState.RECONNECTED);
+
+        verify(curatorFramework, atLeastOnce()).create();
+    }
+
+    /**
+     * The ordinary reconnect, where the session survived the blip and the node is still there.
+     * {@code NodeExists} is not an error and must not be logged or propagated as one.
+     */
+    @Test
+    public void testReconnectToleratesMembershipThatStillExists() throws Exception {
+        final LeaderElector le = createDefaultElector();
+        when(curatorFramework.create().creatingParentContainersIfNeeded()
+                .withMode(any(CreateMode.class)).forPath(anyString()))
+                .thenThrow(new KeeperException.NodeExistsException());
+
+        le.start();
+        le.stateChanged(curatorFramework, ConnectionState.RECONNECTED);
+    }
+
+    /**
+     * A disconnect must not try to write to ZooKeeper - there is nothing to write to.
+     */
+    @Test
+    public void testDisconnectDoesNotAttemptMembershipCreation() throws Exception {
+        final LeaderElector le = createDefaultElector();
+        when(curatorFramework.create().creatingParentContainersIfNeeded()
+                .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
+        le.start();
+        Mockito.clearInvocations(curatorFramework);
+
+        le.stateChanged(curatorFramework, ConnectionState.LOST);
+
+        verify(curatorFramework, never()).create();
+    }
+
+    /**
+     * {@code stop()} used to set a flag and delete a node, leaving the selector open and the
+     * topology-watch scheduler running - so a stopped elector kept a ZooKeeper connection and kept
+     * calling {@code updateState} on a component the caller believes is gone.
+     */
+    @Test
+    public void testStopClosesTheSelectorAndTheScheduler() throws Exception {
+        final LeaderElector le = createDefaultElector();
+        when(curatorFramework.create().creatingParentContainersIfNeeded()
+                .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
+        le.start();
+        assertNotNull(getField(le, "leaderSelector"));
+
+        le.stop();
+
+        assertNull(getField(le, "leaderSelector"), "the selector must be closed and released");
+        assertTrue(((ScheduledExecutorService) getField(le, "scheduler")).isShutdown(), "the topology watcher must be shut down");
+    }
+
+    /**
+     * A framework lifecycle stops things it never started, and may stop them twice.
+     */
+    @Test
+    public void testStopIsIdempotentAndSafeWithoutStart() {
+        final LeaderElector le = createDefaultElector();
+
+        le.stop();
+        le.stop();
+
+        assertTrue(((AtomicBoolean) unchecked(() -> getField(le, "stop"))).get());
+    }
+
+    private static <T> T unchecked(final ThrowingSupplier<T> supplier) {
+        try {
+            return supplier.get();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingSupplier<T> {
+        T get() throws Exception;
     }
 
     // --- TakeLeadership tests ---

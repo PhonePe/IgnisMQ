@@ -26,49 +26,51 @@ import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.consumer.MagazineConsumerTask;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.exception.ErrorCode;
+import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.request.CreateQueueRequest;
+import com.phonepe.ignis.scheduler.HandlerExecutor;
 import com.phonepe.ignis.request.ShovelConfig;
 import com.phonepe.ignis.scheduler.IgnisSchedulers;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.util.AerospikeTestBase;
-import com.phonepe.ignis.util.IgnisExceptionMatcher;
 import com.phonepe.ignis.util.RequestFactory;
 import com.phonepe.ignis.util.TestMessageHandler;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
-import com.phonepe.magazine.entity.MetaData;
 import com.phonepe.magazine.exception.MagazineException;
-import org.apache.curator.framework.CuratorFramework;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
-import org.mockito.Mockito;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.apache.curator.framework.CuratorFramework;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.util.*;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertNull;
 
 public class IgnisMQManagerTest extends AerospikeTestBase {
     private static final String MESSAGE_HANDLER_TYPE = "messageHandler";
 
-    @Rule
-    public ExpectedException exceptionThrown = ExpectedException.none();
+    private static final long CONSUMER_RUN_BUDGET_IN_MS = 30_000L;
+    private static final long HANDLER_TIMEOUT_IN_MS = 30_000L;
+    private final HandlerExecutor handlerExecutor = new HandlerExecutor(4);
+
+    private static void assertIgnisError(ErrorCode expected, Executable executable) {
+        final IgnisMQException exception = Assertions.assertThrows(IgnisMQException.class, executable);
+        Assertions.assertEquals(expected, exception.getErrorCode());
+    }
 
     private StorageClient<com.aerospike.client.IAerospikeClient> storageClient;
     private IgnisMQManager ignisMQManager;
     private AerospikeQueueService aerospikeQueueService;
     private SimpleMeterRegistry metricRegistry;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         storageClient = Mockito.mock(StorageClient.class);
         Mockito.when(storageClient.getClient()).thenReturn(aerospikeClient);
@@ -83,7 +85,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         f.setAccessible(true);
         f.set(ignisMQManager, aerospikeQueueService);
         Mockito.doReturn(Collections.emptyMap()).when(aerospikeQueueService).getQueues(Mockito.anyBoolean());
-        Assert.assertEquals(Collections.emptySet(), ignisMQManager.getAllQueuesFromDB());
+        Assertions.assertEquals(Collections.emptySet(), ignisMQManager.getAllQueuesFromDB());
 
         // Initialise Message handler
         Map<String, Map.Entry<Class, MessageHandler>> messageHandlerMap = new HashMap<>();
@@ -95,8 +97,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     public void createQueueAndPublishSuccessfully() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         boolean success = ignisMQManager.getQueue("QUEUE_1").publish("true");
-        Assert.assertTrue(success);
-        Assert.assertEquals(1, metricRegistry.find("magazine.load.outcomes")
+        Assertions.assertTrue(success);
+        Assertions.assertEquals(1, metricRegistry.find("magazine.load.outcomes")
                 .tag("magazine", "QUEUE_1").tag("outcome", "loaded").counter().count(), 0);
     }
 
@@ -106,19 +108,18 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_2", MESSAGE_HANDLER_TYPE));
 
         Set<String> expected = ImmutableSet.of("QUEUE_1", "QUEUE_2");
-        Assert.assertEquals(expected, ignisMQManager.getAllQueues().keySet());
+        Assertions.assertEquals(expected, ignisMQManager.getAllQueues().keySet());
     }
 
     @Test
     public void deactivateQueueTest() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
-        Assert.assertTrue(aerospikeQueueService.get("QUEUE_1").get().isActive());
+        Assertions.assertTrue(aerospikeQueueService.get("QUEUE_1").get().isActive());
 
         ignisMQManager.deactivateQueue("QUEUE_1");
         ignisMQManager.refreshQueues();
 
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.QUEUE_NOT_FOUND));
-        ignisMQManager.getQueue("QUEUE_1");
+        assertIgnisError(ErrorCode.QUEUE_NOT_FOUND, () -> ignisMQManager.getQueue("QUEUE_1"));
     }
 
     @Test
@@ -129,8 +130,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
     @Test
     public void queueNotFoundInGetQueueTest() {
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.QUEUE_NOT_FOUND));
-        ignisMQManager.getQueue("QUEUE_1");
+        assertIgnisError(ErrorCode.QUEUE_NOT_FOUND, () -> ignisMQManager.getQueue("QUEUE_1"));
     }
 
     @Test
@@ -141,7 +141,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         int count = 2;
         ignisMQManager.increaseConsumers("QUEUE_1", count);
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
-        Assert.assertEquals(count + queueRequest.getConcurrency(), magazineQueue.getNoOfConsumers());
+        Assertions.assertEquals(count + queueRequest.getConcurrency(), magazineQueue.getNoOfConsumers());
     }
 
     @Test
@@ -152,7 +152,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         int count = 1;
         ignisMQManager.decreaseConsumers("QUEUE_1", count);
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
-        Assert.assertEquals(queueRequest.getConcurrency() - count, magazineQueue.getNoOfConsumers());
+        Assertions.assertEquals(queueRequest.getConcurrency() - count, magazineQueue.getNoOfConsumers());
     }
 
     @Test
@@ -161,7 +161,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ShovelConfig shovelConfig = ShovelConfig.builder().concurrency(5).build();
         ignisMQManager.scheduleShoveling("QUEUE_1", shovelConfig);
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
-        Assert.assertEquals(9, magazineQueue.getNoOfShovelConsumers());
+        Assertions.assertEquals(9, magazineQueue.getNoOfShovelConsumers());
 
         ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_2")
@@ -170,7 +170,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                         .build());
         ignisMQManager.scheduleShoveling("QUEUE_2", shovelConfig);
         magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_2");
-        Assert.assertEquals(5, magazineQueue.getNoOfShovelConsumers());
+        Assertions.assertEquals(5, magazineQueue.getNoOfShovelConsumers());
     }
 
     @Test
@@ -178,9 +178,9 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
-        Assert.assertEquals(0, magazineQueue.getUnconsumedCount());
-        Assert.assertEquals(0, magazineQueue.getMetaData().getPublished());
-        Assert.assertEquals(0, magazineQueue.getMetaData().getConsumed());
+        Assertions.assertEquals(0, magazineQueue.getUnconsumedCount());
+        Assertions.assertEquals(0, magazineQueue.getMetaData().getPublished());
+        Assertions.assertEquals(0, magazineQueue.getMetaData().getConsumed());
 
         ignisMQManager.getQueue("QUEUE_1").publish("true");
         ignisMQManager.getQueue("QUEUE_1").publish("true");
@@ -188,7 +188,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.getQueue("QUEUE_1").publish("true");
         ignisMQManager.getQueue("QUEUE_1").publish("false");
 
-        Assert.assertEquals(5, magazineQueue.getMetaData().getPublished());
+        Assertions.assertEquals(5, magazineQueue.getMetaData().getPublished());
     }
 
     @Test
@@ -196,8 +196,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED));
-        magazineQueue.createConsumers(100);
+        assertIgnisError(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED, () -> magazineQueue.createConsumers(100));
     }
 
     @Test
@@ -205,8 +204,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.INVALID_SHOVEL_TIME_INTERVAL));
-        magazineQueue.scheduleShoveling(0, 100000);
+        assertIgnisError(ErrorCode.INVALID_SHOVEL_TIME_INTERVAL, () -> magazineQueue.scheduleShoveling(0, 100000));
     }
 
     @Test
@@ -214,8 +212,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.INVALID_SHOVEL_TIME_INTERVAL));
-        magazineQueue.scheduleShoveling(0, -1);
+        assertIgnisError(ErrorCode.INVALID_SHOVEL_TIME_INTERVAL, () -> magazineQueue.scheduleShoveling(0, -1));
     }
 
     @Test
@@ -223,14 +220,12 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED));
-        magazineQueue.shovel(100);
+        assertIgnisError(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED, () -> magazineQueue.shovel(100));
     }
 
     @Test
     public void invalidQueueExpiryExceptionTest() throws Exception {
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.INVALID_REQUEST));
-        ignisMQManager.createQueue(
+        assertIgnisError(ErrorCode.INVALID_REQUEST, () -> ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_1")
                         .concurrency(5)
                         .messageHandlerType(MESSAGE_HANDLER_TYPE)
@@ -238,13 +233,12 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                                 .timeUnit(TimeUnit.DAY)
                                 .duration(1000)
                                 .build())
-                        .build());
+                        .build()));
     }
 
     @Test
     public void invalidMessageExpiryExceptionTest() throws Exception {
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.INVALID_REQUEST));
-        ignisMQManager.createQueue(
+        assertIgnisError(ErrorCode.INVALID_REQUEST, () -> ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_1")
                         .concurrency(5)
                         .messageHandlerType(MESSAGE_HANDLER_TYPE)
@@ -252,13 +246,12 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                                 .timeUnit(TimeUnit.DAY)
                                 .duration(1000)
                                 .build())
-                        .build());
+                        .build()));
     }
 
     @Test
     public void messageExpiryMoreThanQueueExpiryExceptionTest() throws Exception {
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.INVALID_REQUEST));
-        ignisMQManager.createQueue(
+        assertIgnisError(ErrorCode.INVALID_REQUEST, () -> ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_1")
                         .concurrency(5)
                         .messageHandlerType(MESSAGE_HANDLER_TYPE)
@@ -270,20 +263,19 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                                 .timeUnit(TimeUnit.DAY)
                                 .duration(1)
                                 .build())
-                        .build());
+                        .build()));
     }
 
     @Test
     public void createExistingQueueExceptionTest() throws Exception {
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.QUEUE_ALREADY_EXISTS));
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
-        ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
+        assertIgnisError(ErrorCode.QUEUE_ALREADY_EXISTS,
+                () -> ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE)));
     }
 
     @Test
     public void invalidMessageHandlerExceptionTest() throws Exception {
-        exceptionThrown.expect(IgnisExceptionMatcher.hasCode(ErrorCode.INVALID_MESSAGE_HANDLER));
-        ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", "INVALID"));
+        assertIgnisError(ErrorCode.INVALID_MESSAGE_HANDLER, () -> ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", "INVALID")));
     }
 
     @Test
@@ -296,7 +288,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Mockito.when(magazine.fire()).thenReturn(trueData, falseData, nullData, null);
         MagazineConsumerTask<String> magazineConsumerTask = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         magazineConsumerTask.run();
         Mockito.verify(magazine, Mockito.times(4)).fire();
         Mockito.verify(magazine, Mockito.times(1)).load(any());
@@ -329,7 +322,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         };
         MagazineConsumerTask<Integer> magazineConsumerTask = new MagazineConsumerTask<>(
                 magazine, magazine, messageHandler, new ObjectMapper(), Integer.class,
-                metricRegistry.timer("consume"), null);
+                metricRegistry.timer("consume"), null,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         magazineConsumerTask.run();
         Mockito.verify(magazine, Mockito.times(5)).fire();
         Mockito.verify(magazine, Mockito.times(1)).load(any());
@@ -355,7 +349,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         MagazineConsumerTask<String> magazineConsumerTask = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
                 new ObjectMapper(), String.class, metricRegistry.timer("consume"),
-                BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(1).build());
+                BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(1).build(),
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         magazineConsumerTask.run();
         // The rejected batch is sidelined message by message; both accepted batches are deleted.
         Mockito.verify(magazine, Mockito.times(3)).load(any());
@@ -374,7 +369,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                 .thenReturn(null);
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         task.run();
         // Non-NOTHING_TO_FIRE MagazineException causes fireFromMagazine to return null, stopping takeWhile after 1 call
         Mockito.verify(magazine, Mockito.times(1)).fire();
@@ -388,7 +384,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                 "data may remain", null));
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
 
         task.run();
 
@@ -404,7 +401,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                 .thenReturn(null);
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         task.run();
         // Generic exception causes fireFromMagazine to return null, stopping takeWhile after 1 call
         Mockito.verify(magazine, Mockito.times(1)).fire();
@@ -435,7 +433,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, failingHandler,
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         // The sideline accepts the message, which is what licenses the delete (B2).
         Mockito.when(magazine.load(any())).thenReturn(true);
         task.run();
@@ -469,7 +468,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, handler,
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         task.run();
         // Ignorable exception => no sideline
         Mockito.verify(magazine, never()).load(any());
@@ -502,7 +502,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         MagazineConsumerTask<Integer> task = new MagazineConsumerTask<>(
                 magazine, magazine, handler,
-                new ObjectMapper(), Integer.class, metricRegistry.timer("consume"), null);
+                new ObjectMapper(), Integer.class, metricRegistry.timer("consume"), null,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         task.run();
         // JsonProcessingException is ignorable, so no sideline via sidelineMessage but handleException calls it
         // Actually handleException checks isExceptionIgnorable — JsonProcessingException is ignorable, so no sidelineMessage
@@ -535,7 +536,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, handler,
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         task.run();
         Mockito.verify(magazine, Mockito.times(1)).delete(any());
         Mockito.verify(magazine, never()).load(any());
@@ -593,14 +595,14 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.refreshQueues();
 
         // The queue should now be in the map
-        Assert.assertNotNull(ignisMQManager.getAllQueues().get("REFRESH_QUEUE"));
+        Assertions.assertNotNull(ignisMQManager.getAllQueues().get("REFRESH_QUEUE"));
     }
 
     @Test
     public void testRefreshQueuesDeactivatesInactiveQueues() throws Exception {
         // First create a queue
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
-        Assert.assertNotNull(ignisMQManager.getAllQueues().get("QUEUE_1"));
+        Assertions.assertNotNull(ignisMQManager.getAllQueues().get("QUEUE_1"));
 
         // Now deactivate in DB
         Mockito.reset(aerospikeQueueService);
@@ -616,7 +618,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.refreshQueues();
 
         // Queue should be removed from map
-        Assert.assertFalse(ignisMQManager.getAllQueues().containsKey("QUEUE_1"));
+        Assertions.assertFalse(ignisMQManager.getAllQueues().containsKey("QUEUE_1"));
     }
 
     @Test
@@ -638,7 +640,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.refreshQueues();
 
         // Consumers should have increased
-        Assert.assertEquals(originalConsumers + 2, q.getNoOfConsumers());
+        Assertions.assertEquals(originalConsumers + 2, q.getNoOfConsumers());
     }
 
     @Test
@@ -646,7 +648,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue q = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
         int originalConsumers = q.getNoOfConsumers();
-        Assert.assertTrue(originalConsumers > 1);
+        Assertions.assertTrue(originalConsumers > 1);
 
         // Reset spy and update concurrency in DB to lower value
         Mockito.reset(aerospikeQueueService);
@@ -660,7 +662,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         ignisMQManager.refreshQueues();
 
-        Assert.assertEquals(1, q.getNoOfConsumers());
+        Assertions.assertEquals(1, q.getNoOfConsumers());
     }
 
     @Test
@@ -690,7 +692,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                         .build());
 
         MagazineQueue q = (MagazineQueue) ignisMQManager.getQueue("QUEUE_NS");
-        Assert.assertNull(q.getShovelConfig());
+        Assertions.assertNull(q.getShovelConfig());
 
         // Now set shovel config in DB
         Mockito.reset(aerospikeQueueService);
@@ -742,29 +744,30 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         final Field schedulersField = IgnisMQManager.class.getDeclaredField("schedulers");
         schedulersField.setAccessible(true);
         final IgnisSchedulers schedulers = (IgnisSchedulers) schedulersField.get(ignisMQManager);
-        assertNotNull("the manager must own its schedulers", schedulers);
+        assertNotNull(schedulers, "the manager must own its schedulers");
 
         ignisMQManager.stop();
 
-        assertTrue("both pools must be shut down", schedulers.isStopped());
+        assertTrue(schedulers.isStopped(), "both pools must be shut down");
         final long deadline = System.currentTimeMillis() + 15_000L;
         while (schedulers.getWorker().poolSize() + schedulers.getControl().poolSize() > 0
                 && System.currentTimeMillis() < deadline) {
             Thread.sleep(50);
         }
-        assertEquals("no worker thread may survive stop()", 0, schedulers.getWorker().poolSize());
-        assertEquals("no control thread may survive stop()", 0, schedulers.getControl().poolSize());
+        assertEquals(0, schedulers.getWorker().poolSize(), "no worker thread may survive stop()");
+        assertEquals(0, schedulers.getControl().poolSize(), "no control thread may survive stop()");
     }
 
-    @Test(expected = NullPointerException.class)
-    public void testMeterRegistryIsRequired() throws Exception {
-        new IgnisMQManager(CLIENT_ID, createBaseStorage(), new ObjectMapper(), null,
-                storageClient, Mockito.mock(CuratorFramework.class), FARM_ID);
+    @Test
+    public void testMeterRegistryIsRequired() {
+        Assertions.assertThrows(NullPointerException.class,
+                () -> new IgnisMQManager(CLIENT_ID, createBaseStorage(), new ObjectMapper(), null,
+                        storageClient, Mockito.mock(CuratorFramework.class), FARM_ID));
     }
 
     @Test
     public void testGetTaskInitializer() {
-        Assert.assertNotNull(ignisMQManager.getTaskInitializer());
+        Assertions.assertNotNull(ignisMQManager.getTaskInitializer());
     }
 
     private <T> MagazineData<T> buildMagazineData(final T data) {
@@ -787,7 +790,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         BatchingConfig batchingConfig = BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(1).build();
         MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
                 magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), batchingConfig);
+                new ObjectMapper(), String.class, metricRegistry.timer("consume"), batchingConfig,
+                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
         // Should not throw — caught internally
         task.run();
     }

@@ -17,8 +17,8 @@
 package com.phonepe.ignis.scheduler;
 
 import com.phonepe.ignis.utils.Constants;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,15 +27,13 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class IgnisSchedulerCommandsTest {
 
     private IgnisSchedulerCommands scheduler;
 
-    @After
+    @AfterEach
     public void tearDown() {
         if (scheduler != null) {
             scheduler.stop();
@@ -58,10 +56,12 @@ public class IgnisSchedulerCommandsTest {
             throw new IllegalStateException("boom");
         }, 0, 20);
 
-        assertTrue("a throwing task must stay scheduled", runs.await(10, TimeUnit.SECONDS));
+        assertTrue(runs.await(10, TimeUnit.SECONDS), "a throwing task must stay scheduled");
     }
 
-    /** A cancelled task stops running and does not linger in the delay queue. */
+    /**
+     * A cancelled task stops running and does not linger in the delay queue.
+     */
     @Test
     public void testACancelledTaskStopsRunning() throws Exception {
         scheduler = new IgnisSchedulerCommands();
@@ -73,7 +73,7 @@ public class IgnisSchedulerCommandsTest {
         final int atCancellation = runs.get();
         Thread.sleep(200);
 
-        assertEquals("no runs may happen after cancellation", atCancellation, runs.get());
+        assertEquals(atCancellation, runs.get(), "no runs may happen after cancellation");
     }
 
     /**
@@ -90,23 +90,27 @@ public class IgnisSchedulerCommandsTest {
             }, 60_000, 60_000);
         }
 
-        assertTrue("pool should have grown past its base", scheduler.corePoolSize() > base);
+        assertTrue(scheduler.corePoolSize() > base, "pool should have grown past its base");
     }
 
-    /** Growth stops at the ceiling; above it, tasks time-share rather than allocating a thread each. */
+    /**
+     * Growth stops at the ceiling; above it, tasks time-share rather than allocating a thread each.
+     */
     @Test
     public void testThePoolIsCapped() {
         scheduler = new IgnisSchedulerCommands();
 
-        for (int i = 0; i < Constants.SCHEDULER_MAX_THREADS + 10; i++) {
+        for (int i = 0; i < Constants.DEFAULT_WORKER_THREADS + 10; i++) {
             scheduler.scheduleRepeating(() -> {
             }, 60_000, 60_000);
         }
 
-        assertEquals(Constants.SCHEDULER_MAX_THREADS, scheduler.corePoolSize());
+        assertEquals(Constants.DEFAULT_WORKER_THREADS, scheduler.corePoolSize());
     }
 
-    /** A one-shot must not grow the pool: it is transient by definition. */
+    /**
+     * A one-shot must not grow the pool: it is transient by definition.
+     */
     @Test
     public void testAOneShotDoesNotGrowThePool() {
         scheduler = new IgnisSchedulerCommands();
@@ -136,17 +140,19 @@ public class IgnisSchedulerCommandsTest {
         }, 0, 10);
         assertTrue(started.await(5, TimeUnit.SECONDS));
 
-        assertTrue("stop must complete within its grace period", scheduler.stop());
+        assertTrue(scheduler.stop(), "stop must complete within its grace period");
         assertTrue(scheduler.isStopped());
 
         final long deadline = System.currentTimeMillis() + 10_000L;
         while (liveSchedulerThreads() > 0 && System.currentTimeMillis() < deadline) {
             Thread.sleep(50);
         }
-        assertEquals("scheduler threads must not survive stop()", 0L, liveSchedulerThreads());
+        assertEquals(0L, liveSchedulerThreads(), "scheduler threads must not survive stop()");
     }
 
-    /** A framework lifecycle stops things it never started, and may stop them twice. */
+    /**
+     * A framework lifecycle stops things it never started, and may stop them twice.
+     */
     @Test
     public void testStopIsIdempotentAndSafeWithoutWork() {
         scheduler = new IgnisSchedulerCommands();
@@ -178,8 +184,7 @@ public class IgnisSchedulerCommandsTest {
 
         tasks.forEach(scheduler::cancelRepeating);
 
-        assertTrue("the pool must shrink once the tasks it grew for are gone",
-                scheduler.corePoolSize() < grown);
+        assertTrue(scheduler.corePoolSize() < grown, "the pool must shrink once the tasks it grew for are gone");
     }
 
     /**
@@ -201,7 +206,7 @@ public class IgnisSchedulerCommandsTest {
         scheduler.cancelRepeating(oneShot);
         scheduler.cancelRepeating(oneShot);
 
-        assertEquals("a one-shot must not affect pool sizing", grown, scheduler.corePoolSize());
+        assertEquals(grown, scheduler.corePoolSize(), "a one-shot must not affect pool sizing");
     }
 
     private static long liveSchedulerThreads() {

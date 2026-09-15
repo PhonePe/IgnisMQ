@@ -20,9 +20,9 @@ import com.phonepe.ignis.common.TimeToLive;
 import com.phonepe.ignis.common.TimeUnit;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.utils.Constants;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class CreateQueueRequestTest {
 
@@ -126,5 +126,28 @@ public class CreateQueueRequestTest {
         TimeToLive defaultTtl = request.getDefaultTimeToLive();
         assertEquals(TimeUnit.DAY, defaultTtl.getTimeUnit());
         assertEquals(Constants.DEFAULT_DURATION_DAY, defaultTtl.getDuration());
+    }
+
+    @Test
+    public void testHandlerTimeoutDefaultsWhenUnset() {
+        CreateQueueRequest request = CreateQueueRequest.builder()
+                .name("QUEUE_1")
+                .concurrency(5)
+                .messageHandlerType("handler")
+                .build();
+
+        assertEquals(Constants.DEFAULT_HANDLER_TIMEOUT_IN_MINS, request.getHandlerTimeoutInMins());
+    }
+
+    @Test
+    public void testHandlerTimeoutIsOverridable() {
+        CreateQueueRequest request = CreateQueueRequest.builder()
+                .name("QUEUE_1")
+                .concurrency(5)
+                .messageHandlerType("handler")
+                .handlerTimeoutInMins(3)
+                .build();
+
+        assertEquals(3, request.getHandlerTimeoutInMins());
     }
 }

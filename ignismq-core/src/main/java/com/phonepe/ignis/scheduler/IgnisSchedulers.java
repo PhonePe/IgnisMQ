@@ -29,9 +29,9 @@ import lombok.extern.slf4j.Slf4j;
  *   <tr><td>Tasks</td><td>queue watcher, sweeper</td><td>consumers, shovels</td></tr>
  *   <tr><td>Count</td><td>exactly two, per process</td><td>unbounded: queues x concurrency</td></tr>
  *   <tr><td>Runs</td><td>ignisMQ's own code</td><td>arbitrary user handlers</td></tr>
- *   <tr><td>Sizing</td><td>fixed</td><td>grows to {@link Constants#SCHEDULER_MAX_THREADS}</td></tr>
+ *   <tr><td>Sizing</td><td>fixed</td><td>grows to the configured worker ceiling</td></tr>
  * </table>
- *
+ * <p>
  * Sharing one pool coupled those two columns: enough slow or backlogged consumers and the watcher
  * stops refreshing queues and the sweeper stops recovering orphans, silently. Both are the control
  * plane - the watcher is how a queue created elsewhere becomes consumable here, and the sweeper is
@@ -52,12 +52,30 @@ public final class IgnisSchedulers {
     private final IgnisSchedulerCommands control;
     @Getter
     private final IgnisSchedulerCommands worker;
+    /**
+     * Where user handlers run: the only way to bound how long a worker thread waits for arbitrary
+     * user code is to not run it on that thread.
+     */
+    @Getter
+    private final HandlerExecutor handler;
 
     public IgnisSchedulers() {
+        this(Constants.DEFAULT_WORKER_THREADS);
+    }
+
+    /**
+     * @param workerThreads ceiling on threads running consumers and shovels. Sizing guidance is
+     *                      roughly concurrently-active queues x their concurrency, not total
+     *                      configured consumers: an idle consumer returns immediately and holds
+     *                      nothing.
+     */
+    public IgnisSchedulers(final int workerThreads) {
+        final int workers = Math.max(1, workerThreads);
         this.control = new IgnisSchedulerCommands("ignismq-control",
                 Constants.SCHEDULER_CONTROL_THREADS, Constants.SCHEDULER_CONTROL_THREADS);
         this.worker = new IgnisSchedulerCommands("ignismq-worker",
-                Constants.SCHEDULER_BASE_THREADS, Constants.SCHEDULER_MAX_THREADS);
+                Constants.SCHEDULER_BASE_THREADS, workers);
+        this.handler = new HandlerExecutor(workers);
     }
 
     /**
@@ -70,15 +88,18 @@ public final class IgnisSchedulers {
      */
     public boolean stop() {
         final boolean workersStopped = worker.stop();
+        // Handlers after workers: a worker blocked waiting on a handler is released by interrupting
+        // the handler, so stopping them the other way round would just wait out the grace period.
+        final boolean handlersStopped = handler.stop();
         final boolean controlStopped = control.stop();
-        if (!workersStopped || !controlStopped) {
-            log.warn("Scheduler shutdown incomplete: workers stopped={}, control stopped={}",
-                    workersStopped, controlStopped);
+        if (!workersStopped || !handlersStopped || !controlStopped) {
+            log.warn("Scheduler shutdown incomplete: workers={}, handlers={}, control={}",
+                    workersStopped, handlersStopped, controlStopped);
         }
-        return workersStopped && controlStopped;
+        return workersStopped && handlersStopped && controlStopped;
     }
 
     public boolean isStopped() {
-        return worker.isStopped() && control.isStopped();
+        return worker.isStopped() && handler.isStopped() && control.isStopped();
     }
 }

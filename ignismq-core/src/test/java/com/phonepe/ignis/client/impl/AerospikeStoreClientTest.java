@@ -17,15 +17,15 @@
 package com.phonepe.ignis.client.impl;
 
 import com.aerospike.client.IAerospikeClient;
-import com.phonepe.ignis.util.AerospikeTestBase;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import com.phonepe.aerospike.config.AerospikeHost;
-import org.junit.Test;
+import com.phonepe.ignis.util.AerospikeTestBase;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class AerospikeStoreClientTest extends AerospikeTestBase {
 

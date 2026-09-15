@@ -21,10 +21,10 @@ import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.util.AerospikeTestBase;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.Mockito;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.Collections;
 
@@ -38,7 +38,7 @@ public class SweeperTest extends AerospikeTestBase {
     private Sweeper sweeper;
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         queueService = Mockito.spy(createQueueService());
         storageClient = Mockito.mock(StorageClient.class);

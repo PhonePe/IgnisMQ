@@ -27,8 +27,8 @@ import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
-import com.phonepe.ignis.leadership.TaskInitializer;
 import com.phonepe.ignis.guage.QueueStatGuage;
+import com.phonepe.ignis.leadership.TaskInitializer;
 import com.phonepe.ignis.metric.QueueStat;
 import com.phonepe.ignis.request.CreateQueueRequest;
 import com.phonepe.ignis.request.ShovelConfig;
@@ -72,11 +72,19 @@ public final class IgnisMQManager {
     private final QueueStatGuage queueStatGuage;
     private final QueueSweeper queueSweeper;
 
-    private final IgnisSchedulers schedulers = new IgnisSchedulers();
+    private final IgnisSchedulers schedulers;
 
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
                           final MeterRegistry meterRegistry, final CuratorFramework curatorFramework,
                           final String farmId) throws Exception {
+        this(clientId, storage, mapper, meterRegistry, curatorFramework, farmId,
+                Constants.DEFAULT_WORKER_THREADS);
+    }
+
+    public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
+                          final MeterRegistry meterRegistry, final CuratorFramework curatorFramework,
+                          final String farmId, final int workerThreads) throws Exception {
+        this.schedulers = new IgnisSchedulers(workerThreads);
         this.clientId = clientId;
         this.storage = storage;
         this.mapper = mapper;
@@ -96,6 +104,15 @@ public final class IgnisMQManager {
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
                           final MeterRegistry meterRegistry, final StorageClient storageClient,
                           final CuratorFramework curatorFramework, final String farmId) throws Exception {
+        this(clientId, storage, mapper, meterRegistry, storageClient, curatorFramework, farmId,
+                Constants.DEFAULT_WORKER_THREADS);
+    }
+
+    public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
+                          final MeterRegistry meterRegistry, final StorageClient storageClient,
+                          final CuratorFramework curatorFramework, final String farmId,
+                          final int workerThreads) throws Exception {
+        this.schedulers = new IgnisSchedulers(workerThreads);
         this.clientId = clientId;
         this.farmId = farmId;
         this.storage = storage;
@@ -181,11 +198,12 @@ public final class IgnisMQManager {
     public void createQueue(final CreateQueueRequest queueRequest) throws Exception {
         validateRequest(queueRequest);
         final long sweepDuration = queueRequest.getSweepDurationInMins() * 60 * 1000L;
+        final long handlerTimeout = queueRequest.getHandlerTimeoutInMins() * 60 * 1000L;
         IQueue<?> queue = createMagazine(
                 queueRequest.getName(), queueRequest.getShards(), queueRequest.getMessageExpiry().toSeconds(),
                 queueRequest.getQueueExpiry().toSeconds() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
                 queueRequest.getConcurrency(), queueRequest.getMessageHandlerType(), queueRequest.getShovelConfig(),
-                queueRequest.getBatchingConfig(), sweepDuration
+                queueRequest.getBatchingConfig(), sweepDuration, handlerTimeout
         );
 
         //Storing the queue details
@@ -203,6 +221,7 @@ public final class IgnisMQManager {
                         .messageHandlerType(queueRequest.getMessageHandlerType())
                         .active(true)
                         .sweepDuration(sweepDuration)
+                        .handlerTimeout(handlerTimeout)
                         .createdAt(System.currentTimeMillis())
                         .batchingConfig(queueRequest.getBatchingConfig())
                         .build(),
@@ -358,7 +377,12 @@ public final class IgnisMQManager {
                                 entry.getValue().getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
                                 entry.getValue().getConcurrency(), entry.getValue().getMessageHandlerType(),
                                 shovelConfig, entry.getValue().getBatchingConfig(),
-                                entry.getValue().getSweepDuration());
+                                entry.getValue().getSweepDuration(),
+                                // Queues created before the timeout was configurable have no such
+                                // bin, and read back as 0.
+                                entry.getValue().getHandlerTimeout() > 0
+                                        ? entry.getValue().getHandlerTimeout()
+                                        : Constants.DEFAULT_HANDLER_TIMEOUT_IN_MINS * 60 * 1000L);
                         ignisMQMap.put(entry.getKey(), queue);
                         log.info("Queue '{}' successfully created", entry.getKey());
                     } catch (Exception e) {
@@ -415,7 +439,8 @@ public final class IgnisMQManager {
                                          final String messageHandlerType,
                                          final ShovelConfig shovelConfig,
                                          final BatchingConfig batchingConfig,
-                                         final long sweepDurationInMillis) throws Exception {
+                                         final long sweepDurationInMillis,
+                                         final long handlerTimeoutInMillis) throws Exception {
         if (!messageHandlers.containsKey(messageHandlerType)) {
             throw IgnisMQException.builder()
                     .errorCode(ErrorCode.INVALID_MESSAGE_HANDLER)
@@ -431,7 +456,8 @@ public final class IgnisMQManager {
                 clientId, farmId, queueName, queueShards, recordTtlInSeconds, metaDataTtlInSeconds,
                 storageClient, storage, concurrency, messageHandlers.get(messageHandlerType).getValue(),
                 shovelConfig, mapper, messageHandlers.get(messageHandlerType).getKey(),
-                batchingConfig, sweepDurationInMillis, schedulers.getWorker(), publishMetricTimer,
+                batchingConfig, sweepDurationInMillis, handlerTimeoutInMillis, schedulers.getWorker(),
+                schedulers.getHandler(), publishMetricTimer,
                 consumeMetricTimer, magazineMeterRegistry
         );
     }

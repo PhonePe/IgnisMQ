@@ -19,7 +19,7 @@ package com.phonepe.ignis;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
@@ -40,6 +40,7 @@ public class ArchitectureTest {
                 .because("ignismq-core is framework-free; the Dropwizard bridge belongs to the bundle")
                 .check(CLASSES);
     }
+
     @Test
     public void nothingSchedulesWorkOnAJavaUtilTimer() {
         noClasses()
@@ -65,6 +66,7 @@ public class ArchitectureTest {
                 .because("entities, config and metrics are values, not participants")
                 .check(CLASSES);
     }
+
     @Test
     public void aerospikeTypesStayInStorageServiceAndClient() {
         noClasses()
@@ -85,6 +87,7 @@ public class ArchitectureTest {
                 .because("Magazine is an implementation detail; users hold IQueue and QueueStat")
                 .check(CLASSES);
     }
+
     @Test
     public void queuesDoNotExposeMagazineTypesPublicly() {
         noMethods()

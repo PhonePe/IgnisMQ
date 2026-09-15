@@ -21,16 +21,16 @@ import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.util.AerospikeTestBase;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.CreateMode;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.lang.reflect.Field;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
@@ -43,7 +43,7 @@ public class TaskInitializerTest extends AerospikeTestBase {
     private AerospikeStorage storage;
     private StorageClient storageClient;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         curatorFramework = Mockito.mock(CuratorFramework.class, RETURNS_DEEP_STUBS);
         queueService = Mockito.spy(createQueueService());
@@ -125,7 +125,7 @@ public class TaskInitializerTest extends AerospikeTestBase {
         assertNotNull(taskField.get(taskInitializer));
 
         taskInitializer.stop();
-        assertNull("sweeper task must be released on stop", taskField.get(taskInitializer));
+        assertNull(taskField.get(taskInitializer), "sweeper task must be released on stop");
 
         // Second stop must not throw.
         taskInitializer.stop();
@@ -143,14 +143,15 @@ public class TaskInitializerTest extends AerospikeTestBase {
 
         taskInitializer.stop();
 
-        assertFalse("a scheduler owned by the caller must survive", shared.isStopped());
+        assertFalse(shared.isStopped(), "a scheduler owned by the caller must survive");
         shared.stop();
         assertTrue(shared.isStopped());
     }
 
-    @Test(expected = NullPointerException.class)
+    @Test
     public void testMeterRegistryIsRequired() {
-        new TaskInitializer(curatorFramework, queueService, CLIENT_ID, storage, storageClient,
-                FARM_ID, null);
+        assertThrows(NullPointerException.class,
+                () -> new TaskInitializer(curatorFramework, queueService, CLIENT_ID, storage, storageClient,
+                        FARM_ID, null));
     }
 }

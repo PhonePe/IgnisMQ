@@ -67,6 +67,19 @@ public class Utils {
                 bounded / 1000L / Constants.FIRE_HISTORY_WINDOWS_PER_SWEEP_DURATION);
     }
 
+    /**
+     * Clamps a configured handler timeout to half the sweep duration, which is the correctness
+     * bound: past sweepDuration the sweeper sidelines and deletes a record whose handler is still
+     * running.
+     */
+    public static long handlerTimeoutMillis(final long configuredTimeoutInMillis,
+                                            final long sweepDurationInMillis) {
+        final long boundedSweep = Math.min(Math.max(sweepDurationInMillis, 0L),
+                Constants.MAX_SWEEP_DURATION_IN_MS);
+        final long ceiling = boundedSweep / Constants.HANDLER_TIMEOUT_SWEEP_DIVISOR;
+        return Math.max(1L, Math.min(configuredTimeoutInMillis, ceiling));
+    }
+
     public static void waitForRequestsCompletion(final List<Future<Boolean>> futureList) {
         for (Future<Boolean> future : futureList) {
             try {

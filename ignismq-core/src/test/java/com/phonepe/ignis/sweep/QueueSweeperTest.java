@@ -31,18 +31,15 @@ import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
 import com.phonepe.magazine.impl.aerospike.AerospikeStorage;
 import com.phonepe.magazine.impl.aerospike.AerospikeStorageConfig;
-import org.junit.Before;
-import org.junit.Test;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The sweeper's whole job is to re-home messages that were delivered and never acknowledged, without
@@ -65,7 +62,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
     private StorageClient storageClient;
     private BaseStorage baseStorage;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         service = createQueueService();
         storageClient = Mockito.mock(StorageClient.class);
@@ -137,7 +134,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
 
         sweepTwice(queue, entity, magazine, sideline);
 
-        assertTrue("a message claimed moments ago must survive the sweep", exists(magazine, inFlight));
+        assertTrue(exists(magazine, inFlight), "a message claimed moments ago must survive the sweep");
         assertNothingToFire(sideline);
     }
 
@@ -159,8 +156,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         sweepTwice(queue, entity, magazine, sideline);
 
         Mockito.verify(sideline, Mockito.atLeastOnce()).load("stale");
-        assertTrue("message must not be deleted when the sideline would not take it",
-                exists(magazine, stale));
+        assertTrue(exists(magazine, stale), "message must not be deleted when the sideline would not take it");
     }
 
     /**
@@ -281,8 +277,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         sweepTwice(queue, entity, magazine, sideline);
 
         assertNothingToFire(sideline);
-        assertEquals("progress must move past a range that held nothing",
-                Long.valueOf(3L), reload(queue).getSweepPointers().get("SHARD_0"));
+        assertEquals(Long.valueOf(3L), reload(queue).getSweepPointers().get("SHARD_0"), "progress must move past a range that held nothing");
     }
 
     /**
@@ -309,7 +304,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
 
         // The registry's magazines were used, not freshly built ones.
         Mockito.verify(main, Mockito.atLeastOnce()).firePointerBefore(Mockito.any());
-        assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
+        assertEquals(magazine(Utils.getSidelineQueueName(queue)).fire().getData(), "orphan");
     }
 
     /**
@@ -332,7 +327,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         missing.sweepQueue(queue, entity);
         missing.sweepQueue(queue, reload(queue));
 
-        assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
+        assertEquals(magazine(Utils.getSidelineQueueName(queue)).fire().getData(), "orphan");
     }
 
     /**
@@ -372,7 +367,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         sweeper.sweepQueue(queue, entity);
         sweeper.sweepQueue(queue, reload(queue));
 
-        assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
+        assertEquals(magazine(Utils.getSidelineQueueName(queue)).fire().getData(), "orphan");
     }
 
     /**
@@ -406,7 +401,9 @@ public class QueueSweeperTest extends AerospikeTestBase {
         sweeper.sweep(queue, reload(queue), magazine, sideline);
     }
 
-    /** The test storage is configured with a one-second checkpoint window. */
+    /**
+     * The test storage is configured with a one-second checkpoint window.
+     */
     private static void awaitWindowRollover() {
         try {
             Thread.sleep(1200L);

@@ -26,6 +26,7 @@ import com.phonepe.ignis.consumer.MagazineConsumerTask;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.request.ShovelConfig;
+import com.phonepe.ignis.scheduler.HandlerExecutor;
 import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
 import com.phonepe.ignis.shovel.ShovelTask;
 import com.phonepe.ignis.storage.BaseStorage;
@@ -59,6 +60,8 @@ public final class MagazineQueue<M> implements IQueue<M> {
     private final List<ScheduledFuture<?>> consumers = new ArrayList<>();
     private final List<ScheduledFuture<?>> sidelineConsumers = new ArrayList<>();
     private final IgnisSchedulerCommands scheduler;
+    private final HandlerExecutor handlerExecutor;
+    private final long handlerTimeoutMillis;
     private final ObjectMapper mapper;
     private final Class<M> clazz;
     @Getter
@@ -83,7 +86,9 @@ public final class MagazineQueue<M> implements IQueue<M> {
             final Class<M> clazz,
             final BatchingConfig batchingConfig,
             final long sweepDurationInMillis,
+            final long handlerTimeoutInMillis,
             final IgnisSchedulerCommands scheduler,
+            final HandlerExecutor handlerExecutor,
             final Timer publishMetricTimer,
             final Timer consumeMetricTimer,
             final MeterRegistry meterRegistry) throws Exception {
@@ -94,6 +99,8 @@ public final class MagazineQueue<M> implements IQueue<M> {
         this.consumeMetricTimer = consumeMetricTimer;
         this.batchingConfig = batchingConfig;
         this.scheduler = scheduler;
+        this.handlerExecutor = handlerExecutor;
+        this.handlerTimeoutMillis = Utils.handlerTimeoutMillis(handlerTimeoutInMillis, sweepDurationInMillis);
         // One storage, two magazines. Every cache Magazine keeps - key layout, active shards,
         // checkpoint claims - is keyed by MagazineContext, so a storage is explicitly designed to
         // serve several magazines. Building one per magazine doubled the object graph and the
@@ -163,7 +170,9 @@ public final class MagazineQueue<M> implements IQueue<M> {
         IntStream.range(0, count).boxed()
                 .forEach(i -> consumers.add(scheduler.scheduleRepeating(
                         new MagazineConsumerTask<>(magazine, sidelineMagazine, messageHandler,
-                                mapper, clazz, consumeMetricTimer, batchingConfig),
+                                mapper, clazz, consumeMetricTimer, batchingConfig,
+                                Constants.CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor,
+                                handlerTimeoutMillis),
                         Constants.INITIAL_DELAY_IN_MS,
                         Constants.DELAY_PERIOD_IN_MS)));
         log.info("Created {} new consumers of queue '{}', Total consumers = {}",
@@ -217,8 +226,8 @@ public final class MagazineQueue<M> implements IQueue<M> {
                     sidelineConsumers.add(autoDelete
                             ? scheduler.scheduleOnce(shovelTask, Constants.INITIAL_DELAY_IN_MS)
                             : scheduler.scheduleRepeating(shovelTask, Constants.INITIAL_DELAY_IN_MS,
-                                    timeIntervalInSecs == 0
-                                            ? Constants.DELAY_PERIOD_IN_MS : timeIntervalInSecs * 1000L));
+                            timeIntervalInSecs == 0
+                                    ? Constants.DELAY_PERIOD_IN_MS : timeIntervalInSecs * 1000L));
                 });
         log.info("All shovels tasks scheduled.");
     }

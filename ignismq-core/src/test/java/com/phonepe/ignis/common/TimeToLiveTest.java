@@ -17,9 +17,9 @@
 package com.phonepe.ignis.common;
 
 import com.phonepe.ignis.utils.Constants;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TimeToLiveTest {
 

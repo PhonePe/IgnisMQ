@@ -20,18 +20,12 @@ import com.codahale.metrics.MetricRegistry;
 import com.phonepe.magazine.metrics.MagazineMetrics;
 import com.phonepe.magazine.metrics.StorageOperation;
 import io.micrometer.core.instrument.MeterRegistry;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * The bridge is the whole of A1: if these properties hold, Magazine's Micrometer instrumentation
- * is visible to a Dropwizard application without core depending on Dropwizard.
- */
 public class DropwizardMagazineMetricsTest {
 
     private final MetricRegistry metrics = new MetricRegistry();
@@ -56,7 +50,7 @@ public class DropwizardMagazineMetricsTest {
 
         final com.codahale.metrics.Timer timer =
                 metrics.getTimers().get("commands.order-events_publish.all");
-        assertNotNull("untagged timer name must not be rewritten", timer);
+        assertNotNull(timer, "untagged timer name must not be rewritten");
         assertEquals(1, timer.getCount());
     }
 
@@ -87,13 +81,11 @@ public class DropwizardMagazineMetricsTest {
             magazineMetrics.aerospikeCall("orders", StorageOperation.BATCH_READ_METADATA);
         }
 
-        assertEquals("recording must reuse existing series",
-                afterFirstCall, metrics.getMetrics().size());
+        assertEquals(afterFirstCall, metrics.getMetrics().size(), "recording must reuse existing series");
 
         // A second queue adds its own bounded block, and no more.
         magazineMetrics.aerospikeCall("payments", StorageOperation.BATCH_READ_METADATA);
-        assertEquals("each queue must contribute the same fixed number of series",
-                2 * afterFirstCall, metrics.getMetrics().size());
+        assertEquals(2 * afterFirstCall, metrics.getMetrics().size(), "each queue must contribute the same fixed number of series");
     }
 
     @Test
@@ -101,7 +93,6 @@ public class DropwizardMagazineMetricsTest {
         bridge.counter("ignis.local.only").increment();
 
         assertTrue(metrics.getMeters().containsKey("ignis.local.only"));
-        assertTrue("must not leak into Micrometer's static global registry",
-                io.micrometer.core.instrument.Metrics.globalRegistry.getMeters().isEmpty());
+        assertTrue(io.micrometer.core.instrument.Metrics.globalRegistry.getMeters().isEmpty(), "must not leak into Micrometer's static global registry");
     }
 }

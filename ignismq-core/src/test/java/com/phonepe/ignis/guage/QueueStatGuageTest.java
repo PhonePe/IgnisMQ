@@ -25,17 +25,21 @@ import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.util.AerospikeTestBase;
 import com.phonepe.ignis.util.RequestFactory;
 import com.phonepe.ignis.util.TestMessageHandler;
-import org.apache.curator.framework.CuratorFramework;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.Mockito;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.apache.curator.framework.CuratorFramework;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.AbstractMap;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 
 public class QueueStatGuageTest extends AerospikeTestBase {
 
@@ -43,7 +47,7 @@ public class QueueStatGuageTest extends AerospikeTestBase {
     private IgnisMQManager ignisMQManager;
     private SimpleMeterRegistry meterRegistry;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         StorageClient storageClient = Mockito.mock(StorageClient.class);
         Mockito.when(storageClient.getClient()).thenReturn(aerospikeClient);

@@ -16,13 +16,13 @@
 
 package com.phonepe.ignis.storage;
 
-import com.phonepe.magazine.entity.StorageType;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
-import org.junit.Test;
+import com.phonepe.magazine.entity.StorageType;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class AerospikeStorageTest {
 

@@ -56,6 +56,7 @@ public final class AerospikeQueueService implements QueueService {
     private static final String SIDELINE_SWEEP_POINTERS_BIN = "sidelineSweep";
     private static final String SIDELINE_SWEPT_COUNTER_BIN = "sidelineSwept";
     private static final String SWEEP_DURATION_BIN = "sweepDuration";
+    private static final String HANDLER_TIMEOUT_BIN = "handlerTimeout";
     private static final String MAX_BATCH_SIZE = "maxBatchSize";
     private static final String MAX_WAIT_TIME = "maxWaitTime";
     private static final String SET_FORMAT = "%s_%s_ignis_queues";
@@ -122,6 +123,7 @@ public final class AerospikeQueueService implements QueueService {
                 binList.add(new Bin(SHOVEL_TIME_INTERVAL_IN_SECS_BIN, entity.getShovelTimeIntervalInSecs()));
                 binList.add(new Bin(CREATED_AT_BIN, entity.getCreatedAt()));
                 binList.add(new Bin(SWEEP_DURATION_BIN, entity.getSweepDuration()));
+                binList.add(new Bin(HANDLER_TIMEOUT_BIN, entity.getHandlerTimeout()));
                 if (Objects.nonNull(entity.getBatchingConfig())) {
                     binList.add(new Bin(MAX_BATCH_SIZE, entity.getBatchingConfig().getMaxBatchSize()));
                     binList.add(new Bin(MAX_WAIT_TIME, entity.getBatchingConfig().getMaxWaitTimeInSecs()));
@@ -256,6 +258,7 @@ public final class AerospikeQueueService implements QueueService {
                 .sweptCounter(record.getLong(SWEPT_COUNTER_BIN))
                 .sidelineSweptCounter(record.getLong(SIDELINE_SWEPT_COUNTER_BIN))
                 .sweepDuration(record.getLong(SWEEP_DURATION_BIN))
+                .handlerTimeout(record.getLong(HANDLER_TIMEOUT_BIN))
                 .batchingConfig(batchingConfig)
                 .build();
     }

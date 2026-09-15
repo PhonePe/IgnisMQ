@@ -71,11 +71,25 @@ public class Constants {
     public static final int TTL_FACTOR_FOR_QUEUE_EXPIRY = 2;
 
     public static final int SCHEDULER_BASE_THREADS = 2;
-    public static final int SCHEDULER_MAX_THREADS = 256;
+    /**
+     * Default ceiling on worker threads, overridable per manager. The handler pool is sized from
+     * the same number rather than separately: a handler thread is only ever occupied while its
+     * worker is blocked on it, so handler demand cannot exceed worker demand.
+     */
+    public static final int DEFAULT_WORKER_THREADS = 256;
     public static final int SCHEDULER_CONTROL_THREADS = 2;
     public static final long SCHEDULER_SHUTDOWN_GRACE_IN_MS = 10_000L;
 
     public static final long CONSUMER_RUN_BUDGET_IN_MS = 30_000L;
+
+    /**
+     * Ceiling on a single {@code MessageHandler.handle} call, overridable per queue and always
+     * clamped to half the sweep duration - past that the sweeper sidelines and deletes a record
+     * whose handler is still running, which is double processing.
+     */
+    public static final int DEFAULT_HANDLER_TIMEOUT_IN_MINS = 10;
+    public static final int MAX_HANDLER_TIMEOUT_IN_MINS = 30;
+    public static final int HANDLER_TIMEOUT_SWEEP_DIVISOR = 2;
 
     public static final int ACTIVE_SHARD_REFRESH_SECONDS = 5;
 }

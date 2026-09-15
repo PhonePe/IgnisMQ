@@ -16,10 +16,9 @@
 
 package com.phonepe.ignis.leadership;
 
-import com.phonepe.ignis.common.LoadBalancer;
-
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.phonepe.ignis.common.LoadBalancer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.leader.LeaderSelector;
@@ -46,6 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class LeaderElector implements LeaderSelectorListener {
     private static final int INITIAL_DELAY_IN_SEC = 2;
     private static final int DELAY_IN_SEC = 30;
+    private static final int SHUTDOWN_GRACE_IN_SEC = 5;
     private final String clientId;
     private final String balancerId;
     private final AtomicBoolean stop = new AtomicBoolean();
@@ -132,6 +132,14 @@ public class LeaderElector implements LeaderSelectorListener {
             } finally {
                 lock.unlock();
             }
+            return;
+        }
+        // If the session expired while we were away, ZooKeeper deleted our ephemeral membership
+        // node and nothing else recreates it: the pod stays up, keeps its leadership candidacy, and
+        // is invisible to every peer's partition assignment.
+        if (ConnectionState.RECONNECTED == newState) {
+            log.info("[{}:{}] Reconnected to zk; ensuring membership still exists", clientId, balancerId);
+            ensureMembership();
         }
     }
 
@@ -141,14 +149,19 @@ public class LeaderElector implements LeaderSelectorListener {
         log.info("[{}] Watching reader path: {}", clientId, memberPathPrefix());
         final String leaderPath = String.format("/%s-ignis-workers/%s/loadbalancer-leader", clientId, clientId);
         this.leaderSelector = new LeaderSelector(curatorFramework, leaderPath, this);
+        // Without this, leadership is a one-shot: on any relinquish - a session blip, a suspended
+        // connection, or takeLeadership returning - the instance leaves the election and never
+        // re-enters, so a cluster loses eligible candidates one blip at a time.
+        leaderSelector.autoRequeue();
         log.info("Starting leader selector at: " + leaderPath);
-        curatorFramework.create().creatingParentContainersIfNeeded()
-                .withMode(CreateMode.EPHEMERAL)
-                .forPath(memberPath());
-        log.info("Member path created at: " + memberPath());
+        ensureMembership();
         leaderSelector.start();
     }
 
+    /**
+     * Releases the selector and the topology watcher as well as the membership node. Idempotent,
+     * and safe on an elector that was never started.
+     */
     public void stop() {
         lock.lock();
         try {
@@ -157,6 +170,38 @@ public class LeaderElector implements LeaderSelectorListener {
             rescindMembership();
         } finally {
             lock.unlock();
+        }
+        if (Objects.nonNull(leaderSelector)) {
+            try {
+                leaderSelector.close();
+            } catch (Exception e) {
+                log.warn("[{}:{}] Error closing leader selector", clientId, balancerId, e);
+            }
+            leaderSelector = null;
+        }
+        scheduler.shutdownNow();
+        try {
+            if (!scheduler.awaitTermination(SHUTDOWN_GRACE_IN_SEC, TimeUnit.SECONDS)) {
+                log.warn("[{}:{}] Topology watcher did not stop within {}s", clientId, balancerId,
+                        SHUTDOWN_GRACE_IN_SEC);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** NodeExists is the ordinary case when the session survived the blip, not an error. */
+    private void ensureMembership() {
+        final String memberPath = memberPath();
+        try {
+            curatorFramework.create().creatingParentContainersIfNeeded()
+                    .withMode(CreateMode.EPHEMERAL)
+                    .forPath(memberPath);
+            log.info("Member path created at: {}", memberPath);
+        } catch (KeeperException.NodeExistsException e) {
+            log.debug("[{}:{}] Membership already present at {}", clientId, balancerId, memberPath);
+        } catch (Exception e) {
+            log.error("[{}:{}] Could not create membership at {}", clientId, balancerId, memberPath, e);
         }
     }
 

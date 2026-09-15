@@ -20,16 +20,16 @@ import com.aerospike.client.AerospikeClient;
 import com.aerospike.client.Host;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.policy.ClientPolicy;
+import com.phonepe.aerospike.config.AerospikeConfiguration;
+import com.phonepe.aerospike.config.AerospikeHost;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
-import com.phonepe.aerospike.config.AerospikeConfiguration;
-import com.phonepe.aerospike.config.AerospikeHost;
 import io.appform.testcontainers.aerospike.AerospikeContainerConfiguration;
 import io.appform.testcontainers.aerospike.container.AerospikeContainer;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.After;
-import org.junit.Before;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.util.List;
 
@@ -57,7 +57,7 @@ public abstract class AerospikeTestBase {
 
     protected IAerospikeClient aerospikeClient;
 
-    @Before
+    @BeforeEach
     public void setUpAerospikeClient() {
         aerospikeClient = new AerospikeClient(new ClientPolicy(),
                 new Host(AEROSPIKE_DOCKER_CONTAINER.getHost(), AEROSPIKE_DOCKER_CONTAINER.getConnectionPort()));
@@ -66,7 +66,7 @@ public abstract class AerospikeTestBase {
                 AEROSPIKE_NAMESPACE, null, null);
     }
 
-    @After
+    @AfterEach
     public void tearDownAerospikeClient() {
         if (aerospikeClient != null) {
             aerospikeClient.truncate(

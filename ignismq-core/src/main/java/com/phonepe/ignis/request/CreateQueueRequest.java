@@ -58,6 +58,9 @@ public class CreateQueueRequest {
     @Min(5)
     @Max(300)
     private final int sweepDurationInMins;
+    @Min(1)
+    @Max(Constants.MAX_HANDLER_TIMEOUT_IN_MINS)
+    private final int handlerTimeoutInMins;
     @Valid
     private final BatchingConfig batchingConfig;
 
@@ -71,6 +74,7 @@ public class CreateQueueRequest {
                               @JsonProperty("messageHandler") final String messageHandlerType,
                               @JsonProperty("shovelConfig") final ShovelConfig shovelConfig,
                               @JsonProperty("sweepDurationInMins") final Integer sweepDurationInMins,
+                              @JsonProperty("handlerTimeoutInMins") final Integer handlerTimeoutInMins,
                               @JsonProperty("batchingConfig") final BatchingConfig batchingConfig) {
         this.name = name;
         this.shards = Objects.nonNull(shards) ? shards : Constants.DEFAULT_SHARDS;
@@ -81,6 +85,8 @@ public class CreateQueueRequest {
         this.shovelConfig = shovelConfig;
         this.sweepDurationInMins = Objects.nonNull(sweepDurationInMins)
                 ? sweepDurationInMins : DEFAULT_SWEEP_DURATION_IN_MINS;
+        this.handlerTimeoutInMins = Objects.nonNull(handlerTimeoutInMins)
+                ? handlerTimeoutInMins : Constants.DEFAULT_HANDLER_TIMEOUT_IN_MINS;
         this.batchingConfig = batchingConfig;
     }
 

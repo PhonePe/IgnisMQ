@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       execution exceptionally and, for a repeating task, is the same trap unless the task is
  *       wrapped. It is wrapped here.</li>
  *   <li><strong>No introspection.</strong> No queue depth, no run duration, no rejections - which
- *       is exactly what D8 needs to instrument.</li>
+ *       is observable, unlike a Timer.</li>
  * </ol>
  * Threads are daemons, so a JVM shutting down without calling {@link #stop()} is not held open.
  * <p>
@@ -69,7 +69,7 @@ public final class IgnisSchedulerCommands {
     private final Set<ScheduledFuture<?>> recurring = ConcurrentHashMap.newKeySet();
 
     public IgnisSchedulerCommands() {
-        this("ignismq-scheduler", Constants.SCHEDULER_BASE_THREADS, Constants.SCHEDULER_MAX_THREADS);
+        this("ignismq-scheduler", Constants.SCHEDULER_BASE_THREADS, Constants.DEFAULT_WORKER_THREADS);
     }
 
     /**

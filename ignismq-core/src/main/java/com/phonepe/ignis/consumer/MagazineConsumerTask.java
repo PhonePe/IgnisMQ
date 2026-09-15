@@ -20,17 +20,18 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.config.BatchingConfig;
-import com.phonepe.ignis.utils.Constants;
+import com.phonepe.ignis.scheduler.HandlerExecutor;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import io.micrometer.core.instrument.Timer;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -48,17 +49,8 @@ public final class MagazineConsumerTask<M> implements Runnable {
     private final Timer consumeMetricTimer;
     private final BatchingConfig batchingConfig;
     private final long runBudgetMillis;
-
-    public MagazineConsumerTask(final Magazine<String> magazine,
-                                final Magazine<String> sidelineMagazine,
-                                final MessageHandler<M> messageHandler,
-                                final ObjectMapper mapper,
-                                final Class<M> clazz,
-                                final Timer consumeMetricTimer,
-                                final BatchingConfig batchingConfig) {
-        this(magazine, sidelineMagazine, messageHandler, mapper, clazz, consumeMetricTimer,
-                batchingConfig, Constants.CONSUMER_RUN_BUDGET_IN_MS);
-    }
+    private final HandlerExecutor handlerExecutor;
+    private final long handlerTimeoutMillis;
 
     public MagazineConsumerTask(final Magazine<String> magazine,
                                 final Magazine<String> sidelineMagazine,
@@ -67,7 +59,11 @@ public final class MagazineConsumerTask<M> implements Runnable {
                                 final Class<M> clazz,
                                 final Timer consumeMetricTimer,
                                 final BatchingConfig batchingConfig,
-                                final long runBudgetMillis) {
+                                final long runBudgetMillis,
+                                final HandlerExecutor handlerExecutor,
+                                final long handlerTimeoutMillis) {
+        this.handlerExecutor = Objects.requireNonNull(handlerExecutor, "handlerExecutor");
+        this.handlerTimeoutMillis = handlerTimeoutMillis;
         this.runBudgetMillis = runBudgetMillis;
         this.magazine = magazine;
         this.sidelineMagazine = sidelineMagazine;
@@ -134,7 +130,7 @@ public final class MagazineConsumerTask<M> implements Runnable {
             if (Objects.nonNull(magazineData)) {
                 batch.add(magazineData);
                 // A full batch goes now. The old code compared depth with <=, so it slept for five
-                // more seconds at exactly the moment a complete batch had become available (B5).
+                // more seconds at exactly the moment a complete batch had become available.
                 if (batch.size() >= batchingConfig.getMaxBatchSize()) {
                     consume(List.copyOf(batch));
                     batch.clear();
@@ -256,7 +252,7 @@ public final class MagazineConsumerTask<M> implements Runnable {
 
     /**
      * @return true when the payload is safely in the sideline magazine, or when there is no payload
-     *         to preserve in the first place.
+     * to preserve in the first place.
      */
     private boolean transferToSideline(final String message) {
         if (Objects.isNull(message) || message.isEmpty()) {
@@ -277,14 +273,24 @@ public final class MagazineConsumerTask<M> implements Runnable {
     }
 
     private Boolean handle(final List<M> messages) throws Exception {
-        return messageHandler.handle(messages);
+        try {
+            return handlerExecutor.call(() -> messageHandler.handle(messages), handlerTimeoutMillis);
+        } catch (TimeoutException e) {
+            throw new HandlerTimeoutException(magazine.getMagazineIdentifier(), messages.size(),
+                    handlerTimeoutMillis, e);
+        }
     }
 
     private boolean isExceptionIgnorable(final Throwable t) {
+        // Never ignorable: "ignorable" means delete without sidelining, and a timeout says nothing
+        // about whether the work was done. The handler may still be running.
+        if (t instanceof HandlerTimeoutException) {
+            return false;
+        }
         if (Objects.nonNull(messageHandler.getIgnorableExceptions())) {
             return messageHandler.getIgnorableExceptions()
                     .stream()
-                .anyMatch(exceptionType -> exceptionType.isAssignableFrom(t.getClass()));
+                    .anyMatch(exceptionType -> exceptionType.isAssignableFrom(t.getClass()));
         }
         return false;
     }

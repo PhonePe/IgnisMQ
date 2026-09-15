@@ -18,7 +18,7 @@ package com.phonepe.ignis.utils;
 
 import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.magazine.entity.MetaData;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,7 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class UtilsTest {
 
@@ -107,14 +107,14 @@ public class UtilsTest {
         assertTrue(futures.isEmpty());
     }
 
-    @Test(expected = IgnisMQException.class)
+    @Test
     public void testWaitForRequestsCompletionFailure() {
         List<Future<Boolean>> futures = new ArrayList<>();
         CompletableFuture<Boolean> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(new RuntimeException("test"));
         futures.add(failedFuture);
 
-        Utils.waitForRequestsCompletion(futures);
+        assertThrows(IgnisMQException.class, () -> Utils.waitForRequestsCompletion(futures));
     }
 
     @Test
@@ -122,7 +122,7 @@ public class UtilsTest {
         assertNotNull(Utils.executorService);
     }
 
-    @Test(expected = IgnisMQException.class)
+    @Test
     public void testWaitForRequestsCompletionWithInterruptedException() {
         List<Future<Boolean>> futures = new ArrayList<>();
         Future<Boolean> future = new Future<>() {
@@ -152,6 +152,31 @@ public class UtilsTest {
             }
         };
         futures.add(future);
-        Utils.waitForRequestsCompletion(futures);
+        assertThrows(IgnisMQException.class, () -> Utils.waitForRequestsCompletion(futures));
+    }
+
+    /**
+     * The sweep duration is the correctness bound: a handler still running holds a claimed record,
+     * and once it elapses the sweeper sidelines and deletes that record while the handler runs on.
+     */
+    @Test
+    public void testHandlerTimeoutIsClampedToHalfTheSweepDuration() {
+        final long fiveMinutes = 5 * 60 * 1000L;
+        final long tenMinutes = 10 * 60 * 1000L;
+        assertEquals(fiveMinutes / 2, Utils.handlerTimeoutMillis(tenMinutes, fiveMinutes));
+    }
+
+    @Test
+    public void testAConfiguredTimeoutWithinTheBoundIsHonoured() {
+        final long oneMinute = 60 * 1000L;
+        final long thirtyMinutes = 30 * 60 * 1000L;
+        assertEquals(oneMinute, Utils.handlerTimeoutMillis(oneMinute, thirtyMinutes));
+    }
+
+    /** Degenerate input must not yield a zero or negative timeout, which would fail every batch. */
+    @Test
+    public void testHandlerTimeoutIsAlwaysPositive() {
+        assertTrue(Utils.handlerTimeoutMillis(0L, 0L) > 0);
+        assertTrue(Utils.handlerTimeoutMillis(-1L, -1L) > 0);
     }
 }

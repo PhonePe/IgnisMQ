@@ -111,7 +111,7 @@
         <aerospike.bundle.version>v1.0.0-2</aerospike.bundle.version>
 
         <!-- Testing -->
-        <junit.version>4.12</junit.version>
+        <junit.version>5.10.2</junit.version>
         <archunit.version>1.4.1</archunit.version>
         <mockito-core.version>4.3.1</mockito-core.version>
         <junit.testcontainer.version>1.0.6</junit.testcontainer.version>
@@ -125,10 +125,25 @@
         <sonar.tests>src/test</sonar.tests>
         <sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
         <sonar.dynamicAnalysis>reuseReports</sonar.dynamicAnalysis>
-        <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+        <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml
+        </sonar.coverage.jacoco.xmlReportPaths>
         <sonar.language>java</sonar.language>
         <sonar.qualitygate.wait>true</sonar.qualitygate.wait>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Keeps every transitively pulled Jupiter artifact on one version; mockito-junit-jupiter
+                 otherwise drags in junit-jupiter-api 5.8.2 alongside our 5.10.2 engine. -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -150,8 +165,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>

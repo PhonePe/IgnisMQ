@@ -305,6 +305,21 @@ public class MagazineConsumerTaskTest {
         verify(magazine, times(handedOver)).delete(any());
     }
 
+    @Test
+    @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
+    public void testSuccessiveBatchesArriveWholeAndInOrder() {
+        when(magazine.fire())
+                .thenReturn(data("msg1"), data("msg2"), data("msg3"), data("msg4"))
+                .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+        final RetainingHandler handler = new RetainingHandler();
+
+        batchTask(handler, 2, 1, 10_000L).run();
+
+        assertEquals(2, handler.batches.size());
+        assertEquals(List.of("msg1", "msg2"), handler.batches.get(0));
+        assertEquals(List.of("msg3", "msg4"), handler.batches.get(1));
+    }
+
     private MagazineConsumerTask<String> batchTask(final MessageHandler<String> handler,
                                                    final int maxBatchSize, final int maxWaitSeconds) {
         return new MagazineConsumerTask<>(magazine, sidelineMagazine, handler, new ObjectMapper(),
@@ -636,6 +651,27 @@ public class MagazineConsumerTaskTest {
         public boolean handle(final List<String> messages) {
             batchSizes.add(messages.size());
             return outcome;
+        }
+    }
+
+    /** Keeps the contents of every batch, which {@code CapturingHandler} reduces to a size. */
+    private static final class RetainingHandler implements MessageHandler<String> {
+        private final List<List<String>> batches = Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public Set<Class<?>> getIgnorableExceptions() {
+            return Set.of();
+        }
+
+        @Override
+        public boolean handle(final String message) {
+            return handle(List.of(message));
+        }
+
+        @Override
+        public boolean handle(final List<String> messages) {
+            batches.add(messages);
+            return true;
         }
     }
 

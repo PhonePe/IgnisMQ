@@ -18,6 +18,7 @@ package com.phonepe.ignis.consumer;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.metric.IgnisMetrics;
@@ -34,7 +35,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
 
 /**
  * @author shantanu.tiwari
@@ -43,16 +43,11 @@ import java.util.stream.Collectors;
 public final class MagazineConsumerTask<M> implements Runnable {
 
     private static final long POLL_INTERVAL_IN_MS = 200L;
-    private static final String REASON_REJECTED = "rejected";
-    private static final String REASON_EXCEPTION = "exception";
-    private static final String REASON_TIMEOUT = "timeout";
-    private static final String REASON_REFUSED = "sideline_refused";
-    private static final String REASON_SATURATED = "saturated";
     private final Magazine<String> magazine;
     private final Magazine<String> sidelineMagazine;
     private final MessageHandler<M> messageHandler;
-    private final ObjectMapper mapper;
-    private final Class<M> clazz;
+    private final ObjectReader reader;
+    private final boolean rawPayload;
     private final BatchingConfig batchingConfig;
     private final long runBudgetMillis;
     private final HandlerExecutor handlerExecutor;
@@ -76,8 +71,10 @@ public final class MagazineConsumerTask<M> implements Runnable {
         this.magazine = magazine;
         this.sidelineMagazine = sidelineMagazine;
         this.messageHandler = messageHandler;
-        this.mapper = mapper;
-        this.clazz = clazz;
+        this.rawPayload = clazz.isPrimitive() || clazz == String.class;
+        // Resolved once: readValue(String, Class) looks the deserialiser up on every call, and this
+        // one runs per message.
+        this.reader = rawPayload ? null : mapper.readerFor(clazz);
         this.batchingConfig = batchingConfig;
     }
 
@@ -130,7 +127,7 @@ public final class MagazineConsumerTask<M> implements Runnable {
         final long lingerMillis = batchingConfig.getMaxWaitTimeInSecs() * 1000L;
         final long lingerDeadline = startTime + lingerMillis;
         final long runDeadline = startTime + Math.max(lingerMillis, runBudgetMillis);
-        final List<MagazineData<String>> batch = new ArrayList<>(batchingConfig.getMaxBatchSize());
+        List<MagazineData<String>> batch = new ArrayList<>(batchingConfig.getMaxBatchSize());
 
         while (!Thread.currentThread().isInterrupted()) {
             final MagazineData<String> magazineData = fireFromMagazine();
@@ -139,8 +136,8 @@ public final class MagazineConsumerTask<M> implements Runnable {
                 // A full batch goes now. The old code compared depth with <=, so it slept for five
                 // more seconds at exactly the moment a complete batch had become available.
                 if (batch.size() >= batchingConfig.getMaxBatchSize()) {
-                    consume(List.copyOf(batch));
-                    batch.clear();
+                    consume(batch);
+                    batch = new ArrayList<>(batchingConfig.getMaxBatchSize());
                     // Checked here and not on every fire: a batch already in hand is finished
                     // rather than abandoned, so the budget bounds the turn without splitting a
                     // batch the caller asked for.
@@ -168,7 +165,7 @@ public final class MagazineConsumerTask<M> implements Runnable {
         }
 
         if (!batch.isEmpty()) {
-            consume(List.copyOf(batch));
+            consume(batch);
         }
     }
 
@@ -207,32 +204,41 @@ public final class MagazineConsumerTask<M> implements Runnable {
         meters.recordConsume(() -> {
             try {
                 log.debug("Consuming messages {}", magazineDataList);
-                final Boolean success = handle(magazineDataList.stream()
-                        .map(magazineData -> {
-                            if (Objects.nonNull(magazineData.getData())) {
-                                if (clazz.isPrimitive() || clazz == String.class) {
-                                    return (M) magazineData.getData();
-                                }
-                                try {
-                                    return mapper.readValue(magazineData.getData(), clazz);
-                                } catch (JsonProcessingException e) {
-                                    handleException(magazineData, e);
-                                }
-                            }
-                            return null;
-                        })
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toList()));
+                final Boolean success = handle(deserialise(magazineDataList));
                 if (Boolean.TRUE.equals(success)) {
                     magazineDataList.forEach(magazine::delete);
                     meters.acked(magazineDataList.size());
                 } else {
-                    magazineDataList.forEach(data -> sidelineThenDelete(data, REASON_REJECTED));
+                    magazineDataList.forEach(data -> sidelineThenDelete(data, IgnisMetrics.REASON_REJECTED));
                 }
             } catch (Exception e) {
                 magazineDataList.forEach(magazineData -> handleException(magazineData, e));
             }
         });
+    }
+
+    /**
+     * A message whose payload cannot be read is dealt with here and left out of the batch; it stays
+     * in the caller's list, so a batch the handler then accepts still deletes it.
+     */
+    private List<M> deserialise(final List<MagazineData<String>> magazineDataList) {
+        final List<M> messages = new ArrayList<>(magazineDataList.size());
+        for (final MagazineData<String> magazineData : magazineDataList) {
+            final String payload = magazineData.getData();
+            if (Objects.isNull(payload)) {
+                continue;
+            }
+            if (rawPayload) {
+                messages.add((M) payload);
+                continue;
+            }
+            try {
+                messages.add(reader.readValue(payload));
+            } catch (JsonProcessingException e) {
+                handleException(magazineData, e);
+            }
+        }
+        return messages;
     }
 
     private void handleException(final MagazineData<String> magazineData,
@@ -259,7 +265,7 @@ public final class MagazineConsumerTask<M> implements Runnable {
             meters.sidelined(reason);
             magazine.delete(magazineData);
         } else {
-            meters.sidelineRefused(REASON_REFUSED);
+            meters.sidelineRefused(IgnisMetrics.REASON_SIDELINE_REFUSED);
             log.error("Could not sideline message from queue {}; leaving it in the main magazine for " +
                     "the sweeper rather than deleting it", magazine.getMagazineIdentifier());
         }
@@ -299,10 +305,10 @@ public final class MagazineConsumerTask<M> implements Runnable {
         try {
             return callHandler(messages);
         } catch (HandlerTimeoutException e) {
-            outcome = REASON_TIMEOUT;
+            outcome = IgnisMetrics.REASON_TIMEOUT;
             throw e;
         } catch (HandlerSaturatedException e) {
-            outcome = REASON_SATURATED;
+            outcome = IgnisMetrics.REASON_SATURATED;
             throw e;
         } catch (Exception e) {
             outcome = IgnisMetrics.FAILURE;
@@ -324,9 +330,9 @@ public final class MagazineConsumerTask<M> implements Runnable {
 
     private static String sidelineReason(final Exception e) {
         if (e instanceof HandlerTimeoutException) {
-            return REASON_TIMEOUT;
+            return IgnisMetrics.REASON_TIMEOUT;
         }
-        return e instanceof HandlerSaturatedException ? REASON_SATURATED : REASON_EXCEPTION;
+        return e instanceof HandlerSaturatedException ? IgnisMetrics.REASON_SATURATED : IgnisMetrics.REASON_EXCEPTION;
     }
 
     private boolean isExceptionIgnorable(final Throwable t) {

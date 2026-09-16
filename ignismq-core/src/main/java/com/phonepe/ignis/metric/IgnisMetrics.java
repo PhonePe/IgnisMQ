@@ -101,6 +101,14 @@ public final class IgnisMetrics {
     public static final String MESSAGE = "message";
     public static final String EMPTY = "empty";
 
+    /** Why a message left the main magazine for the sideline. A closed set, so meters are pre-resolved. */
+    public static final String REASON_REJECTED = "rejected";
+    public static final String REASON_EXCEPTION = "exception";
+    public static final String REASON_TIMEOUT = "timeout";
+    public static final String REASON_SATURATED = "saturated";
+    /** The sideline would not take it, so the payload is still in the main magazine. */
+    public static final String REASON_SIDELINE_REFUSED = "sideline_refused";
+
     /** The caller's registry when enabled, a discarding sink when not. */
     @Getter
     private final MeterRegistry registry;

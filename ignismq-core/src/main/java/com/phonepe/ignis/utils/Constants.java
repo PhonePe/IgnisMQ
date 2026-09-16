@@ -91,5 +91,17 @@ public class Constants {
     public static final int MAX_HANDLER_TIMEOUT_IN_MINS = 30;
     public static final int HANDLER_TIMEOUT_SWEEP_DIVISOR = 2;
 
+    /** How long a worker waits for a handler thread before the batch is refused. */
+    public static final long HANDLER_SATURATION_GRACE_IN_MS = 1_000L;
+
     public static final int ACTIVE_SHARD_REFRESH_SECONDS = 5;
+
+    public static final boolean DEFAULT_METRICS_ENABLED = true;
+
+    /**
+     * How often the queue-depth snapshot behind the per-queue gauges may be refreshed. This is the
+     * only metric whose value costs a storage read, so the interval - not the scrape frequency - is
+     * what bounds its cost.
+     */
+    public static final long QUEUE_DEPTH_REFRESH_IN_MS = 30_000L;
 }

@@ -16,11 +16,16 @@
 
 package com.phonepe.ignis.scheduler;
 
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.utils.Constants;
+import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Delayed;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -28,53 +33,34 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * A named, bounded pool of scheduled tasks.
- * <p>
- * Replaces the six independent {@link java.util.Timer}s that used to sit behind consumers, shovels,
- * shovel retries, the queue watcher and the sweeper. {@code Timer} was the wrong primitive for three
- * reasons, in ascending order of severity:
- * <ol>
- *   <li><strong>A thread per timer.</strong> Scheduling cost scaled with configured concurrency
- *       rather than with actual work, and the thread existed whether or not the task had anything
- *       to do.</li>
- *   <li><strong>One uncaught exception killed the schedule.</strong> {@code Timer} terminates its
- *       thread on any escaping {@code RuntimeException} and every later run is silently lost - the
- *       failure that looks like "the queue just stopped draining". A pool completes that one
- *       execution exceptionally and, for a repeating task, is the same trap unless the task is
- *       wrapped. It is wrapped here.</li>
- *   <li><strong>No introspection.</strong> No queue depth, no run duration, no rejections - which
- *       is observable, unlike a Timer.</li>
- * </ol>
- * Threads are daemons, so a JVM shutting down without calling {@link #stop()} is not held open.
+ * A named, bounded pool of scheduled tasks, with daemon threads.
  * <p>
  * ignisMQ runs two of these rather than one - see {@link IgnisSchedulers} for why the split matters.
  */
 @Slf4j
 public final class IgnisSchedulerCommands {
 
+    private static final String RETRIED = "retried";
+    private static final String FATAL = "fatal";
+
     private final ScheduledThreadPoolExecutor executor;
     private final int maxThreads;
-    /** Live recurring tasks. Decremented on cancellation, so the pool tracks demand in both directions. */
     private final AtomicInteger recurringTasks = new AtomicInteger();
-    /**
-     * The futures this scheduler grew the pool for.
-     * <p>
-     * Membership, not a count, because callers legitimately hold a mixed bag: a shovel is recurring
-     * or one-shot depending on {@code autoDelete}, and the caller cancelling it no longer knows
-     * which. Deciding from the set makes a double cancel, or a cancel of a one-shot, a no-op
-     * instead of an off-by-one that would shrink the pool below real demand.
-     */
+    /** Membership rather than a count, so a double cancel or a cancelled one-shot is a no-op. */
     private final Set<ScheduledFuture<?>> recurring = ConcurrentHashMap.newKeySet();
+    private volatile String poolTag;
+    /** Null until {@link #bindTo}; unit tests and the standalone TaskInitializer stay unbound. */
+    private volatile Timer taskWait;
+    private volatile IgnisMetrics metrics;
 
     public IgnisSchedulerCommands() {
         this("ignismq-scheduler", Constants.SCHEDULER_BASE_THREADS, Constants.DEFAULT_WORKER_THREADS);
     }
 
     /**
-     * @param namePrefix thread name prefix, so a stack dump says which pool is saturated.
-     * @param coreThreads threads before any recurring task is registered.
      * @param maxThreads ceiling on growth. A pool that must never be crowded out passes the same
      *                   value for both, making it fixed.
      */
@@ -82,42 +68,48 @@ public final class IgnisSchedulerCommands {
         this.maxThreads = Math.max(1, maxThreads);
         this.executor = new ScheduledThreadPoolExecutor(
                 Math.max(1, Math.min(coreThreads, this.maxThreads)), threadFactory(namePrefix));
-        // Without this a cancelled consumer's task sits in the delay queue until its next scheduled
-        // run, so repeatedly scaling a queue down and up would accumulate dead entries.
+        // Otherwise a cancelled task sits in the delay queue until its next scheduled run.
         this.executor.setRemoveOnCancelPolicy(true);
     }
 
     /**
-     * Schedules a task to repeat with a fixed gap between the end of one run and the start of the
-     * next.
-     * <p>
-     * Fixed <em>delay</em>, not fixed rate: a consumer that takes longer than its period must not
-     * have runs queued up behind it. The pool is grown to keep pace with the number of recurring
-     * tasks, up to this scheduler's ceiling, so that a queue configured for sixteen consumers
-     * actually gets sixteen able to run at once.
+     * {@code tasks.due} counts overdue tasks, not queued ones: every idle periodic task sits in the
+     * queue awaiting its next due time, so a raw queue size cannot tell idle from saturated.
+     */
+    public void bindTo(final IgnisMetrics metrics, final String pool) {
+        this.poolTag = pool;
+        this.metrics = metrics;
+        final Tags tags = Tags.of(IgnisMetrics.TAG_POOL, pool);
+        metrics.getRegistry().gauge(IgnisMetrics.POOL_THREADS, tags, executor,
+                ScheduledThreadPoolExecutor::getPoolSize);
+        metrics.getRegistry().gauge(IgnisMetrics.POOL_THREADS_MAX, tags, this, commands -> commands.maxThreads);
+        metrics.getRegistry().gauge(IgnisMetrics.POOL_TASKS_ACTIVE, tags, executor,
+                ScheduledThreadPoolExecutor::getActiveCount);
+        metrics.getRegistry().gauge(IgnisMetrics.POOL_TASKS_DUE, tags, executor,
+                IgnisSchedulerCommands::overdueTasks);
+        this.taskWait = metrics.timer(IgnisMetrics.POOL_TASK_WAIT, tags);
+    }
+
+    /**
+     * Fixed <em>delay</em>, not fixed rate: a consumer slower than its period must not have runs
+     * queued up behind it. Grows the pool towards this scheduler's ceiling.
      */
     public ScheduledFuture<?> scheduleRepeating(final Runnable task, final long initialDelayMillis,
                                                 final long delayMillis) {
         growFor(recurringTasks.incrementAndGet());
-        final ScheduledFuture<?> future = executor.scheduleWithFixedDelay(guard(task),
+        final ScheduledFuture<?> future = executor.scheduleWithFixedDelay(
+                guard(timed(task, initialDelayMillis, delayMillis)),
                 initialDelayMillis, delayMillis, TimeUnit.MILLISECONDS);
         recurring.add(future);
         return future;
     }
 
     /**
-     * Cancels a task registered through {@link #scheduleRepeating}, releasing its share of the pool.
-     * <p>
-     * Use this rather than {@code future.cancel(...)} directly. Cancelling the future alone stops
-     * the task but leaves the pool sized for it, so scaling a queue down and up repeatedly would
-     * ratchet the thread count up without bound - the pool would grow for demand that no longer
-     * exists and never give it back.
-     *
-     * @param task the future returned by {@link #scheduleRepeating}.
+     * Use this rather than {@code future.cancel(...)}: cancelling the future alone leaves the pool
+     * sized for the task, so scaling a queue down and up would ratchet the thread count up.
      */
     public void cancelRepeating(final ScheduledFuture<?> task) {
-        // Interrupts a consumer sitting on its poll interval rather than waiting it out; the task
-        // treats interruption as a reason to stop, not an error.
+        // Interrupts a consumer sitting on its poll interval; the task treats that as a stop.
         task.cancel(true);
         if (recurring.remove(task)) {
             shrinkTo(recurringTasks.decrementAndGet());
@@ -167,6 +159,38 @@ public final class IgnisSchedulerCommands {
         return executor.getCorePoolSize();
     }
 
+    /** Escape hatch for callers that genuinely need the executor, such as tests. */
+    ScheduledExecutorService executor() {
+        return executor;
+    }
+
+    private static double overdueTasks(final ScheduledThreadPoolExecutor executor) {
+        return executor.getQueue().stream()
+                .filter(Delayed.class::isInstance)
+                .filter(task -> ((Delayed) task).getDelay(TimeUnit.NANOSECONDS) <= 0L)
+                .count();
+    }
+
+    /**
+     * Time spent waiting for a thread. Under fixed delay the next run is due exactly
+     * {@code delayMillis} after the previous finished, so anything past that is time queued.
+     */
+    private Runnable timed(final Runnable task, final long initialDelayMillis, final long delayMillis) {
+        final AtomicLong dueAt = new AtomicLong(
+                System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(initialDelayMillis));
+        return () -> {
+            final Timer waited = taskWait;
+            if (Objects.nonNull(waited)) {
+                waited.record(Math.max(0L, System.nanoTime() - dueAt.get()), TimeUnit.NANOSECONDS);
+            }
+            try {
+                task.run();
+            } finally {
+                dueAt.set(System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(delayMillis));
+            }
+        };
+    }
+
     private void growFor(final int tasks) {
         final int target = Math.min(tasks, maxThreads);
         if (target > executor.getCorePoolSize()) {
@@ -182,20 +206,34 @@ public final class IgnisSchedulerCommands {
     }
 
     /**
-     * Keeps a repeating task repeating.
-     * <p>
-     * {@code ScheduledExecutorService} cancels a recurring task the first time it throws, silently -
-     * the same defect as {@code Timer}, and the reason swapping the primitive alone would not have
-     * fixed anything. Every task is therefore wrapped so nothing escapes.
+     * {@code ScheduledExecutorService} cancels a recurring task the first time it throws, silently,
+     * so every task is wrapped. {@code Error} is counted and then rethrown: rescheduling through an
+     * {@code OutOfMemoryError} loops on a condition that will not clear, so {@code outcome=fatal}
+     * is the signal that a schedule is gone until restart.
      */
-    private static Runnable guard(final Runnable task) {
+    private Runnable guard(final Runnable task) {
         return () -> {
             try {
                 task.run();
             } catch (Exception e) {
+                count(RETRIED);
                 log.error("Scheduled task failed; it remains scheduled and will run again", e);
+            } catch (Error e) {
+                count(FATAL);
+                log.error("Scheduled task died with an Error; its schedule is lost until this process "
+                        + "restarts. This is not retried: rescheduling through an Error loops on a "
+                        + "condition that will not clear", e);
+                throw e;
             }
         };
+    }
+
+    private void count(final String outcome) {
+        final IgnisMetrics bound = metrics;
+        if (Objects.nonNull(bound)) {
+            bound.counter(IgnisMetrics.POOL_TASK_FAILURES,
+                    Tags.of(IgnisMetrics.TAG_POOL, poolTag, IgnisMetrics.TAG_OUTCOME, outcome)).increment();
+        }
     }
 
     private static ThreadFactory threadFactory(final String namePrefix) {
@@ -206,10 +244,5 @@ public final class IgnisSchedulerCommands {
             thread.setDaemon(true);
             return thread;
         };
-    }
-
-    /** Escape hatch for callers that genuinely need the executor, such as tests. */
-    ScheduledExecutorService executor() {
-        return executor;
     }
 }

@@ -17,6 +17,7 @@
 package com.phonepe.ignis.leadership;
 
 import com.phonepe.ignis.client.StorageClient;
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
@@ -59,14 +60,16 @@ public class TaskInitializerTest extends AerospikeTestBase {
     @Test
     public void testConstructor() {
         TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
+                CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
         assertNotNull(taskInitializer);
     }
 
     @Test
     public void testStartAndStop() throws Exception {
         TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
+                CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
 
         // Deep stubs on curatorFramework handle the full create chain automatically
         when(curatorFramework.create().creatingParentContainersIfNeeded()
@@ -84,7 +87,8 @@ public class TaskInitializerTest extends AerospikeTestBase {
     @Test
     public void testStartSetsLeaderElector() throws Exception {
         TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
+                CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
 
         // Mock create chain
         when(curatorFramework.create().creatingParentContainersIfNeeded()
@@ -107,7 +111,8 @@ public class TaskInitializerTest extends AerospikeTestBase {
     @Test
     public void testStopWithoutStartIsSafe() {
         TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
+                CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
 
         taskInitializer.stop();
     }
@@ -115,7 +120,8 @@ public class TaskInitializerTest extends AerospikeTestBase {
     @Test
     public void testStopIsIdempotentAndCancelsTheSweeperTask() throws Exception {
         TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry());
+                CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
         taskInitializer.start();
@@ -139,7 +145,8 @@ public class TaskInitializerTest extends AerospikeTestBase {
     public void testASuppliedSchedulerOutlivesTheTaskInitializer() {
         final IgnisSchedulerCommands shared = new IgnisSchedulerCommands();
         final TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID, new SimpleMeterRegistry(), shared, null);
+                CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(new SimpleMeterRegistry()), shared, null);
 
         taskInitializer.stop();
 
@@ -149,9 +156,9 @@ public class TaskInitializerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testMeterRegistryIsRequired() {
+    public void testMetricsAreRequired() {
         assertThrows(NullPointerException.class,
                 () -> new TaskInitializer(curatorFramework, queueService, CLIENT_ID, storage, storageClient,
-                        FARM_ID, null));
+                        FARM_ID, null, null, null));
     }
 }

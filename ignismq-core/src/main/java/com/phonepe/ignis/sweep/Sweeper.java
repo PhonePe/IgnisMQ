@@ -22,9 +22,9 @@ import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.common.LoadBalancer;
 import com.phonepe.ignis.common.MagazineRegistry;
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.storage.BaseStorage;
 import lombok.extern.slf4j.Slf4j;
-import io.micrometer.core.instrument.MeterRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,17 +44,11 @@ public class Sweeper implements Runnable, LoadBalancer {
 
     public Sweeper(final QueueService queueService, final String clientId,
                    final BaseStorage storage, final StorageClient client,
-                   final String farmId, final MeterRegistry meterRegistry) {
-        this(queueService, clientId, storage, client, farmId, meterRegistry, null);
-    }
-
-    public Sweeper(final QueueService queueService, final String clientId,
-                   final BaseStorage storage, final StorageClient client,
-                   final String farmId, final MeterRegistry meterRegistry,
+                   final String farmId, final IgnisMetrics metrics,
                    final MagazineRegistry magazineRegistry) {
         this.queueService = queueService;
         this.queueSweeper = new QueueSweeper(queueService, clientId, storage, client, farmId,
-                meterRegistry, magazineRegistry);
+                metrics, magazineRegistry);
     }
 
     @Override

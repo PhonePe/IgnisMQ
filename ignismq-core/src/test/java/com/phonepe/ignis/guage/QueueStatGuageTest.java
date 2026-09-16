@@ -55,7 +55,7 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         meterRegistry = new SimpleMeterRegistry();
         ignisMQManager = new IgnisMQManager(
                 CLIENT_ID, createBaseStorage(), new ObjectMapper(), meterRegistry,
-                storageClient, Mockito.mock(CuratorFramework.class), FARM_ID);
+                storageClient, Mockito.mock(CuratorFramework.class), FARM_ID, null);
         queueService = Mockito.spy(createQueueService());
 
         Field f = IgnisMQManager.class.getDeclaredField("queueService");

@@ -16,6 +16,7 @@
 
 package com.phonepe.ignis.scheduler;
 
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.utils.Constants;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -76,6 +77,13 @@ public final class IgnisSchedulers {
         this.worker = new IgnisSchedulerCommands("ignismq-worker",
                 Constants.SCHEDULER_BASE_THREADS, workers);
         this.handler = new HandlerExecutor(workers);
+    }
+
+    /** Separate from construction so the pools stay usable without a registry, as tests need. */
+    public void bindTo(final IgnisMetrics metrics) {
+        control.bindTo(metrics, "control");
+        worker.bindTo(metrics, "worker");
+        handler.bindTo(metrics);
     }
 
     /**

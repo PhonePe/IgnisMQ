@@ -26,6 +26,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -158,11 +159,13 @@ public class HandlerExecutorTest {
         hog.start();
         assertTrue(occupied.await(10, TimeUnit.SECONDS));
 
-        final String caller = Thread.currentThread().getName();
-        final String ranOn = executor.call(() -> Thread.currentThread().getName(), 10_000);
+        final AtomicBoolean handlerRan = new AtomicBoolean();
+        assertThrows(HandlerSaturatedException.class,
+                () -> executor.call(() -> handlerRan.compareAndSet(false, true), 10_000));
 
-        assertEquals(caller, ranOn, "a saturated pool must run the handler on the calling thread");
-        assertEquals(1, executor.inlineExecutions());
+        assertFalse(handlerRan.get(),
+                "a refused batch must not have been executed; the caller still owns it");
+        assertEquals(1, executor.saturationRefusals());
         release.countDown();
         hog.join(10_000);
     }

@@ -18,26 +18,23 @@ package com.phonepe.ignis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableSet;
+import com.aerospike.client.Bin;
+import com.aerospike.client.Key;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.common.TimeToLive;
 import com.phonepe.ignis.common.TimeUnit;
-import com.phonepe.ignis.config.BatchingConfig;
-import com.phonepe.ignis.consumer.MagazineConsumerTask;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.request.CreateQueueRequest;
-import com.phonepe.ignis.scheduler.HandlerExecutor;
 import com.phonepe.ignis.request.ShovelConfig;
 import com.phonepe.ignis.scheduler.IgnisSchedulers;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.util.AerospikeTestBase;
 import com.phonepe.ignis.util.RequestFactory;
 import com.phonepe.ignis.util.TestMessageHandler;
-import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.entity.MagazineData;
-import com.phonepe.magazine.exception.MagazineException;
+import com.phonepe.ignis.utils.Constants;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.curator.framework.CuratorFramework;
 import org.junit.jupiter.api.Assertions;
@@ -50,15 +47,10 @@ import java.lang.reflect.Field;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 
 public class IgnisMQManagerTest extends AerospikeTestBase {
     private static final String MESSAGE_HANDLER_TYPE = "messageHandler";
-
-    private static final long CONSUMER_RUN_BUDGET_IN_MS = 30_000L;
-    private static final long HANDLER_TIMEOUT_IN_MS = 30_000L;
-    private final HandlerExecutor handlerExecutor = new HandlerExecutor(4);
 
     private static void assertIgnisError(ErrorCode expected, Executable executable) {
         final IgnisMQException exception = Assertions.assertThrows(IgnisMQException.class, executable);
@@ -78,7 +70,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         metricRegistry = new SimpleMeterRegistry();
         ignisMQManager = new IgnisMQManager(
                 CLIENT_ID, createBaseStorage(), new ObjectMapper(), metricRegistry,
-                storageClient, Mockito.mock(CuratorFramework.class), FARM_ID);
+                storageClient, Mockito.mock(CuratorFramework.class), FARM_ID, null);
         aerospikeQueueService = Mockito.spy(createQueueService());
 
         Field f = IgnisMQManager.class.getDeclaredField("queueService");
@@ -279,271 +271,6 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void queueSingleStringMessageConsumeTest() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        Mockito.when(magazine.load(any())).thenReturn(true);
-        MagazineData<String> trueData = buildMagazineData("true");
-        MagazineData<String> falseData = buildMagazineData("false");
-        MagazineData<String> nullData = buildMagazineData(null);
-        Mockito.when(magazine.fire()).thenReturn(trueData, falseData, nullData, null);
-        MagazineConsumerTask<String> magazineConsumerTask = new MagazineConsumerTask<>(
-                magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        magazineConsumerTask.run();
-        Mockito.verify(magazine, Mockito.times(4)).fire();
-        Mockito.verify(magazine, Mockito.times(1)).load(any());
-        Mockito.verify(magazine, Mockito.times(3)).delete(any());
-    }
-
-    @Test
-    public void queueSingleIntegerMessageConsumeTest() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        Mockito.when(magazine.load(any())).thenReturn(true);
-        MagazineData<String> data = buildMagazineData("1");
-        MagazineData<String> zeroData = buildMagazineData("0");
-        MagazineData<String> nullData = buildMagazineData(null);
-        Mockito.when(magazine.fire()).thenReturn(data, data, zeroData, nullData, null);
-        MessageHandler<Integer> messageHandler = new MessageHandler<>() {
-            @Override
-            public Set<Class<?>> getIgnorableExceptions() {
-                return Set.of();
-            }
-
-            @Override
-            public boolean handle(Integer message) {
-                return message > 0;
-            }
-
-            @Override
-            public boolean handle(List<Integer> messages) {
-                return messages.stream().allMatch(this::handle);
-            }
-        };
-        MagazineConsumerTask<Integer> magazineConsumerTask = new MagazineConsumerTask<>(
-                magazine, magazine, messageHandler, new ObjectMapper(), Integer.class,
-                metricRegistry.timer("consume"), null,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        magazineConsumerTask.run();
-        Mockito.verify(magazine, Mockito.times(5)).fire();
-        Mockito.verify(magazine, Mockito.times(1)).load(any());
-        Mockito.verify(magazine, Mockito.times(4)).delete(any());
-    }
-
-    /**
-     * Seven messages at a batch size of three: two full batches and a remainder held until the
-     * batching deadline.
-     * <p>
-     * C2 changed how the consumer decides it is ready. It no longer reads magazine depth first -
-     * the messages themselves are the signal - so the exact number of {@code fire()} calls is now a
-     * function of the poll interval and not something worth pinning. What the messages did is.
-     */
-    @Test
-    public void queueBatchConsumeTest() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        Mockito.when(magazine.load(any())).thenReturn(true);
-        MagazineData<String> trueData = buildMagazineData("true");
-        MagazineData<String> falseData = buildMagazineData("false");
-        MagazineData<String> nullData = buildMagazineData(null);
-        Mockito.when(magazine.fire()).thenReturn(trueData, falseData, trueData, trueData, trueData, trueData, nullData, null);
-        MagazineConsumerTask<String> magazineConsumerTask = new MagazineConsumerTask<>(
-                magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"),
-                BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(1).build(),
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        magazineConsumerTask.run();
-        // The rejected batch is sidelined message by message; both accepted batches are deleted.
-        Mockito.verify(magazine, Mockito.times(3)).load(any());
-        Mockito.verify(magazine, Mockito.times(7)).delete(any());
-        // Depth is never consulted: that read was one per consumer per wait, with nothing to do.
-        Mockito.verify(magazine, Mockito.never()).getMetaData();
-    }
-
-    @Test
-    public void testConsumeWithMagazineExceptionNonNothingToFire() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        Mockito.when(magazine.fire())
-                .thenThrow(new MagazineException(
-                        com.phonepe.magazine.exception.ErrorCode.INTERNAL_ERROR,
-                        "some error", null))
-                .thenReturn(null);
-        MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
-                magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        task.run();
-        // Non-NOTHING_TO_FIRE MagazineException causes fireFromMagazine to return null, stopping takeWhile after 1 call
-        Mockito.verify(magazine, Mockito.times(1)).fire();
-    }
-
-    @Test
-    public void testRetriesExhaustedStopsCurrentDrainWithoutDeletingData() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        Mockito.when(magazine.fire()).thenThrow(new MagazineException(
-                com.phonepe.magazine.exception.ErrorCode.RETRIES_EXHAUSTED,
-                "data may remain", null));
-        MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
-                magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-
-        task.run();
-
-        Mockito.verify(magazine).fire();
-        Mockito.verify(magazine, Mockito.never()).delete(any());
-    }
-
-    @Test
-    public void testConsumeWithGenericException() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        Mockito.when(magazine.fire())
-                .thenThrow(new RuntimeException("generic error"))
-                .thenReturn(null);
-        MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
-                magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        task.run();
-        // Generic exception causes fireFromMagazine to return null, stopping takeWhile after 1 call
-        Mockito.verify(magazine, Mockito.times(1)).fire();
-    }
-
-    @Test
-    public void testConsumeHandlerThrowsException() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        MagazineData<String> data = buildMagazineData("test");
-        Mockito.when(magazine.fire()).thenReturn(data, (MagazineData<String>) null);
-
-        MessageHandler<String> failingHandler = new MessageHandler<>() {
-            @Override
-            public Set<Class<?>> getIgnorableExceptions() {
-                return null;
-            }
-
-            @Override
-            public boolean handle(String message) {
-                throw new RuntimeException("handler error");
-            }
-
-            @Override
-            public boolean handle(List<String> messages) {
-                throw new RuntimeException("handler error");
-            }
-        };
-
-        MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
-                magazine, magazine, failingHandler,
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        // The sideline accepts the message, which is what licenses the delete (B2).
-        Mockito.when(magazine.load(any())).thenReturn(true);
-        task.run();
-        // Exception in consume -> handleException -> sidelineMessage
-        Mockito.verify(magazine, Mockito.times(1)).load(any());
-        Mockito.verify(magazine, Mockito.times(1)).delete(any());
-    }
-
-    @Test
-    public void testConsumeWithIgnorableException() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        MagazineData<String> data = buildMagazineData("test");
-        Mockito.when(magazine.fire()).thenReturn(data, (MagazineData<String>) null);
-
-        MessageHandler<String> handler = new MessageHandler<>() {
-            @Override
-            public Set<Class<?>> getIgnorableExceptions() {
-                return Set.of(RuntimeException.class);
-            }
-
-            @Override
-            public boolean handle(String message) {
-                throw new RuntimeException("ignorable");
-            }
-
-            @Override
-            public boolean handle(List<String> messages) {
-                throw new RuntimeException("ignorable");
-            }
-        };
-
-        MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
-                magazine, magazine, handler,
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        task.run();
-        // Ignorable exception => no sideline
-        Mockito.verify(magazine, never()).load(any());
-        Mockito.verify(magazine, Mockito.times(1)).delete(any());
-    }
-
-    @Test
-    public void testConsumeWithInvalidJsonDeserialization() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        MagazineData<String> badJsonData = buildMagazineData("not-valid-json{{{");
-        Mockito.when(magazine.fire()).thenReturn(badJsonData, (MagazineData<String>) null);
-
-        // Use Integer class which requires JSON deserialization
-        MessageHandler<Integer> handler = new MessageHandler<>() {
-            @Override
-            public Set<Class<?>> getIgnorableExceptions() {
-                return Set.of(com.fasterxml.jackson.core.JsonProcessingException.class);
-            }
-
-            @Override
-            public boolean handle(Integer message) {
-                return true;
-            }
-
-            @Override
-            public boolean handle(List<Integer> messages) {
-                return true;
-            }
-        };
-
-        MagazineConsumerTask<Integer> task = new MagazineConsumerTask<>(
-                magazine, magazine, handler,
-                new ObjectMapper(), Integer.class, metricRegistry.timer("consume"), null,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        task.run();
-        // JsonProcessingException is ignorable, so no sideline via sidelineMessage but handleException calls it
-        // Actually handleException checks isExceptionIgnorable — JsonProcessingException is ignorable, so no sidelineMessage
-        // handleException calls delete(magazineData) at line 162, then consume's forEach at line 148 calls delete again = 2
-        Mockito.verify(magazine, Mockito.times(2)).delete(any());
-    }
-
-    @Test
-    public void testConsumeWithPrimitiveType() {
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        MagazineData<String> data = buildMagazineData("hello");
-        Mockito.when(magazine.fire()).thenReturn(data, (MagazineData<String>) null);
-
-        MessageHandler<String> handler = new MessageHandler<>() {
-            @Override
-            public Set<Class<?>> getIgnorableExceptions() {
-                return null;
-            }
-
-            @Override
-            public boolean handle(String message) {
-                return true;
-            }
-
-            @Override
-            public boolean handle(List<String> messages) {
-                return true;
-            }
-        };
-
-        MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
-                magazine, magazine, handler,
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), null,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        task.run();
-        Mockito.verify(magazine, Mockito.times(1)).delete(any());
-        Mockito.verify(magazine, never()).load(any());
-    }
-
-    @Test
     public void testSweepQueueNonExistentQueue() {
         ignisMQManager.sweepQueue("NON_EXISTENT");
         // Should log "Queue doesn't exist" and return
@@ -564,7 +291,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         IgnisMQManager manager = new IgnisMQManager(
                 CLIENT_ID, createBaseStorage(), new ObjectMapper(), new SimpleMeterRegistry(),
-                sc, Mockito.mock(CuratorFramework.class), FARM_ID);
+                sc, Mockito.mock(CuratorFramework.class), FARM_ID, null);
         // Don't initialize message handlers
         manager.refreshQueues(); // Should log "No message handlers registered" and return
     }
@@ -596,6 +323,53 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         // The queue should now be in the map
         Assertions.assertNotNull(ignisMQManager.getAllQueues().get("REFRESH_QUEUE"));
+    }
+
+    /**
+     * The upgrade path for every queue that exists today. A queue created before the handler
+     * timeout was configurable has no such bin, which reads back as zero - and zero is not merely
+     * an unhelpful default, it clamps to a 1 ms timeout, which would time out and sideline every
+     * batch on the queue. The fallback is what stands between an upgrade and total data diversion.
+     */
+    @Test
+    public void testAQueueCreatedBeforeTheHandlerTimeoutBinFallsBackToTheDefault() throws Exception {
+        final long sweepDuration = 60 * 60 * 1000L;
+        QueueEntity entity = QueueEntity.builder()
+                .active(true).shards(1).queueExpiry(300).messageExpiry(60)
+                .concurrency(1).messageHandlerType(MESSAGE_HANDLER_TYPE)
+                .shovelConcurrency(0).shovelTimeIntervalInSecs(0)
+                .createdAt(System.currentTimeMillis())
+                .sweepDuration(sweepDuration)
+                .build();
+
+        Mockito.reset(aerospikeQueueService);
+        AerospikeQueueService realService = createQueueService();
+        realService.store("LEGACY_TIMEOUT_QUEUE", entity, 1200);
+        // Written, then stripped, so the record is shaped exactly as one from a version that had
+        // never heard of the bin rather than one that wrote a zero into it.
+        aerospikeClient.put(null,
+                new Key(AEROSPIKE_NAMESPACE,
+                        String.format("%s_%s_ignis_queues", FARM_ID, CLIENT_ID), "LEGACY_TIMEOUT_QUEUE"),
+                Bin.asNull("handlerTimeout"));
+        Assertions.assertEquals(0L,
+                realService.get("LEGACY_TIMEOUT_QUEUE").orElseThrow().getHandlerTimeout(),
+                "precondition: the bin is absent and reads back as the sentinel");
+
+        aerospikeQueueService = Mockito.spy(realService);
+        Field f = IgnisMQManager.class.getDeclaredField("queueService");
+        f.setAccessible(true);
+        f.set(ignisMQManager, aerospikeQueueService);
+
+        ignisMQManager.refreshQueues();
+
+        MagazineQueue queue = (MagazineQueue) ignisMQManager.getAllQueues().get("LEGACY_TIMEOUT_QUEUE");
+        Assertions.assertNotNull(queue);
+        // A one-hour sweep duration puts the clamp ceiling at 30 minutes, well clear of the
+        // 10-minute default, so the assertion distinguishes the fallback from the clamp rather
+        // than passing on a coincidence of the two.
+        Assertions.assertEquals(Constants.DEFAULT_HANDLER_TIMEOUT_IN_MINS * 60 * 1000L,
+                queue.getHandlerTimeoutMillis(),
+                "a queue predating the bin must fall back to the default, not to a 1 ms timeout");
     }
 
     @Test
@@ -762,37 +536,11 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     public void testMeterRegistryIsRequired() {
         Assertions.assertThrows(NullPointerException.class,
                 () -> new IgnisMQManager(CLIENT_ID, createBaseStorage(), new ObjectMapper(), null,
-                        storageClient, Mockito.mock(CuratorFramework.class), FARM_ID));
+                        storageClient, Mockito.mock(CuratorFramework.class), FARM_ID, null));
     }
 
     @Test
     public void testGetTaskInitializer() {
         Assertions.assertNotNull(ignisMQManager.getTaskInitializer());
-    }
-
-    private <T> MagazineData<T> buildMagazineData(final T data) {
-        return MagazineData.<T>builder()
-                .magazineIdentifier("M123")
-                .shard(1)
-                .data(data)
-                .firePointer(100)
-                .build();
-    }
-
-    @Test
-    public void testConsumeWithBatchingFatalException() {
-        // Tests the outer catch(Exception) in MagazineConsumerTask.run()
-        // batchConsume calls magazine.getMetaData() which throws → caught by outer catch
-        Magazine<String> magazine = Mockito.mock(Magazine.class);
-        Mockito.when(magazine.getMagazineIdentifier()).thenReturn("TEST_Q");
-        Mockito.when(magazine.getMetaData()).thenThrow(new RuntimeException("fatal metadata error"));
-
-        BatchingConfig batchingConfig = BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(1).build();
-        MagazineConsumerTask<String> task = new MagazineConsumerTask<>(
-                magazine, magazine, new TestMessageHandler(),
-                new ObjectMapper(), String.class, metricRegistry.timer("consume"), batchingConfig,
-                CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
-        // Should not throw — caught internally
-        task.run();
     }
 }

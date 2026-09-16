@@ -16,17 +16,18 @@
 
 package com.phonepe.ignis.consumer;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.config.BatchingConfig;
+import com.phonepe.ignis.metric.QueueMeters;
 import com.phonepe.ignis.scheduler.HandlerExecutor;
+import com.phonepe.ignis.util.TestMessageHandler;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
-import io.micrometer.core.instrument.Timer;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -54,13 +55,13 @@ public class MagazineConsumerTaskTest {
     private static final long HANDLER_TIMEOUT_IN_MS = 30_000L;
 
     private final HandlerExecutor handlerExecutor = new HandlerExecutor(4);
-    private Timer consumeTimer;
+    private QueueMeters meters;
 
     @BeforeEach
     public void setUp() {
         magazine = Mockito.mock(Magazine.class);
         sidelineMagazine = Mockito.mock(Magazine.class);
-        consumeTimer = new SimpleMeterRegistry().timer("test.consume");
+        meters = QueueMeters.unmetered("TEST_QUEUE");
         when(magazine.getMagazineIdentifier()).thenReturn("TEST_QUEUE");
     }
 
@@ -271,7 +272,7 @@ public class MagazineConsumerTaskTest {
         // the loop terminates on the budget at all, and asserting it against the real value would
         // cost this suite thirty seconds to learn nothing extra.
         new MagazineConsumerTask<>(magazine, sidelineMagazine, handler(true), new ObjectMapper(),
-                String.class, consumeTimer, null, 1_000L, handlerExecutor, HANDLER_TIMEOUT_IN_MS).run();
+                String.class, null, 1_000L, handlerExecutor, HANDLER_TIMEOUT_IN_MS, meters).run();
         final long elapsed = System.currentTimeMillis() - started;
 
         assertTrue(elapsed < 15_000, "a backlogged consumer must hand its thread back; ran for " + elapsed + "ms");
@@ -307,9 +308,9 @@ public class MagazineConsumerTaskTest {
     private MagazineConsumerTask<String> batchTask(final MessageHandler<String> handler,
                                                    final int maxBatchSize, final int maxWaitSeconds) {
         return new MagazineConsumerTask<>(magazine, sidelineMagazine, handler, new ObjectMapper(),
-                String.class, consumeTimer, BatchingConfig.builder()
+                String.class, BatchingConfig.builder()
                 .maxBatchSize(maxBatchSize).maxWaitTimeInSecs(maxWaitSeconds).build(),
-                Constants.CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS);
+                Constants.CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS, meters);
     }
 
     /**
@@ -344,7 +345,7 @@ public class MagazineConsumerTaskTest {
         try {
             final long started = System.currentTimeMillis();
             new MagazineConsumerTask<>(magazine, sidelineMagazine, hanging, new ObjectMapper(),
-                    String.class, consumeTimer, null, 1_000L, executor, 300L).run();
+                    String.class, null, 1_000L, executor, 300L, meters).run();
             final long elapsed = System.currentTimeMillis() - started;
 
             assertTrue(elapsed < 20_000, "the consumer must not wait out a hung handler; waited " + elapsed + "ms");
@@ -389,7 +390,7 @@ public class MagazineConsumerTaskTest {
 
         try {
             new MagazineConsumerTask<>(magazine, sidelineMagazine, hanging, new ObjectMapper(),
-                    String.class, consumeTimer, null, 1_000L, executor, 300L).run();
+                    String.class, null, 1_000L, executor, 300L, meters).run();
 
             verify(sidelineMagazine, atLeastOnce()).load(any());
         } finally {
@@ -402,9 +403,9 @@ public class MagazineConsumerTaskTest {
                                                    final int maxBatchSize, final int maxWaitSeconds,
                                                    final long runBudgetMillis) {
         return new MagazineConsumerTask<>(magazine, sidelineMagazine, handler, new ObjectMapper(),
-                String.class, consumeTimer, BatchingConfig.builder()
+                String.class, BatchingConfig.builder()
                 .maxBatchSize(maxBatchSize).maxWaitTimeInSecs(maxWaitSeconds).build(), runBudgetMillis,
-                handlerExecutor, HANDLER_TIMEOUT_IN_MS);
+                handlerExecutor, HANDLER_TIMEOUT_IN_MS, meters);
     }
 
     /**
@@ -429,6 +430,185 @@ public class MagazineConsumerTaskTest {
         assertEquals(List.of(1), handler.batchSizes);
         assertTrue(elapsed >= 1_900, "the run budget must not truncate the caller's batching wait; waited only "
                 + elapsed + "ms");
+    }
+
+    /**
+     * Moved from IgnisMQManagerTest, which built a manager, a scheduler pool and an Aerospike
+     * container per test to exercise a task that needs none of them. These use one mock as both the
+     * main and the sideline magazine, so a load and a delete land on the same counter.
+     */
+    @Test
+    public void testAMixedDrainDeletesAcceptedAndSidelinesRejectedMessages() {
+        final Magazine<String> selfSidelining = Mockito.mock(Magazine.class);
+        when(selfSidelining.load(any())).thenReturn(true);
+        when(selfSidelining.fire())
+                .thenReturn(data("true"), data("false"), data(null), null);
+
+        selfSidelinedTask(selfSidelining, new TestMessageHandler(), String.class).run();
+
+        verify(selfSidelining, times(4)).fire();
+        verify(selfSidelining, times(1)).load(any());
+        verify(selfSidelining, times(3)).delete(any());
+    }
+
+    /**
+     * A non-String type goes through the mapper on the way in, which the String path skips
+     * entirely.
+     */
+    @Test
+    public void testANonStringMessageIsDeserialisedBeforeReachingTheHandler() {
+        final Magazine<String> selfSidelining = Mockito.mock(Magazine.class);
+        when(selfSidelining.load(any())).thenReturn(true);
+        when(selfSidelining.fire())
+                .thenReturn(data("1"), data("1"), data("0"), data(null), null);
+
+        final MessageHandler<Integer> positiveOnly = new MessageHandler<>() {
+            @Override
+            public Set<Class<?>> getIgnorableExceptions() {
+                return Set.of();
+            }
+
+            @Override
+            public boolean handle(final Integer message) {
+                return message > 0;
+            }
+
+            @Override
+            public boolean handle(final List<Integer> messages) {
+                return messages.stream().allMatch(this::handle);
+            }
+        };
+
+        selfSidelinedTask(selfSidelining, positiveOnly, Integer.class).run();
+
+        verify(selfSidelining, times(5)).fire();
+        verify(selfSidelining, times(1)).load(any());
+        verify(selfSidelining, times(4)).delete(any());
+    }
+
+    /**
+     * Seven messages at a batch size of three: two full batches and a remainder held until the
+     * batching deadline.
+     * <p>
+     * C2 changed how the consumer decides it is ready. It no longer reads magazine depth first -
+     * the messages themselves are the signal - so the exact number of {@code fire()} calls is now a
+     * function of the poll interval and not something worth pinning. What the messages did is.
+     */
+    @Test
+    public void testABatchedDrainSidelinesOnlyTheRejectedBatch() {
+        final Magazine<String> selfSidelining = Mockito.mock(Magazine.class);
+        when(selfSidelining.load(any())).thenReturn(true);
+        when(selfSidelining.fire()).thenReturn(data("true"), data("false"), data("true"),
+                data("true"), data("true"), data("true"), data(null), null);
+
+        new MagazineConsumerTask<>(selfSidelining, selfSidelining, new TestMessageHandler(),
+                new ObjectMapper(), String.class,
+                BatchingConfig.builder().maxBatchSize(3).maxWaitTimeInSecs(1).build(),
+                Constants.CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS,
+                meters).run();
+
+        // The rejected batch is sidelined message by message; both accepted batches are deleted.
+        verify(selfSidelining, times(3)).load(any());
+        verify(selfSidelining, times(7)).delete(any());
+        // Depth is never consulted: that read was one per consumer per wait, with nothing to do.
+        verify(selfSidelining, never()).getMetaData();
+    }
+
+    /**
+     * Anything other than NOTHING_TO_FIRE means the magazine could not answer, so the drain stops
+     * and the next scheduled run retries rather than spinning on a failing backend.
+     */
+    @Test
+    public void testAFiringFailureStopsTheDrain() {
+        when(magazine.fire())
+                .thenThrow(new MagazineException(ErrorCode.INTERNAL_ERROR, "some error", null))
+                .thenReturn(null);
+
+        task(handler(true)).run();
+
+        verify(magazine, times(1)).fire();
+    }
+
+    /** The same stop, for a failure that is not a MagazineException at all. */
+    @Test
+    public void testAnUnexpectedFiringFailureAlsoStopsTheDrain() {
+        when(magazine.fire())
+                .thenThrow(new RuntimeException("generic error"))
+                .thenReturn(null);
+
+        task(handler(true)).run();
+
+        verify(magazine, times(1)).fire();
+    }
+
+    /**
+     * B2: RETRIES_EXHAUSTED means the claim itself may not have completed, so there is no message
+     * in hand to retire - deleting anything here would destroy a record nobody has seen.
+     */
+    @Test
+    public void testRetriesExhaustedStopsTheDrainWithoutDeletingData() {
+        when(magazine.fire()).thenThrow(new MagazineException(ErrorCode.RETRIES_EXHAUSTED,
+                "data may remain", null));
+
+        task(handler(true)).run();
+
+        verify(magazine).fire();
+        verify(magazine, never()).delete(any());
+    }
+
+    /** The accepting counterpart of testThrowingHandlerDoesNotDeleteWhenSidelineRefuses. */
+    @Test
+    public void testThrowingHandlerDeletesOnceTheSidelineHasAccepted() {
+        firesThen("msg1");
+        when(sidelineMagazine.load("msg1")).thenReturn(true);
+
+        task(throwingHandler(Collections.emptySet())).run();
+
+        verify(sidelineMagazine, times(1)).load(any());
+        verify(magazine, times(1)).delete(any());
+    }
+
+    /**
+     * A payload that will not deserialise is handled per message, before the batch reaches the
+     * handler. The handler declares JsonProcessingException ignorable, so the message is deleted
+     * there and then filtered out - and the now-empty batch is accepted, which deletes it a second
+     * time. Deleting an already-deleted record is a no-op, but the second call is real and pinning
+     * it is what makes a change to that path visible.
+     */
+    @Test
+    public void testAnUndeserialisableMessageIsDroppedBeforeTheHandlerSeesIt() {
+        final Magazine<String> selfSidelining = Mockito.mock(Magazine.class);
+        when(selfSidelining.fire()).thenReturn(data("not-valid-json{{{"), (MagazineData<String>) null);
+
+        final MessageHandler<Integer> handler = new MessageHandler<>() {
+            @Override
+            public Set<Class<?>> getIgnorableExceptions() {
+                return Set.of(JsonProcessingException.class);
+            }
+
+            @Override
+            public boolean handle(final Integer message) {
+                return true;
+            }
+
+            @Override
+            public boolean handle(final List<Integer> messages) {
+                return true;
+            }
+        };
+
+        selfSidelinedTask(selfSidelining, handler, Integer.class).run();
+
+        verify(selfSidelining, times(2)).delete(any());
+        verify(selfSidelining, never()).load(any());
+    }
+
+    private <T> MagazineConsumerTask<T> selfSidelinedTask(final Magazine<String> selfSidelining,
+                                                          final MessageHandler<T> handler,
+                                                          final Class<T> clazz) {
+        return new MagazineConsumerTask<>(selfSidelining, selfSidelining, handler, new ObjectMapper(),
+                clazz, null, Constants.CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor,
+                HANDLER_TIMEOUT_IN_MS, meters);
     }
 
     /**
@@ -467,8 +647,8 @@ public class MagazineConsumerTaskTest {
 
     private MagazineConsumerTask<String> task(final MessageHandler<String> handler) {
         return new MagazineConsumerTask<>(magazine, sidelineMagazine, handler, new ObjectMapper(),
-                String.class, consumeTimer, null, Constants.CONSUMER_RUN_BUDGET_IN_MS,
-                handlerExecutor, HANDLER_TIMEOUT_IN_MS);
+                String.class, null, Constants.CONSUMER_RUN_BUDGET_IN_MS,
+                handlerExecutor, HANDLER_TIMEOUT_IN_MS, meters);
     }
 
     private static MagazineData<String> data(final String message) {

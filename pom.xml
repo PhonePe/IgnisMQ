@@ -115,6 +115,7 @@
         <archunit.version>1.4.1</archunit.version>
         <mockito-core.version>4.3.1</mockito-core.version>
         <junit.testcontainer.version>1.0.6</junit.testcontainer.version>
+        <awaitility.version>4.2.0</awaitility.version>
         <jna.version>5.13.0</jna.version>
 
         <!-- Sonar properties -->
@@ -142,6 +143,15 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Testcontainers 1.15.3 pulls JNA 5.2.0, which ships no arm64 binary, so Docker
+                 detection dies with an UnsatisfiedLinkError rather than a useful message. Managed
+                 here rather than per module: ignismq-core pinned it locally and ignismq-dw-bundle
+                 inherited the broken version the moment it gained a testcontainer. -->
+            <dependency>
+                <groupId>net.java.dev.jna</groupId>
+                <artifactId>jna</artifactId>
+                <version>${jna.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -168,6 +178,16 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Polling with a deadline, rather than sleeping for a duration guessed to be long enough.
+             A fixed sleep is either slower than it needs to be or flaky under load, and the
+             asynchronous properties these tests assert on - a pool refilling, a meter being
+             recorded - are exactly the "becomes true shortly" shape awaitility exists for. -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>${awaitility.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

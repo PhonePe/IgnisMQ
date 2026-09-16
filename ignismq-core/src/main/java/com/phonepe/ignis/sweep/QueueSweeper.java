@@ -20,6 +20,7 @@ import com.phonepe.ignis.storage.MagazineStorageVisitor;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.common.MagazineRegistry;
 import com.phonepe.ignis.entity.QueueEntity;
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.storage.BaseStorage;
 import com.phonepe.ignis.utils.Constants;
@@ -29,6 +30,7 @@ import com.phonepe.magazine.core.BaseMagazineStorage;
 import com.phonepe.magazine.entity.FireCheckpoint;
 import com.phonepe.magazine.entity.MagazineData;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
@@ -40,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Rescues messages that were handed to a consumer and never acknowledged.
@@ -76,8 +79,10 @@ public final class QueueSweeper {
     private final BaseStorage storage;
     private final StorageClient client;
     private final String farmId;
+    private final IgnisMetrics metrics;
+    /** The caller's registry, or a sink when instrumentation is off. Magazine's storage wants it. */
     private final MeterRegistry meterRegistry;
-    /** Optional: absent means always build, which is what a standalone sweeper does. */
+    /** Optional: null means always build, which is what a standalone sweeper does. */
     private final MagazineRegistry magazineRegistry;
 
     public QueueSweeper(final QueueService queueService,
@@ -85,16 +90,7 @@ public final class QueueSweeper {
                         final BaseStorage storage,
                         final StorageClient client,
                         final String farmId,
-                        final MeterRegistry meterRegistry) {
-        this(queueService, clientId, storage, client, farmId, meterRegistry, null);
-    }
-
-    public QueueSweeper(final QueueService queueService,
-                        final String clientId,
-                        final BaseStorage storage,
-                        final StorageClient client,
-                        final String farmId,
-                        final MeterRegistry meterRegistry,
+                        final IgnisMetrics metrics,
                         final MagazineRegistry magazineRegistry) {
         this.magazineRegistry = magazineRegistry;
         this.queueService = queueService;
@@ -102,7 +98,8 @@ public final class QueueSweeper {
         this.storage = storage;
         this.client = client;
         this.farmId = farmId;
-        this.meterRegistry = Objects.requireNonNull(meterRegistry, "Meter registry is required.");
+        this.metrics = Objects.requireNonNull(metrics, "Metrics are required.");
+        this.meterRegistry = metrics.getRegistry();
     }
 
     /**
@@ -156,9 +153,14 @@ public final class QueueSweeper {
                               final QueueEntity queueEntity,
                               final long cutoffMillis,
                               final boolean isSideline) {
+        final Tags tags = Tags.of(IgnisMetrics.TAG_QUEUE, queueName, IgnisMetrics.TAG_MAGAZINE,
+                isSideline ? IgnisMetrics.SIDELINE_MAGAZINE : IgnisMetrics.MAIN);
+        final long startNanos = System.nanoTime();
+        String outcome = IgnisMetrics.SUCCESS;
         try {
             sweepMagazine(queueName, magazine, sidelineMagazine, queueEntity, cutoffMillis, isSideline);
         } catch (Exception e) {
+            outcome = IgnisMetrics.FAILURE;
             // Includes INVALID_REQUEST from firePointerBefore, which means the retained history no
             // longer reaches back to the cutoff and the sweeper therefore cannot tell an abandoned
             // message from a live one. Refusing to sweep is the only safe answer, and the loud
@@ -166,6 +168,11 @@ public final class QueueSweeper {
             // do.
             log.error("Sweep failed for magazine '{}'. Skipping it this pass",
                     magazine.getMagazineIdentifier(), e);
+        } finally {
+            // Failures are timed too: refusing immediately and dying half way through a scan are
+            // different faults with the same outcome tag.
+            metrics.timer(IgnisMetrics.SWEEP, tags.and(IgnisMetrics.TAG_OUTCOME, outcome))
+                    .record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
         }
     }
 
@@ -238,6 +245,12 @@ public final class QueueSweeper {
                     orphans.getOrDefault(shard, List.of()));
 
             swept += outcome.reHomed();
+            if (outcome.reHomed() > 0) {
+                metrics.counter(IgnisMetrics.SWEEP_REHOMED,
+                        Tags.of(IgnisMetrics.TAG_QUEUE, queueName, IgnisMetrics.TAG_MAGAZINE,
+                                isSideline ? IgnisMetrics.SIDELINE_MAGAZINE : IgnisMetrics.MAIN))
+                        .increment(outcome.reHomed());
+            }
             progress.put(Utils.getShardId(shard), outcome.resumeFrom());
             advance(positions, shard, outcome.resumeFrom(), window.end(), limits.get(shard));
         }

@@ -16,6 +16,8 @@
 
 package com.phonepe.ignis.service;
 
+import com.aerospike.client.Bin;
+import com.aerospike.client.Key;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.util.AerospikeTestBase;
@@ -156,6 +158,47 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
         Optional<QueueEntity> result = service.get("QUEUE_NB");
         assertTrue(result.isPresent());
         assertNull(result.get().getBatchingConfig());
+    }
+
+    @Test
+    public void testHandlerTimeoutRoundTripsThroughTheBin() {
+        QueueEntity entity = QueueEntity.builder()
+                .active(true).shards(32).queueExpiry(600).messageExpiry(300)
+                .concurrency(4).messageHandlerType("handler")
+                .shovelConcurrency(2).shovelTimeIntervalInSecs(600)
+                .createdAt(1000L).sweepDuration(20 * 60 * 1000L)
+                .handlerTimeout(7 * 60 * 1000L)
+                .build();
+
+        service.store("TIMEOUT_Q", entity, 1200);
+
+        assertEquals(7 * 60 * 1000L, service.get("TIMEOUT_Q").orElseThrow().getHandlerTimeout());
+    }
+
+    /**
+     * A queue written before the bin existed. The absent bin is the upgrade path for every queue
+     * that exists today, and it must read back as zero rather than failing, because zero is the
+     * sentinel the caller's fallback keys off.
+     */
+    @Test
+    public void testAQueueWrittenBeforeTheBinExistedReadsBackZero() {
+        service.store("LEGACY_Q", buildEntity(true), 1200);
+        removeHandlerTimeoutBin("LEGACY_Q");
+
+        QueueEntity stored = service.get("LEGACY_Q").orElseThrow();
+
+        assertEquals(0L, stored.getHandlerTimeout(), "an absent bin must read back as the sentinel");
+        assertEquals(20 * 60 * 1000L, stored.getSweepDuration(), "the rest of the record still reads");
+    }
+
+    /**
+     * Deletes the bin outright rather than writing zero, so the record is shaped exactly as one
+     * written by a version that had never heard of it.
+     */
+    private void removeHandlerTimeoutBin(final String queue) {
+        aerospikeClient.put(null,
+                new Key(AEROSPIKE_NAMESPACE, String.format("%s_%s_ignis_queues", FARM_ID, CLIENT_ID), queue),
+                Bin.asNull("handlerTimeout"));
     }
 
     private QueueEntity buildEntity(boolean active) {

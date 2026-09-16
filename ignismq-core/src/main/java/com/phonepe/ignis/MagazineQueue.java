@@ -22,9 +22,12 @@ import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.common.QueueMetaData;
 import com.phonepe.ignis.config.BatchingConfig;
+import com.phonepe.ignis.metric.IgnisMetrics;
+import com.phonepe.ignis.metric.QueueMeters;
 import com.phonepe.ignis.consumer.MagazineConsumerTask;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
+import com.phonepe.ignis.refresh.RefreshableQueue;
 import com.phonepe.ignis.request.ShovelConfig;
 import com.phonepe.ignis.scheduler.HandlerExecutor;
 import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
@@ -37,7 +40,7 @@ import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.core.BaseMagazineStorage;
 import com.phonepe.magazine.entity.MetaData;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -46,14 +49,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
 /**
  * @author shantanu.tiwari
  */
 @Slf4j
-public final class MagazineQueue<M> implements IQueue<M> {
+public final class MagazineQueue<M> implements IQueue<M>, RefreshableQueue {
     private final Magazine<String> magazine;
     private final Magazine<String> sidelineMagazine;
     private final MessageHandler<M> messageHandler;
@@ -61,14 +63,14 @@ public final class MagazineQueue<M> implements IQueue<M> {
     private final List<ScheduledFuture<?>> sidelineConsumers = new ArrayList<>();
     private final IgnisSchedulerCommands scheduler;
     private final HandlerExecutor handlerExecutor;
+    @Getter(AccessLevel.PACKAGE)
     private final long handlerTimeoutMillis;
     private final ObjectMapper mapper;
     private final Class<M> clazz;
     @Getter
     private final ShovelConfig shovelConfig;
-    private final Timer publishMetricTimer;
-    private final Timer consumeMetricTimer;
     private final BatchingConfig batchingConfig;
+    private final QueueMeters meters;
 
     MagazineQueue(
             final String clientId,
@@ -89,14 +91,12 @@ public final class MagazineQueue<M> implements IQueue<M> {
             final long handlerTimeoutInMillis,
             final IgnisSchedulerCommands scheduler,
             final HandlerExecutor handlerExecutor,
-            final Timer publishMetricTimer,
-            final Timer consumeMetricTimer,
-            final MeterRegistry meterRegistry) throws Exception {
+            final MeterRegistry meterRegistry,
+            final IgnisMetrics metrics) {
+        this.meters = new QueueMeters(metrics, queueName);
         this.messageHandler = messageHandler;
         this.mapper = mapper;
         this.clazz = clazz;
-        this.publishMetricTimer = publishMetricTimer;
-        this.consumeMetricTimer = consumeMetricTimer;
         this.batchingConfig = batchingConfig;
         this.scheduler = scheduler;
         this.handlerExecutor = handlerExecutor;
@@ -116,6 +116,7 @@ public final class MagazineQueue<M> implements IQueue<M> {
                 .baseMagazineStorage(magazineStorage)
                 .magazineIdentifier(Utils.getSidelineQueueName(queueName))
                 .build();
+        meters.gaugeConsumers(this, queue -> queue.consumers.size());
         createConsumers(concurrency);
         this.shovelConfig = shovelConfig;
         if (Objects.nonNull(shovelConfig)) {
@@ -129,10 +130,14 @@ public final class MagazineQueue<M> implements IQueue<M> {
         // Timed by hand rather than through Timer.recordCallable, which would force the checked
         // JsonProcessingException through a wrapper and change what callers catch.
         final long startNanos = System.nanoTime();
+        boolean failed = false;
         try {
             return magazine.load(mapper.writeValueAsString(message));
+        } catch (RuntimeException | JsonProcessingException e) {
+            failed = true;
+            throw e;
         } finally {
-            publishMetricTimer.record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
+            meters.recordPublish(System.nanoTime() - startNanos, failed);
         }
     }
 
@@ -160,7 +165,8 @@ public final class MagazineQueue<M> implements IQueue<M> {
                 .build();
     }
 
-    void createConsumers(final int count) {
+    @Override
+    public void createConsumers(final int count) {
         if (consumers.size() + count >= Constants.MAX_CONSUMERS_ALLOWED) {
             throw IgnisMQException.builder()
                     .errorCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED)
@@ -170,24 +176,21 @@ public final class MagazineQueue<M> implements IQueue<M> {
         IntStream.range(0, count).boxed()
                 .forEach(i -> consumers.add(scheduler.scheduleRepeating(
                         new MagazineConsumerTask<>(magazine, sidelineMagazine, messageHandler,
-                                mapper, clazz, consumeMetricTimer, batchingConfig,
-                                Constants.CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor,
-                                handlerTimeoutMillis),
+                                mapper, clazz, batchingConfig, Constants.CONSUMER_RUN_BUDGET_IN_MS,
+                                handlerExecutor, handlerTimeoutMillis, meters),
                         Constants.INITIAL_DELAY_IN_MS,
                         Constants.DELAY_PERIOD_IN_MS)));
         log.info("Created {} new consumers of queue '{}', Total consumers = {}",
                 count, magazine.getMagazineIdentifier(), consumers.size());
     }
 
-    int getNoOfConsumers() {
+    @Override
+    public int getNoOfConsumers() {
         return consumers.size();
     }
 
-    int getNoOfShovelConsumers() {
-        return sidelineConsumers.size();
-    }
-
-    void stopConsumers(final int count) {
+    @Override
+    public void stopConsumers(final int count) {
         final int consumerToStopCount = Math.min(count, consumers.size());
         IntStream.range(0, consumerToStopCount).boxed()
                 // Through the scheduler, not the future: cancelling the future alone would stop the
@@ -203,33 +206,22 @@ public final class MagazineQueue<M> implements IQueue<M> {
         createShovel(concurrency, true, 0);
     }
 
-    void scheduleShoveling(int concurrency, int timeIntervalInSecs) {
+    @Override
+    public void scheduleShoveling(int concurrency, int timeIntervalInSecs) {
         createShovel(concurrency, false, timeIntervalInSecs);
     }
 
-    private void createShovel(int concurrency, boolean autoDelete, int timeIntervalInSecs) {
-        if (timeIntervalInSecs > Constants.MAX_ALLOWED_SHOVEL_TIME_INTERVAL_IN_SECONDS || timeIntervalInSecs < 0) {
-            throw IgnisMQException.builder()
-                    .errorCode(ErrorCode.INVALID_SHOVEL_TIME_INTERVAL)
-                    .build();
-        }
-        if (sidelineConsumers.size() + concurrency >= Constants.MAX_CONSUMERS_ALLOWED) {
-            throw IgnisMQException.builder()
-                    .errorCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED)
-                    .build();
-        }
-        log.info("Creating {} shoveling task for queue '{}'", concurrency, magazine.getMagazineIdentifier());
-        IntStream.range(0, concurrency).boxed()
-                .forEach(i -> {
-                    final ShovelTask shovelTask =
-                            new ShovelTask(magazine, sidelineMagazine, autoDelete, scheduler);
-                    sidelineConsumers.add(autoDelete
-                            ? scheduler.scheduleOnce(shovelTask, Constants.INITIAL_DELAY_IN_MS)
-                            : scheduler.scheduleRepeating(shovelTask, Constants.INITIAL_DELAY_IN_MS,
-                            timeIntervalInSecs == 0
-                                    ? Constants.DELAY_PERIOD_IN_MS : timeIntervalInSecs * 1000L));
-                });
-        log.info("All shovels tasks scheduled.");
+    @Override
+    public void stopShovelConsumers(final int count) {
+        final int consumerToStopCount = Math.min(count, sidelineConsumers.size());
+        IntStream.range(0, consumerToStopCount).boxed()
+                .forEach(i -> scheduler.cancelRepeating(
+                        sidelineConsumers.remove(sidelineConsumers.size() - 1)));
+        log.info("Stopped {} consumers of sideline queue '{}', Total consumers = {}",
+                consumerToStopCount, magazine.getMagazineIdentifier(), sidelineConsumers.size());
+    }
+    int getNoOfShovelConsumers() {
+        return sidelineConsumers.size();
     }
 
     /**
@@ -247,12 +239,29 @@ public final class MagazineQueue<M> implements IQueue<M> {
         return sidelineMagazine;
     }
 
-    void stopShovelConsumers(final int count) {
-        final int consumerToStopCount = Math.min(count, sidelineConsumers.size());
-        IntStream.range(0, consumerToStopCount).boxed()
-                .forEach(i -> scheduler.cancelRepeating(
-                        sidelineConsumers.remove(sidelineConsumers.size() - 1)));
-        log.info("Stopped {} consumers of sideline queue '{}', Total consumers = {}",
-                consumerToStopCount, magazine.getMagazineIdentifier(), sidelineConsumers.size());
+    private void createShovel(int concurrency, boolean autoDelete, int timeIntervalInSecs) {
+        if (timeIntervalInSecs > Constants.MAX_ALLOWED_SHOVEL_TIME_INTERVAL_IN_SECONDS || timeIntervalInSecs < 0) {
+            throw IgnisMQException.builder()
+                    .errorCode(ErrorCode.INVALID_SHOVEL_TIME_INTERVAL)
+                    .build();
+        }
+        if (sidelineConsumers.size() + concurrency >= Constants.MAX_CONSUMERS_ALLOWED) {
+            throw IgnisMQException.builder()
+                    .errorCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED)
+                    .build();
+        }
+        log.info("Creating {} shoveling task for queue '{}'", concurrency, magazine.getMagazineIdentifier());
+        IntStream.range(0, concurrency).boxed()
+                .forEach(i -> {
+                    final ShovelTask shovelTask =
+                            new ShovelTask(magazine, sidelineMagazine, autoDelete, scheduler, meters);
+                    sidelineConsumers.add(autoDelete
+                            ? scheduler.scheduleOnce(shovelTask, Constants.INITIAL_DELAY_IN_MS)
+                            : scheduler.scheduleRepeating(shovelTask, Constants.INITIAL_DELAY_IN_MS,
+                            timeIntervalInSecs == 0
+                                    ? Constants.DELAY_PERIOD_IN_MS : timeIntervalInSecs * 1000L));
+                });
+        log.info("All shovels tasks scheduled.");
     }
+
 }

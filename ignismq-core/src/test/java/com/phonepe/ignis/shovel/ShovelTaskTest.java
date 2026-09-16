@@ -16,6 +16,7 @@
 
 package com.phonepe.ignis.shovel;
 
+import com.phonepe.ignis.metric.QueueMeters;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.magazine.exception.ErrorCode;
@@ -48,7 +49,7 @@ public class ShovelTaskTest {
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
         when(magazine.load(any())).thenReturn(true);
 
-        ShovelTask task = new ShovelTask(magazine, sidelineMagazine, false);
+        ShovelTask task = shovel(false);
         task.run();
 
         verify(magazine, times(2)).load(any());
@@ -64,7 +65,7 @@ public class ShovelTaskTest {
         when(magazine.load("msg1")).thenReturn(false);
         when(sidelineMagazine.reload("msg1")).thenReturn(true);
 
-        ShovelTask task = new ShovelTask(magazine, sidelineMagazine, false);
+        ShovelTask task = shovel(false);
         task.run();
 
         // The reload put a fresh copy at the tail of the sideline, so the source record may go.
@@ -81,7 +82,7 @@ public class ShovelTaskTest {
         when(magazine.load("msg1")).thenThrow(new RuntimeException("load failed"));
         when(sidelineMagazine.reload("msg1")).thenReturn(true);
 
-        ShovelTask task = new ShovelTask(magazine, sidelineMagazine, false);
+        ShovelTask task = shovel(false);
         task.run();
 
         verify(sidelineMagazine, times(1)).reload("msg1");
@@ -102,7 +103,7 @@ public class ShovelTaskTest {
         when(magazine.load("msg1")).thenReturn(false);
         when(sidelineMagazine.reload("msg1")).thenReturn(false);
 
-        new ShovelTask(magazine, sidelineMagazine, false).run();
+        shovel(false).run();
 
         verify(sidelineMagazine, times(1)).reload("msg1");
         verify(sidelineMagazine, never()).delete(any());
@@ -121,7 +122,7 @@ public class ShovelTaskTest {
         when(magazine.load("msg1")).thenThrow(new RuntimeException("load failed"));
         when(sidelineMagazine.reload("msg1")).thenThrow(new RuntimeException("reload failed"));
 
-        new ShovelTask(magazine, sidelineMagazine, false).run();
+        shovel(false).run();
 
         verify(sidelineMagazine, never()).delete(any());
     }
@@ -140,7 +141,7 @@ public class ShovelTaskTest {
         when(sidelineMagazine.reload("msg1")).thenReturn(false);
         when(magazine.load("msg2")).thenReturn(true);
 
-        new ShovelTask(magazine, sidelineMagazine, false).run();
+        shovel(false).run();
 
         verify(sidelineMagazine, never()).delete(data1);
         verify(sidelineMagazine, times(1)).delete(data2);
@@ -151,7 +152,7 @@ public class ShovelTaskTest {
         when(sidelineMagazine.fire())
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
 
-        ShovelTask task = new ShovelTask(magazine, sidelineMagazine, false);
+        ShovelTask task = shovel(false);
         task.run();
 
         verify(magazine, never()).load(any());
@@ -164,7 +165,7 @@ public class ShovelTaskTest {
         when(sidelineMagazine.fire()).thenReturn(nullData)
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
 
-        ShovelTask task = new ShovelTask(magazine, sidelineMagazine, false);
+        ShovelTask task = shovel(false);
         task.run();
 
         verify(magazine, never()).load(any());
@@ -175,7 +176,7 @@ public class ShovelTaskTest {
     public void testShovelWithAutoDeleteOnFatalException() {
         when(sidelineMagazine.fire()).thenThrow(new RuntimeException("fatal"));
 
-        ShovelTask task = new ShovelTask(magazine, sidelineMagazine, true);
+        ShovelTask task = shovel(true);
         task.run();
 
         verify(magazine, never()).load(any());
@@ -185,7 +186,7 @@ public class ShovelTaskTest {
     public void testShovelWithAutoDeleteFalseOnFatalException() {
         when(sidelineMagazine.fire()).thenThrow(new RuntimeException("fatal"));
 
-        ShovelTask task = new ShovelTask(magazine, sidelineMagazine, false);
+        ShovelTask task = shovel(false);
         task.run();
 
         verify(magazine, never()).load(any());
@@ -196,7 +197,7 @@ public class ShovelTaskTest {
         when(sidelineMagazine.fire())
                 .thenThrow(new MagazineException(ErrorCode.INTERNAL_ERROR, "some error", null));
 
-        ShovelTask task = new ShovelTask(magazine, sidelineMagazine, false);
+        ShovelTask task = shovel(false);
         task.run();
 
         verify(magazine, never()).load(any());
@@ -207,7 +208,7 @@ public class ShovelTaskTest {
         when(sidelineMagazine.fire())
                 .thenThrow(new MagazineException(ErrorCode.RETRIES_EXHAUSTED, "data may remain", null));
 
-        new ShovelTask(magazine, sidelineMagazine, false).run();
+        shovel(false).run();
 
         verify(magazine, never()).load(any());
         verify(sidelineMagazine, never()).delete(any());
@@ -220,5 +221,10 @@ public class ShovelTaskTest {
                 .data(data)
                 .firePointer(100)
                 .build();
+    }
+
+    private ShovelTask shovel(final boolean autoDelete) {
+        return new ShovelTask(magazine, sidelineMagazine, autoDelete, null,
+                QueueMeters.unmetered("TEST_QUEUE"));
     }
 }

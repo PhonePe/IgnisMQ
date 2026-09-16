@@ -20,12 +20,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.config.BatchingConfig;
+import com.phonepe.ignis.metric.IgnisMetrics;
+import com.phonepe.ignis.metric.QueueMeters;
 import com.phonepe.ignis.scheduler.HandlerExecutor;
+import com.phonepe.ignis.scheduler.HandlerSaturatedException;
 import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.entity.MagazineData;
 import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -41,28 +43,34 @@ import java.util.stream.Collectors;
 public final class MagazineConsumerTask<M> implements Runnable {
 
     private static final long POLL_INTERVAL_IN_MS = 200L;
+    private static final String REASON_REJECTED = "rejected";
+    private static final String REASON_EXCEPTION = "exception";
+    private static final String REASON_TIMEOUT = "timeout";
+    private static final String REASON_REFUSED = "sideline_refused";
+    private static final String REASON_SATURATED = "saturated";
     private final Magazine<String> magazine;
     private final Magazine<String> sidelineMagazine;
     private final MessageHandler<M> messageHandler;
     private final ObjectMapper mapper;
     private final Class<M> clazz;
-    private final Timer consumeMetricTimer;
     private final BatchingConfig batchingConfig;
     private final long runBudgetMillis;
     private final HandlerExecutor handlerExecutor;
     private final long handlerTimeoutMillis;
+    private final QueueMeters meters;
 
     public MagazineConsumerTask(final Magazine<String> magazine,
                                 final Magazine<String> sidelineMagazine,
                                 final MessageHandler<M> messageHandler,
                                 final ObjectMapper mapper,
                                 final Class<M> clazz,
-                                final Timer consumeMetricTimer,
                                 final BatchingConfig batchingConfig,
                                 final long runBudgetMillis,
                                 final HandlerExecutor handlerExecutor,
-                                final long handlerTimeoutMillis) {
+                                final long handlerTimeoutMillis,
+                                final QueueMeters meters) {
         this.handlerExecutor = Objects.requireNonNull(handlerExecutor, "handlerExecutor");
+        this.meters = Objects.requireNonNull(meters, "meters");
         this.handlerTimeoutMillis = handlerTimeoutMillis;
         this.runBudgetMillis = runBudgetMillis;
         this.magazine = magazine;
@@ -70,7 +78,6 @@ public final class MagazineConsumerTask<M> implements Runnable {
         this.messageHandler = messageHandler;
         this.mapper = mapper;
         this.clazz = clazz;
-        this.consumeMetricTimer = consumeMetricTimer;
         this.batchingConfig = batchingConfig;
     }
 
@@ -169,6 +176,7 @@ public final class MagazineConsumerTask<M> implements Runnable {
         if (System.currentTimeMillis() < deadline) {
             return false;
         }
+        meters.budgetExhausted();
         log.debug("Consumer for queue {} reached its run budget; yielding its thread and resuming " +
                 "on the next scheduled run", magazine.getMagazineIdentifier());
         return true;
@@ -178,11 +186,14 @@ public final class MagazineConsumerTask<M> implements Runnable {
         try {
             final MagazineData<String> magazineData = magazine.fire();
             if (Objects.isNull(magazineData)) {
+                meters.polled(false);
                 return null;
             }
+            meters.polled(true);
             return magazineData;
         } catch (MagazineException e) {
             if (e.getErrorCode().equals(ErrorCode.NOTHING_TO_FIRE)) {
+                meters.polled(false);
                 return null;
             }
             logExceptionInFiring(e);
@@ -193,7 +204,7 @@ public final class MagazineConsumerTask<M> implements Runnable {
     }
 
     private void consume(final List<MagazineData<String>> magazineDataList) {
-        consumeMetricTimer.record(() -> {
+        meters.recordConsume(() -> {
             try {
                 log.debug("Consuming messages {}", magazineDataList);
                 final Boolean success = handle(magazineDataList.stream()
@@ -214,8 +225,9 @@ public final class MagazineConsumerTask<M> implements Runnable {
                         .collect(Collectors.toList()));
                 if (Boolean.TRUE.equals(success)) {
                     magazineDataList.forEach(magazine::delete);
+                    meters.acked(magazineDataList.size());
                 } else {
-                    magazineDataList.forEach(this::sidelineThenDelete);
+                    magazineDataList.forEach(data -> sidelineThenDelete(data, REASON_REJECTED));
                 }
             } catch (Exception e) {
                 magazineDataList.forEach(magazineData -> handleException(magazineData, e));
@@ -227,10 +239,11 @@ public final class MagazineConsumerTask<M> implements Runnable {
                                  final Exception e) {
         log.error("Exception in handling the message {}", magazineData.getData(), e);
         if (isExceptionIgnorable(e)) {
+            meters.ignored();
             magazine.delete(magazineData);
             return;
         }
-        sidelineThenDelete(magazineData);
+        sidelineThenDelete(magazineData, sidelineReason(e));
     }
 
     /**
@@ -241,10 +254,12 @@ public final class MagazineConsumerTask<M> implements Runnable {
      * delivery-time watermark has moved past it, and it will retry the same transfer. Deleting it
      * here instead would remove the only remaining copy.
      */
-    private void sidelineThenDelete(final MagazineData<String> magazineData) {
+    private void sidelineThenDelete(final MagazineData<String> magazineData, final String reason) {
         if (transferToSideline(magazineData.getData())) {
+            meters.sidelined(reason);
             magazine.delete(magazineData);
         } else {
+            meters.sidelineRefused(REASON_REFUSED);
             log.error("Could not sideline message from queue {}; leaving it in the main magazine for " +
                     "the sweeper rather than deleting it", magazine.getMagazineIdentifier());
         }
@@ -273,18 +288,51 @@ public final class MagazineConsumerTask<M> implements Runnable {
     }
 
     private Boolean handle(final List<M> messages) throws Exception {
+        // Only for a batching consumer. A single-message consumer hands over exactly one every
+        // time, so the summary would be a constant 1 - and an operator reading it would fairly
+        // conclude that batching was configured and permanently underfilling.
+        if (Objects.nonNull(batchingConfig)) {
+            meters.handlerBatch(messages.size());
+        }
+        final long startNanos = System.nanoTime();
+        String outcome = IgnisMetrics.SUCCESS;
+        try {
+            return callHandler(messages);
+        } catch (HandlerTimeoutException e) {
+            outcome = REASON_TIMEOUT;
+            throw e;
+        } catch (HandlerSaturatedException e) {
+            outcome = REASON_SATURATED;
+            throw e;
+        } catch (Exception e) {
+            outcome = IgnisMetrics.FAILURE;
+            throw e;
+        } finally {
+            meters.recordHandler(System.nanoTime() - startNanos, outcome);
+        }
+    }
+
+    private Boolean callHandler(final List<M> messages) throws Exception {
         try {
             return handlerExecutor.call(() -> messageHandler.handle(messages), handlerTimeoutMillis);
         } catch (TimeoutException e) {
+            meters.handlerTimedOut();
             throw new HandlerTimeoutException(magazine.getMagazineIdentifier(), messages.size(),
                     handlerTimeoutMillis, e);
         }
     }
 
+    private static String sidelineReason(final Exception e) {
+        if (e instanceof HandlerTimeoutException) {
+            return REASON_TIMEOUT;
+        }
+        return e instanceof HandlerSaturatedException ? REASON_SATURATED : REASON_EXCEPTION;
+    }
+
     private boolean isExceptionIgnorable(final Throwable t) {
-        // Never ignorable: "ignorable" means delete without sidelining, and a timeout says nothing
-        // about whether the work was done. The handler may still be running.
-        if (t instanceof HandlerTimeoutException) {
+        // Never ignorable: "ignorable" means delete without sidelining. A timeout says nothing about
+        // whether the work was done, and saturation means the handler never ran at all.
+        if (t instanceof HandlerTimeoutException || t instanceof HandlerSaturatedException) {
             return false;
         }
         if (Objects.nonNull(messageHandler.getIgnorableExceptions())) {

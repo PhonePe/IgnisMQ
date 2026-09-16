@@ -10,4 +10,5 @@
 target/*
 /bin/
 /PLAN.md
+/PLAN-ARCHIVE.md
 /ignis-benchmark/

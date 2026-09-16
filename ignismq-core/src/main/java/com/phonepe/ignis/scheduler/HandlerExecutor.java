@@ -16,9 +16,14 @@
 
 package com.phonepe.ignis.scheduler;
 
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.utils.Constants;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Tags;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Objects;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -34,39 +39,54 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Runs user message handlers off the worker thread, so one that never returns cannot hold a worker
  * thread for ever. It can stop waiting and free that thread; it cannot stop the handler, since
- * {@code cancel(true)} only interrupts - so a handler that times out repeatedly leaks threads.
+ * {@code cancel(true)} only interrupts.
  * <p>
- * A handler occupies a thread here only while its worker is blocked on it, so this adds no
- * concurrency: one extra thread per executing handler, reclaimed after 60s idle. At saturation the
- * handler runs inline, without a timeout, rather than being rejected.
+ * A handler is never run without a timeout: the bound is clamped to half the sweep duration so a
+ * handler cannot still be running when the sweeper deletes the record it is working on. Saturation
+ * therefore refuses the batch rather than running it unbounded.
  */
 @Slf4j
 public final class HandlerExecutor {
 
     private final ThreadPoolExecutor executor;
-    private final AtomicInteger inlineExecutions = new AtomicInteger();
+    private final AtomicInteger saturationRefusals = new AtomicInteger();
+    private volatile Counter pooled;
+    private volatile Counter refused;
 
     public HandlerExecutor(final int maxThreads) {
         this.executor = new ThreadPoolExecutor(0, Math.max(1, maxThreads),
-                60L, TimeUnit.SECONDS, new SynchronousQueue<>(), threadFactory());
+                60L, TimeUnit.SECONDS, new SynchronousQueue<>(), threadFactory(),
+                HandlerExecutor::waitForAThread);
+    }
+
+    public void bindTo(final IgnisMetrics metrics) {
+        metrics.getRegistry().gauge(IgnisMetrics.HANDLER_THREADS_ACTIVE, executor,
+                ThreadPoolExecutor::getActiveCount);
+        this.pooled = metrics.counter(IgnisMetrics.HANDLER_EXECUTIONS,
+                Tags.of(IgnisMetrics.TAG_MODE, IgnisMetrics.POOLED));
+        this.refused = metrics.counter(IgnisMetrics.HANDLER_EXECUTIONS,
+                Tags.of(IgnisMetrics.TAG_MODE, IgnisMetrics.REFUSED));
     }
 
     /**
-     * @throws TimeoutException when the handler did not finish in time. It may still be running;
-     *                          the caller has simply stopped waiting.
-     * @throws Exception        whatever the handler threw, unwrapped, so existing error handling
-     *                          behaves as it did when the handler ran inline.
+     * @throws TimeoutException          when the handler did not finish in time. It may still be
+     *                                   running; the caller has simply stopped waiting.
+     * @throws HandlerSaturatedException when no handler thread became available. The handler was
+     *                                   <em>not</em> run, so the batch is untouched.
+     * @throws Exception                 whatever the handler threw, unwrapped, so existing error
+     *                                   handling behaves as it did when the handler ran inline.
      */
     public <T> T call(final Callable<T> task, final long timeoutMillis) throws Exception {
         final Future<T> future;
         try {
             future = executor.submit(task);
         } catch (RejectedExecutionException e) {
-            inlineExecutions.incrementAndGet();
-            log.warn("Handler pool saturated; running this batch inline and without a timeout. "
-                    + "Inline executions so far: {}", inlineExecutions.get());
-            return task.call();
+            saturationRefusals.incrementAndGet();
+            increment(refused);
+            throw new HandlerSaturatedException(executor.getMaximumPoolSize(),
+                    Constants.HANDLER_SATURATION_GRACE_IN_MS, saturationRefusals.get(), e);
         }
+        increment(pooled);
         try {
             return future.get(timeoutMillis, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
@@ -78,9 +98,9 @@ public final class HandlerExecutor {
         }
     }
 
-    /** Batches that had to run inline, without a timeout, because the pool was full. */
-    public int inlineExecutions() {
-        return inlineExecutions.get();
+    /** Batches refused because no handler thread was available. */
+    public int saturationRefusals() {
+        return saturationRefusals.get();
     }
 
     public int activeHandlers() {
@@ -108,6 +128,30 @@ public final class HandlerExecutor {
 
     public boolean isStopped() {
         return executor.isShutdown();
+    }
+
+    /**
+     * Waits a bounded time for a handler thread, then refuses. Handler demand cannot exceed worker
+     * demand, so exhausting the grace period means threads have leaked rather than that the pool is
+     * merely busy.
+     */
+    private static void waitForAThread(final Runnable task, final ThreadPoolExecutor executor) {
+        try {
+            final BlockingQueue<Runnable> queue = executor.getQueue();
+            if (executor.isShutdown()
+                    || !queue.offer(task, Constants.HANDLER_SATURATION_GRACE_IN_MS, TimeUnit.MILLISECONDS)) {
+                throw new RejectedExecutionException("no handler thread became available");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RejectedExecutionException("interrupted waiting for a handler thread", e);
+        }
+    }
+
+    private static void increment(final Counter counter) {
+        if (Objects.nonNull(counter)) {
+            counter.increment();
+        }
     }
 
     private static Exception unwrap(final ExecutionException e) {

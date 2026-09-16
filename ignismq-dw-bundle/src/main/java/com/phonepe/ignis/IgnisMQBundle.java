@@ -19,7 +19,6 @@ package com.phonepe.ignis;
 import com.codahale.metrics.CachedGauge;
 import com.phonepe.ignis.metric.DropwizardMagazineMetrics;
 import com.phonepe.ignis.metric.QueueStat;
-import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.storage.BaseStorage;
 import io.dropwizard.Configuration;
 import io.dropwizard.ConfiguredBundle;
@@ -53,7 +52,7 @@ public abstract class IgnisMQBundle<T extends Configuration> implements Configur
         final MeterRegistry meterRegistry = DropwizardMagazineMetrics.bridgedTo(environment.metrics());
         this.ignisMQManager = new IgnisMQManager(getClientId(config), getStorage(config),
                 environment.getObjectMapper(), meterRegistry, getCuratorFramework(),
-                getFarmId(config), getWorkerThreads(config));
+                getFarmId(config), getSettings(config));
 
         // Cached because each load issues metadata reads per queue against the storage backend.
         environment.metrics().register(QUEUE_STATS_METRIC,
@@ -67,7 +66,6 @@ public abstract class IgnisMQBundle<T extends Configuration> implements Configur
         environment.lifecycle().manage(new Managed() {
             @Override
             public void start() throws Exception {
-                ignisMQManager.start();
                 ignisMQManager.getTaskInitializer().start();
             }
 
@@ -95,14 +93,7 @@ public abstract class IgnisMQBundle<T extends Configuration> implements Configur
 
     protected abstract CuratorFramework getCuratorFramework();
 
-    /**
-     * Ceiling on threads running consumers and shovels, and on those running message handlers.
-     * Override to size it from application configuration.
-     * <p>
-     * {@code concurrency} on a queue is a target, not a guarantee: with more registered consumers
-     * than threads they time-share, and no queue gets its stated parallelism.
-     */
-    protected int getWorkerThreads(T config) {
-        return Constants.DEFAULT_WORKER_THREADS;
+    protected IgnisMQSettings getSettings(T config) {
+        return IgnisMQSettings.defaults();
     }
 }

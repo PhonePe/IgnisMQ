@@ -21,12 +21,12 @@ import com.google.common.collect.ImmutableSet;
 import com.phonepe.ignis.common.LoadBalancer;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.common.MagazineRegistry;
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.sweep.Sweeper;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.storage.BaseStorage;
 import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
 import com.phonepe.ignis.utils.Constants;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
 
@@ -52,11 +52,11 @@ public class TaskInitializer {
     private LeaderElector leaderElector;
     private ScheduledFuture<?> sweeperTask;
     private final String farmId;
-    private final MeterRegistry meterRegistry;
     private final IgnisSchedulerCommands scheduler;
     /** True when this initializer created the scheduler and must therefore shut it down. */
     private final boolean ownsScheduler;
     private final MagazineRegistry magazineRegistry;
+    private final IgnisMetrics metrics;
 
     public TaskInitializer(final CuratorFramework curatorFramework,
                            final QueueService queueService,
@@ -64,17 +64,7 @@ public class TaskInitializer {
                            final BaseStorage storage,
                            final StorageClient client,
                            final String farmId,
-                           final MeterRegistry meterRegistry) {
-        this(curatorFramework, queueService, clientId, storage, client, farmId, meterRegistry, null, null);
-    }
-
-    public TaskInitializer(final CuratorFramework curatorFramework,
-                           final QueueService queueService,
-                           final String clientId,
-                           final BaseStorage storage,
-                           final StorageClient client,
-                           final String farmId,
-                           final MeterRegistry meterRegistry,
+                           final IgnisMetrics metrics,
                            final IgnisSchedulerCommands scheduler,
                            final MagazineRegistry magazineRegistry) {
         this.magazineRegistry = magazineRegistry;
@@ -91,7 +81,7 @@ public class TaskInitializer {
         this.storage = storage;
         this.client = client;
         this.farmId = farmId;
-        this.meterRegistry = Objects.requireNonNull(meterRegistry, "Meter registry is required.");
+        this.metrics = Objects.requireNonNull(metrics, "Metrics are required.");
     }
 
     public void start() throws Exception {
@@ -101,7 +91,7 @@ public class TaskInitializer {
         }
 
         final Sweeper sweeperTask = new Sweeper(queueService, clientId, storage, client, farmId,
-                meterRegistry, magazineRegistry);
+                metrics, magazineRegistry);
         final Map<Integer, Set<LoadBalancer>> workers = ImmutableMap.of(1, ImmutableSet.of(sweeperTask));
         leaderElector = new LeaderElector(clientId, curatorFramework, workers);
         leaderElector.start();

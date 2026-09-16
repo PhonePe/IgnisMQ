@@ -19,6 +19,7 @@ package com.phonepe.ignis.sweep;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.common.MagazineRegistry;
 import com.phonepe.ignis.entity.QueueEntity;
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.BaseStorage;
 import com.phonepe.ignis.util.AerospikeTestBase;
@@ -69,7 +70,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         Mockito.when(storageClient.getClient()).thenReturn(aerospikeClient);
         baseStorage = createBaseStorage();
         sweeper = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient, FARM_ID,
-                new SimpleMeterRegistry());
+                new IgnisMetrics(new SimpleMeterRegistry()), null);
         storage = AerospikeStorage.<String>builder()
                 .clazz(String.class)
                 .storageConfig(AerospikeStorageConfig.builder()
@@ -292,7 +293,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         final Magazine<String> main = Mockito.spy(magazine(queue));
         final Magazine<String> sideline = Mockito.spy(magazine(Utils.getSidelineQueueName(queue)));
         final QueueSweeper reusing = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient,
-                FARM_ID, new SimpleMeterRegistry(),
+                FARM_ID, new IgnisMetrics(new SimpleMeterRegistry()),
                 name -> new MagazineRegistry.QueueMagazines(main, sideline));
 
         main.load("orphan");
@@ -317,7 +318,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         final String queue = "SWEEP_REGISTRY_MISS";
         final QueueEntity entity = store(queue, 0L);
         final QueueSweeper missing = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient,
-                FARM_ID, new SimpleMeterRegistry(), name -> null);
+                FARM_ID, new IgnisMetrics(new SimpleMeterRegistry()), name -> null);
 
         final Magazine<String> magazine = magazine(queue);
         magazine.load("orphan");
@@ -371,6 +372,28 @@ public class QueueSweeperTest extends AerospikeTestBase {
     }
 
     /**
+     * The sweeper builds its own magazines, so it is the one component that could quietly keep
+     * publishing after instrumentation was switched off.
+     */
+    @Test
+    public void testSweepMetersHonourTheMetricsSwitch() {
+        final String queue = "SWEEP_METRICS_SWITCH";
+        final QueueEntity entity = store(queue, 0L);
+
+        final SimpleMeterRegistry off = new SimpleMeterRegistry();
+        new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient, FARM_ID,
+                new IgnisMetrics(off, false), null)
+                .sweep(queue, entity, magazine(queue), magazine(Utils.getSidelineQueueName(queue)));
+        assertNull(off.find(IgnisMetrics.SWEEP).timer());
+
+        final SimpleMeterRegistry on = new SimpleMeterRegistry();
+        new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient, FARM_ID,
+                new IgnisMetrics(on, true), null)
+                .sweep(queue, entity, magazine(queue), magazine(Utils.getSidelineQueueName(queue)));
+        assertNotNull(on.find(IgnisMetrics.SWEEP).timer());
+    }
+
+    /**
      * One unsweepable queue must not abort the pass: the sweeper runs over every queue in turn and
      * the next cycle retries this one from the same progress marker.
      */
@@ -379,7 +402,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         final StorageClient broken = Mockito.mock(StorageClient.class);
         Mockito.when(broken.getClient()).thenThrow(new IllegalStateException("broken"));
         final QueueSweeper failing = new QueueSweeper(service, CLIENT_ID, baseStorage, broken, FARM_ID,
-                new SimpleMeterRegistry());
+                new IgnisMetrics(new SimpleMeterRegistry()), null);
 
         failing.sweepQueue("NEVER_EXISTED", store("NEVER_EXISTED", 0L));
     }

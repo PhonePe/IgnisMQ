@@ -17,6 +17,7 @@
 package com.phonepe.ignis.sweep;
 
 import com.phonepe.ignis.client.StorageClient;
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
@@ -44,7 +45,8 @@ public class SweeperTest extends AerospikeTestBase {
         storageClient = Mockito.mock(StorageClient.class);
         when(storageClient.getClient()).thenReturn(aerospikeClient);
         storage = (AerospikeStorage) createBaseStorage();
-        sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID, meterRegistry);
+        sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(meterRegistry), null);
     }
 
     @Test
@@ -101,7 +103,8 @@ public class SweeperTest extends AerospikeTestBase {
         Mockito.reset(queueService);
         // Re-spy the service
         queueService = Mockito.spy(createQueueService());
-        sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID, meterRegistry);
+        sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(meterRegistry), null);
         sweeper.activate();
 
         sweeper.run();

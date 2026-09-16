@@ -27,6 +27,7 @@ import com.phonepe.ignis.util.RequestFactory;
 import com.phonepe.ignis.util.TestMessageHandler;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.curator.framework.CuratorFramework;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -62,6 +63,14 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         f.setAccessible(true);
         f.set(ignisMQManager, queueService);
         doReturn(Collections.emptyMap()).when(queueService).getQueues(Mockito.anyBoolean());
+    }
+
+    @AfterEach
+    public void stopManager() {
+        if (ignisMQManager != null) {
+            ignisMQManager.stop();
+            ignisMQManager = null;
+        }
     }
 
     @Test

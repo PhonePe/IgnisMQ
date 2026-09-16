@@ -61,17 +61,15 @@ public abstract class AerospikeTestBase {
     public void setUpAerospikeClient() {
         aerospikeClient = new AerospikeClient(new ClientPolicy(),
                 new Host(AEROSPIKE_DOCKER_CONTAINER.getHost(), AEROSPIKE_DOCKER_CONTAINER.getConnectionPort()));
-        aerospikeClient.truncate(
-                ((AerospikeClient) aerospikeClient).getInfoPolicyDefault(),
-                AEROSPIKE_NAMESPACE, null, null);
+        truncateNamespace();
     }
 
     @AfterEach
     public void tearDownAerospikeClient() {
         if (aerospikeClient != null) {
-            aerospikeClient.truncate(
-                    ((AerospikeClient) aerospikeClient).getInfoPolicyDefault(),
-                    AEROSPIKE_NAMESPACE, null, null);
+            truncateNamespace();
+            aerospikeClient.close();
+            aerospikeClient = null;
         }
     }
 
@@ -81,6 +79,12 @@ public abstract class AerospikeTestBase {
 
     protected static int getContainerPort() {
         return AEROSPIKE_DOCKER_CONTAINER.getConnectionPort();
+    }
+
+    protected void truncateNamespace() {
+        aerospikeClient.truncate(
+                ((AerospikeClient) aerospikeClient).getInfoPolicyDefault(),
+                AEROSPIKE_NAMESPACE, null, null);
     }
 
     protected AerospikeConfiguration getAerospikeConfiguration() {

@@ -27,12 +27,14 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.data.Stat;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +49,8 @@ import static org.mockito.Mockito.*;
 
 public class LeaderElectorTest {
 
+    private final List<LeaderElector> electors = new ArrayList<>();
+
     private CuratorFramework curatorFramework;
     private LoadBalancer loadBalancer;
 
@@ -56,8 +60,16 @@ public class LeaderElectorTest {
         loadBalancer = Mockito.mock(LoadBalancer.class);
     }
 
+    @AfterEach
+    public void stopElectors() {
+        electors.forEach(LeaderElector::stop);
+        electors.clear();
+    }
+
     private LeaderElector createElector(Map<Integer, Set<LoadBalancer>> workers) {
-        return new LeaderElector("CLIENT_ID", curatorFramework, workers);
+        final LeaderElector elector = new LeaderElector("CLIENT_ID", curatorFramework, workers);
+        electors.add(elector);
+        return elector;
     }
 
     private LeaderElector createDefaultElector() {

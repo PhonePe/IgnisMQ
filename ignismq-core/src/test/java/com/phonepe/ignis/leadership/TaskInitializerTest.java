@@ -25,11 +25,14 @@ import com.phonepe.ignis.util.AerospikeTestBase;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.CreateMode;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +41,8 @@ import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.when;
 
 public class TaskInitializerTest extends AerospikeTestBase {
+
+    private final List<TaskInitializer> taskInitializers = new ArrayList<>();
 
     private CuratorFramework curatorFramework;
     private AerospikeQueueService queueService;
@@ -52,6 +57,12 @@ public class TaskInitializerTest extends AerospikeTestBase {
         storageClient = Mockito.mock(StorageClient.class);
     }
 
+    @AfterEach
+    public void stopTaskInitializers() {
+        taskInitializers.forEach(TaskInitializer::stop);
+        taskInitializers.clear();
+    }
+
     @Test
     public void testConstants() {
         assertEquals(15 * 60 * 1000, TaskInitializer.DELAY_FOR_SWEEPER_TASK);
@@ -59,17 +70,13 @@ public class TaskInitializerTest extends AerospikeTestBase {
 
     @Test
     public void testConstructor() {
-        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID,
-                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
+        TaskInitializer taskInitializer = newTaskInitializer(null);
         assertNotNull(taskInitializer);
     }
 
     @Test
     public void testStartAndStop() throws Exception {
-        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID,
-                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
+        TaskInitializer taskInitializer = newTaskInitializer(null);
 
         // Deep stubs on curatorFramework handle the full create chain automatically
         when(curatorFramework.create().creatingParentContainersIfNeeded()
@@ -86,9 +93,7 @@ public class TaskInitializerTest extends AerospikeTestBase {
 
     @Test
     public void testStartSetsLeaderElector() throws Exception {
-        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID,
-                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
+        TaskInitializer taskInitializer = newTaskInitializer(null);
 
         // Mock create chain
         when(curatorFramework.create().creatingParentContainersIfNeeded()
@@ -110,18 +115,14 @@ public class TaskInitializerTest extends AerospikeTestBase {
      */
     @Test
     public void testStopWithoutStartIsSafe() {
-        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID,
-                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
+        TaskInitializer taskInitializer = newTaskInitializer(null);
 
         taskInitializer.stop();
     }
 
     @Test
     public void testStopIsIdempotentAndCancelsTheSweeperTask() throws Exception {
-        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID,
-                new IgnisMetrics(new SimpleMeterRegistry()), null, null);
+        TaskInitializer taskInitializer = newTaskInitializer(null);
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
         taskInitializer.start();
@@ -144,9 +145,7 @@ public class TaskInitializerTest extends AerospikeTestBase {
     @Test
     public void testASuppliedSchedulerOutlivesTheTaskInitializer() {
         final IgnisSchedulerCommands shared = new IgnisSchedulerCommands();
-        final TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID,
-                new IgnisMetrics(new SimpleMeterRegistry()), shared, null);
+        final TaskInitializer taskInitializer = newTaskInitializer(shared);
 
         taskInitializer.stop();
 
@@ -160,5 +159,13 @@ public class TaskInitializerTest extends AerospikeTestBase {
         assertThrows(NullPointerException.class,
                 () -> new TaskInitializer(curatorFramework, queueService, CLIENT_ID, storage, storageClient,
                         FARM_ID, null, null, null));
+    }
+
+    private TaskInitializer newTaskInitializer(final IgnisSchedulerCommands scheduler) {
+        final TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
+                CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(new SimpleMeterRegistry()), scheduler, null);
+        taskInitializers.add(taskInitializer);
+        return taskInitializer;
     }
 }

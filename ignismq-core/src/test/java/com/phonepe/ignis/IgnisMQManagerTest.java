@@ -38,6 +38,7 @@ import com.phonepe.ignis.utils.Constants;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.curator.framework.CuratorFramework;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
@@ -83,6 +84,14 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Map<String, Map.Entry<Class, MessageHandler>> messageHandlerMap = new HashMap<>();
         messageHandlerMap.put(MESSAGE_HANDLER_TYPE, new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
         ignisMQManager.initialiseMessageHandlers(messageHandlerMap);
+    }
+
+    @AfterEach
+    public void stopManager() {
+        if (ignisMQManager != null) {
+            ignisMQManager.stop();
+            ignisMQManager = null;
+        }
     }
 
     @Test
@@ -292,8 +301,12 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         IgnisMQManager manager = new IgnisMQManager(
                 CLIENT_ID, createBaseStorage(), new ObjectMapper(), new SimpleMeterRegistry(),
                 sc, Mockito.mock(CuratorFramework.class), FARM_ID, null);
-        // Don't initialize message handlers
-        manager.refreshQueues(); // Should log "No message handlers registered" and return
+        try {
+            // Don't initialize message handlers
+            manager.refreshQueues(); // Should log "No message handlers registered" and return
+        } finally {
+            manager.stop();
+        }
     }
 
     @Test

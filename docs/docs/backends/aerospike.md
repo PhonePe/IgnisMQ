@@ -11,7 +11,7 @@ IgnisMQ uses Aerospike as its primary storage backend, leveraging the [Magazine]
 The storage layer is split into two concerns:
 
 - **AerospikeStorage** — a thin configuration holder that carries the `AerospikeConfiguration` and namespace, implementing the `BaseStorage` visitor pattern.
-- **AerospikeQueueService** — the actual CRUD and sweep logic for queue metadata, fire timestamps, and sweep operations.
+- **AerospikeQueueService** — the CRUD for queue metadata and the sweep pointers. It is **not** on the message path: message slots are read and written through Magazine's own storage, not through this class.
 
 ---
 
@@ -60,6 +60,7 @@ Each record represents one queue. The Aerospike key is the queue name.
 | `sweptCounter` | long | Total messages swept from main magazine |
 | `sidelineSwept` | long | Total messages swept from sideline magazine |
 | `sweepDuration` | long | Sweep look-back duration in milliseconds |
+| `handlerTimeout` | long | Handler execution budget in milliseconds. Absent on queues created before 2.0, which fall back to the default rather than to zero |
 | `maxBatchSize` | int | Batching config — max batch size (0 = disabled) |
 | `maxWaitTime` | int | Batching config — max wait time in seconds (0 = disabled) |
 
@@ -67,8 +68,8 @@ Each record represents one queue. The Aerospike key is the queue name.
 
 | Set Name Pattern | Purpose |
 |------------------|---------|
-| `{clientId}_data_set` | Message data records (keyed by `{queueName}_SHARD_{shard}_{pointer}`) |
-| `{clientId}_meta_set` | Magazine pointers — load/fire pointers per shard |
+| `{farmId}_{clientId}_data_set` | Message data records (keyed by `{queueName}_SHARD_{shard}_{pointer}`) |
+| `{farmId}_{clientId}_meta_set` | Magazine pointers — load/fire pointers per shard |
 
 !!! info "Sideline"
     Sideline queues reuse the same Magazine sets but with `_SIDELINE` appended to the queue name (e.g., `my-queue_SIDELINE`).
@@ -120,65 +121,110 @@ RetryerBuilder.newBuilder()
 
 ---
 
-## Fire Timestamp Mechanism
+## Delivery-Time Watermarks
 
-When a consumer fires (dequeues) a message, `addFireTimestamp()` stamps the `fireTS` bin on the corresponding data record with the current epoch millisecond timestamp:
+!!! warning "Changed in 2.0"
+    Earlier versions stamped a `fireTS` bin on **every message** as it was delivered, and the sweeper
+    compared that timestamp per record. Both the bin and `addFireTimestamp()` are **gone**. If you are
+    upgrading, see the [upgrade notes](../upgrading.md).
+
+The sweeper has to answer one question: *was this message handed to a consumer long enough ago that
+the consumer is certainly gone?* The old answer was per message — a timestamp on every record. The
+current answer is **positional**, and costs nothing per message.
+
+Magazine periodically records where each shard's fire pointer stood at a point in time, a
+**checkpoint**. Given a cutoff, `firePointerBefore(Instant)` returns, per shard, the highest fire
+pointer known to have been reached at or before that moment:
 
 ```java
-queueService.addFireTimestamp(magazineData, System.currentTimeMillis());
+Map<String, FireCheckpoint> watermarks =
+        magazine.firePointerBefore(Instant.ofEpochMilli(now - sweepDurationMillis));
 ```
 
-This timestamp is later used by the sweeper to identify "stuck" messages — those that were fired but never acknowledged within the configured `sweepDuration`.
+Everything at or below that pointer was claimed at least `sweepDuration` ago. Everything above it
+might have been claimed a moment ago and must not be touched.
 
-!!! note
-    `fireTS` is also stamped during shoveling to reset the sweep clock for re-delivered messages.
+### What this buys
+
+| | Per-message `fireTS` | Watermark |
+|---|---|---|
+| Write cost per delivery | One extra Aerospike write **per message** | None |
+| Storage per record | An extra bin on every record | None |
+| How "old enough" is decided | Read the record, compare its bin | Compare a pointer to a shard-level watermark |
+
+### Two behaviours worth knowing
+
+**A shard missing from the answer means "sweep nothing here".** That is normal for a young queue —
+no checkpoint reaches back that far yet — and it is the safe direction.
+
+!!! note "There is a pause after a fresh deploy, and it is expected"
+    Checkpoints are recorded as the queue is used. Immediately after a new queue is created, or after
+    a long idle period, no checkpoint reaches back `sweepDuration`, so the sweeper correctly does
+    nothing. Sweeping resumes on its own once history has accumulated past that age. A quiet sweeper
+    in the first `sweepDuration` after a deploy is not a fault.
+
+**The sweeper refuses loudly rather than guessing.** If the retained checkpoint history no longer
+spans the requested cutoff, `firePointerBefore` throws `INVALID_REQUEST`, the pass is abandoned for
+that magazine with an error log, and `ignismq.sweep{outcome=failure}` is recorded. Refusing is the
+only safe answer — without history the sweeper cannot tell an abandoned message from a live one — and
+the noise is deliberate: silently sweeping nothing looks exactly like a healthy idle queue.
+
+Checkpoint retention is sized from `sweepDuration`, so this should not happen in normal operation.
+Alert on it — see the [monitoring runbook](../operations/monitoring.md).
 
 ---
 
 ## Sweep Internals
 
-The sweep process detects messages that were fired but not consumed within the allowed time window and reloads them into the sideline magazine.
+Runs on the one instance the leader assigned the sweep partition to, and only for active queues.
 
-### Execution Flow
+1. **`Sweeper.run()`** — skipped entirely unless this node holds the sweep assignment.
+2. Active queues are fetched once via `queueService.getQueues(true)`.
+3. Each queue is submitted to a pool capped at `Constants.PARALLEL_FACTOR` (64).
+4. Both magazines are swept — the main queue and its sideline.
 
-1. **Sweeper.run()** — Triggered as a `TimerTask` (only when this node is the active leader).
-2. Fetches all active queues via `queueService.getQueues(true)`.
-3. Submits each queue to a fixed thread pool (`Executors.newFixedThreadPool(64)`).
-4. **Per queue**: iterates over each shard `0..numShards-1` sequentially.
-5. **Per shard**: calls `queueService.sweep(queueName, shard, sweepTillFireTS, sidelineMagazine)`.
-
-### Sweep Algorithm (per shard)
+### Per magazine
 
 ```mermaid
 flowchart TD
-    A[Start sweep for shard] --> B[Read Magazine meta record]
-    B --> C{Meta record exists?}
-    C -- No --> Z[Skip — no data]
-    C -- Yes --> D[Get currentFirePointer from meta]
-    D --> E[Get sweepPointer from queue entity]
-    E --> F{sweepPointer >= currentFirePointer?}
-    F -- Yes --> Z2[Skip — already swept]
-    F -- No --> G[Batch read 1000 records starting at sweepPointer]
-    G --> H{For each record}
-    H --> I{fireTS >= sweepTillFireTS?}
-    I -- Yes --> J[Stop — reached time boundary]
-    I -- No --> K[Load message into sideline magazine]
-    K --> L[Delete record from main magazine]
-    L --> H
-    H -- All processed --> M[Update sweepPointer and sweptCounter via MapOperation.increment]
-    M --> N{sweepPointer >= currentFirePointer?}
-    N -- Yes --> O[Done]
-    N -- No --> G
-    J --> O
+    A[sweepMagazine] --> B["firePointerBefore(now - sweepDuration)"]
+    B --> C{Any shard has a checkpoint?}
+    C -- No --> Z[Done — nothing is provably old enough]
+    C -- Yes --> D[Per shard: limit = checkpoint fire pointer]
+    D --> E[Per shard: start = stored sweep pointer]
+    E --> F{start &lt;= limit?}
+    F -- No --> Z2[Shard already swept to the watermark]
+    F -- Yes --> G["peek() a window of pointers, batched across shards"]
+    G --> H{Slot still holds a record?}
+    H -- No --> I[Delivered and acknowledged — nothing to do]
+    H -- Yes --> J[Load into the sideline magazine]
+    J --> K{Load succeeded?}
+    K -- No --> L[Leave it. The next pass retries]
+    K -- Yes --> M[Delete from the source magazine]
+    M --> N[Advance the shard's sweep pointer]
+    I --> N
+    N --> O{Reached the watermark?}
+    O -- No --> G
+    O -- Yes --> Z3[Done]
 ```
 
-### Key Details
+### Key details
 
-- **sweepTillFireTimestamp** = `System.currentTimeMillis() - sweepDuration`
-- **Batch size**: 1000 records per batch (constant `SWEEP_BATCH_SIZE`)
-- **Sideline sweep threshold**: `min(sweepTillFireTS, now - 2 * shovelTimeInterval)` — prevents sweeping messages that are about to be shoveled
-- **Pointer updates**: Uses `MapOperation.increment` to atomically advance per-shard sweep pointers
-- **Queue metadata TTL**: `queueExpiry * 2` (the `TTL_FACTOR_FOR_QUEUE_EXPIRY` constant)
+- **The watermark bounds the range; it does not say what is in it.** A slot below the fire pointer is
+  either empty — delivered and acknowledged — or still full, meaning abandoned. Only looking can tell,
+  so the range is still scanned, but with one `peek` per batch rather than a read per message.
+- **Every slot is scanned once, ever.** The per-shard sweep pointer only moves forward.
+- **`peek` is batched across shards**, not per shard, so a queue with 8 shards issues one multi-key
+  read per round rather than 8.
+- **Re-homing is at-least-once, deliberately.** The message is loaded into the sideline and only then
+  deleted from the source. A crash between the two leaves it in both, and the next pass re-homes it
+  again. The opposite ordering loses messages.
+- **A failed load is not a delete.** The record stays where it is for a later pass. This is the same
+  contract the consumer follows when the sideline refuses a message.
+- **Shard count comes from `magazine.getShards()`**, the persisted value, so ignisMQ's view and
+  Magazine's can no longer disagree.
+- **`sweepDuration`** is capped at 12 hours, and the handler timeout is clamped to at most half of it
+  so that a handler cannot still be running when the sweeper re-homes the record it is working on.
 
 ---
 
@@ -186,11 +232,11 @@ flowchart TD
 
 | Lever | Guidance |
 |-------|----------|
-| **Shards** | More shards = more parallelism. Range: 1–512. Default: 32. |
+| **Shards** | More shards = more parallelism, but every shard widens active-shard discovery. Range 1–512, default 8. Fixed once the queue exists. |
 | **Message TTL** | Set `messageExpiry` to keep data clean and prevent unbounded growth. |
 | **Queue metadata TTL** | Automatically set to `queueExpiry * 2` for safety margin. |
 | **Sweep batch size** | Fixed at 1000 — balances memory usage vs. scan efficiency. |
 | **Namespace sizing** | Size the namespace memory for peak in-flight message volume. |
 | **Thread pool** | Sweep parallelism is capped at 64 threads (`Constants.PARALLEL_FACTOR`). |
-| **Concurrency** | Max 100 consumers per queue (`MAX_CONSUMERS_ALLOWED`). |
+| **Concurrency** | `MAX_CONSUMERS_ALLOWED` is 100 and the check is exclusive, so 99 consumers per queue is the maximum. |
 | **Connection pool** | Tune `maxConnectionsPerNode` based on cluster size and throughput. |

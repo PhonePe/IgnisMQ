@@ -123,7 +123,7 @@ public class MyApplication extends Application<MyAppConfiguration> {
 
 If you're not using Dropwizard, create an `IgnisMQManager` directly.
 
-=== "6-Parameter Constructor"
+=== "Manager-owned StorageClient"
 
     The manager builds the `StorageClient` internally from the provided `BaseStorage`.
 
@@ -159,7 +159,8 @@ If you're not using Dropwizard, create an `IgnisMQManager` directly.
             new ObjectMapper(),     // Jackson ObjectMapper
             new SimpleMeterRegistry(), // Micrometer MeterRegistry
             curator,                // CuratorFramework
-            "datacenter-1"          // farmId
+            "datacenter-1",         // farmId
+            IgnisMQSettings.defaults()  // or null for the same
     );
 
     // 4. Register handlers and create queues
@@ -174,7 +175,7 @@ If you're not using Dropwizard, create an `IgnisMQManager` directly.
             .build());
     ```
 
-=== "7-Parameter Constructor (Pre-built StorageClient)"
+=== "With a pre-built StorageClient"
 
     Use this when you already have an Aerospike client and want to share it.
 
@@ -187,14 +188,20 @@ If you're not using Dropwizard, create an `IgnisMQManager` directly.
             storage,                // BaseStorage
             new ObjectMapper(),     // Jackson ObjectMapper
             new SimpleMeterRegistry(), // Micrometer MeterRegistry
-            storageClient,          // Pre-built StorageClient
+            storageClient,          // pre-built; stop() will not close it
             curator,                // CuratorFramework
-            "datacenter-1"          // farmId
+            "datacenter-1",         // farmId
+            IgnisMQSettings.defaults()  // or null for the same
     );
     ```
 
 !!! note "Constructor side effects"
-    Both constructors immediately start background tasks: the watcher thread (refreshes queues every 5 minutes) and the `TaskInitializer` (leader election + sweeper). Make sure ZooKeeper and Aerospike are reachable before constructing the manager.
+    The constructor builds the scheduler pools, the storage client (unless you supplied one) and the
+    queue watcher, which refreshes queues every 5 minutes. Aerospike must be reachable.
+
+    It does **not** start leader election or the sweeper: `getTaskInitializer().start()` does, and the
+    Dropwizard bundle calls it for you on application start. `stop()` releases everything the manager
+    owns, and leaves a `StorageClient` you supplied open.
 
 ---
 
@@ -274,8 +281,8 @@ public interface MessageHandler<M> {
 
 | Method | Called When | Return `true` | Return `false` |
 |--------|-----------|---------------|----------------|
-| `handle(M)` | Single message consumed | Message acknowledged and deleted | Message sidelined for retry |
-| `handle(List<M>)` | Batch mode enabled | All messages in batch acknowledged | All messages in batch sidelined |
+| `handle(List<M>)` | **Every consumed message, in both modes.** A non-batching queue passes a one-element list | All messages in the list acknowledged and deleted | All messages in the list sidelined for retry |
+| `handle(M)` | **Never.** Required by the interface, but ignisMQ does not call it | — | — |
 | `getIgnorableExceptions()` | Exception thrown during handling | — | Exceptions in this set are swallowed (message skipped, not sidelined) |
 
 ### Simple Handler
@@ -476,7 +483,7 @@ manager.createQueue(CreateQueueRequest.builder()
         .concurrency(8)
         .messageHandlerType("payment-handler")
         .shovelConfig(ShovelConfig.builder()
-                .concurrency(4)         // 4 parallel shovel threads
+                .concurrency(4)         // 4 parallel shovel tasks
                 .timeIntervalInSecs(600) // Run every 10 minutes
                 .build())
         .build());
@@ -484,7 +491,7 @@ manager.createQueue(CreateQueueRequest.builder()
 
 | Parameter | Range | Default | Description |
 |-----------|-------|---------|-------------|
-| `concurrency` | 1 – 50 | 4 | Number of parallel shovel threads |
+| `concurrency` | 1 – 50 | 4 | Number of parallel shovel tasks |
 | `timeIntervalInSecs` | 0 – 86,400 (1 day) | 600 (10 min) | Interval between shovel runs |
 
 ### Schedule Shoveling Later
@@ -510,7 +517,7 @@ queue.shovel(4); // 4 concurrent threads, runs once
 !!! warning "Shovel behavior"
     - **Scheduled shoveling** runs repeatedly at the configured interval
     - **Manual shovel** (`queue.shovel(concurrency)`) runs once and stops when sideline is drained
-    - Shovel threads count toward the max consumer limit (100 per queue)
+    - Shovels are capped separately from consumers, by the same exclusive check — up to 99 of each
 
 ---
 
@@ -537,18 +544,18 @@ log.info("Total queues in cluster: {}", allQueueNames.size());
 
 ### Scaling Consumers
 
-Adjust the number of consumer threads for a queue at runtime:
+Adjust the number of consumer tasks for a queue at runtime:
 
 ```java
-// Scale up: add 4 more consumer threads
+// Scale up: add 4 more consumer tasks
 manager.increaseConsumers("order-events", 4);
 
-// Scale down: stop 2 consumer threads
+// Scale down: stop 2 consumer tasks
 manager.decreaseConsumers("order-events", 2);
 ```
 
 !!! note "Consumer limits"
-    The maximum total consumers per queue is **100** (`MAX_CONSUMERS_ALLOWED`). Attempting to exceed this throws `IgnisMQException` with error code `MAX_ALLOWED_CONSUMERS_EXCEEDED`.
+    `MAX_CONSUMERS_ALLOWED` is 100 and the guard is exclusive, so **99 is the highest attainable count**. Reaching 100 throws `IgnisMQException` with error code `MAX_ALLOWED_CONSUMERS_EXCEEDED`.
 
 ### Deactivating a Queue
 
@@ -562,7 +569,7 @@ manager.deactivateQueue("order-events");
 
 ### Manual Sweep
 
-Trigger the sweep process for a specific queue (normally runs automatically via leader election):
+Trigger the sweep process for a specific queue. Normally one instance sweeps automatically - the leader assigns the sweep partition to a member, and the assigned instance runs it:
 
 ```java
 manager.sweepQueue("order-events");
@@ -604,16 +611,26 @@ those meters into `Environment.metrics()` and registers the cached queue-stat ga
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `commands.{queueName}_publish.all` | Timer | Latency of publish operations |
-| `commands.{queueName}_consume.all` | Timer | Latency of consume operations |
+| `ignismq.publish` | Timer | Publish latency, tagged `queue` and `outcome` |
+| `ignismq.consume` | Timer | Batch processing after the messages were claimed, tagged `queue` |
+| `ignismq.handler.duration` | Timer | The handler call alone, tagged `queue` and `outcome` |
+| `ignismq.queue.depth` | Gauge | Backlog per queue |
 | `ignis.queue.stats` | Gauge | Bundle-only cached queue statistics, refreshed every 3 minutes |
+
+The full set, with every tag and the scope of each meter, is in **[Metrics](api/metrics.md)**.
 
 ```java
 // Access core metrics programmatically
-io.micrometer.core.instrument.Timer publishTimer =
-        meterRegistry.find("commands.order-events_publish.all").timer();
-log.info("Publish mean: {} ms", publishTimer.mean(java.util.concurrent.TimeUnit.MILLISECONDS));
+Timer publishTimer = meterRegistry.find(IgnisMetrics.PUBLISH)
+        .tag("queue", "order-events")
+        .tag("outcome", "success")
+        .timer();
+log.info("Publish mean: {} ms", publishTimer.mean(TimeUnit.MILLISECONDS));
 ```
+
+!!! warning "Renamed in 2.0"
+    These replace `commands.{queueName}_publish.all` and `commands.{queueName}_consume.all`. The old
+    names are not aliased — see the [upgrade notes](upgrading.md).
 
 ---
 

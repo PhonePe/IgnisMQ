@@ -60,7 +60,7 @@ mvn clean test
 ```
 
 !!! note "Docker required for tests"
-    Integration tests use [Testcontainers](https://www.testcontainers.org/) to spin up an Aerospike instance (`aerospike/aerospike-server:6.1.0.7`). Make sure Docker is running before executing tests.
+    Integration tests use [Testcontainers](https://www.testcontainers.org/) to spin up an Aerospike instance (`aerospike/aerospike-server:6.2.0.7`). Make sure Docker is running before executing tests.
 
 ## Your First Queue in 5 Minutes
 
@@ -100,7 +100,8 @@ public class OrderEventHandler implements MessageHandler<OrderEvent> {
 
     @Override
     public boolean handle(List<OrderEvent> messages) throws Exception {
-        // Called in batch mode. Process all messages.
+        // This is the overload ignisMQ calls, in every mode. A non-batching
+        // queue passes a one-element list.
         for (OrderEvent msg : messages) {
             handle(msg);
         }
@@ -142,9 +143,10 @@ public class OrderEventHandler implements MessageHandler<OrderEvent> {
         "my-service",               // clientId — identifies this application
         storage,                     // Aerospike storage
         new ObjectMapper(),          // Jackson mapper for serialization
-        new SimpleMeterRegistry(),   // Micrometer metrics
+        new SimpleMeterRegistry(),   // any Micrometer MeterRegistry
         curatorFramework,            // ZooKeeper curator client
-        "datacenter-1"              // farmId — identifies this deployment
+        "datacenter-1",             // farmId — identifies this deployment
+        IgnisMQSettings.defaults()   // worker cap and the metrics switch
     );
 
     // Register message handlers (MUST be called before createQueue)
@@ -156,7 +158,7 @@ public class OrderEventHandler implements MessageHandler<OrderEvent> {
     manager.createQueue(CreateQueueRequest.builder()
         .name("order-events")
         .shards(32)                      // Number of Magazine shards
-        .concurrency(4)                  // Number of consumer threads
+        .concurrency(4)                  // Consumer tasks on the shared worker pool
         .messageHandlerType("order-handler")  // Must match a registered handler
         .messageExpiry(new TimeToLive(TimeUnit.DAY, 2))
         .queueExpiry(new TimeToLive(TimeUnit.DAY, 7))
@@ -215,20 +217,31 @@ for (int i = 0; i < 1000; i++) {
 }
 ```
 
-That's it! Messages will be consumed automatically by the consumer threads. You don't need to call any "consume" method — the `MagazineConsumerTask` timers handle this.
+That's it! Messages are consumed automatically. There is no "consume" method to call — consumers are
+scheduled when the queue is created.
 
 !!! info "Consumer startup delay"
-    Consumers start after a **2 minute** initial delay (`INITIAL_DELAY_IN_MS`). This allows the cluster to stabilize. During this time, published messages are safely persisted in Aerospike.
+    Consumers start **1 second** after the queue is created (`INITIAL_DELAY_IN_MS`) and then poll on a
+    1 second fixed delay. Earlier versions waited 2 minutes; that cold start was removed along with
+    the per-consumer timers.
 
 ## What Happens Behind the Scenes
 
 After you call `createQueue()`:
 
-1. **Two Magazine instances** are created — a main queue and a sideline queue (`{name}_SIDELINE`)
-2. **Consumer timers** are started (one `java.util.Timer` per concurrency slot), each polling every 1 second
+1. **Two Magazine instances** are created — a main queue and a sideline queue (`{name}_SIDELINE`) —
+   sharing one storage, and therefore one set of Magazine's caches
+2. **`concurrency` consumer tasks** are scheduled on the manager's shared worker pool, each polling on
+   a 1 second fixed delay. They are tasks, not threads: `concurrency` is a target share of
+   `workerThreads`, not a private thread per consumer
 3. **Queue metadata** is persisted to Aerospike with TTL = `queueExpiry * 2`
-4. A **background watcher** refreshes queue state from the database every 5 minutes
-5. The **TaskInitializer** starts leader election and schedules the sweeper
+
+Two more things run in a working process, and neither is triggered by `createQueue`:
+
+- A **background watcher** refreshes queue state from the database every 5 minutes, on the separate
+  control pool so that user code cannot starve it. It is scheduled by the manager's **constructor**
+- The **TaskInitializer** starts leader election and schedules the sweeper, once per process, when
+  something calls **`start()`** — in a Dropwizard app the bundle does this for you
 
 ## Next Steps
 
@@ -237,3 +250,5 @@ After you call `createQueue()`:
 | [Core Concepts](core-concepts.md) | Understand sidelining, shoveling, sweeping, and leader election |
 | [Usage Guide](usage.md) | Advanced examples — batching, shoveling, runtime scaling |
 | [Configuration](api/configuration.md) | All config options with defaults and constraints |
+| [Metrics](api/metrics.md) | What every meter means, and what it does not cover |
+| [Monitoring runbook](operations/monitoring.md) | What to alert on, and what each alert means |

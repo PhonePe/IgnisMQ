@@ -67,7 +67,13 @@ public final class QueueDepthMetrics {
         gauge(IgnisMetrics.QUEUE_SHOVELLED, tags, queueName, QueueStat::getShovelled);
     }
 
-    /** Without this a deactivated queue's gauges freeze at their last value and hold alerts open. */
+    /**
+     * Without this a deactivated queue's gauges freeze at their last value and hold alerts open.
+     * <p>
+     * The consumer count is included even though {@link #register} does not create it: that gauge
+     * needs the live queue object, so the queue registers it, but deactivation is the only place
+     * that knows the queue has gone.
+     */
     public void deregister(final String queueName) {
         if (!registered.remove(queueName)) {
             return;
@@ -75,7 +81,7 @@ public final class QueueDepthMetrics {
         final Tags tags = Tags.of(IgnisMetrics.TAG_QUEUE, queueName);
         for (String name : List.of(IgnisMetrics.QUEUE_DEPTH, IgnisMetrics.QUEUE_PUBLISHED,
                 IgnisMetrics.QUEUE_CONSUMED, IgnisMetrics.QUEUE_SIDELINED,
-                IgnisMetrics.QUEUE_SHOVELLED)) {
+                IgnisMetrics.QUEUE_SHOVELLED, IgnisMetrics.QUEUE_CONSUMERS)) {
             metrics.remove(name, tags);
         }
     }

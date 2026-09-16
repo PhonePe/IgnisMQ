@@ -144,6 +144,27 @@ class IgnisMetricsTest {
         assertNull(registry.find(IgnisMetrics.QUEUE_DEPTH).tags(IgnisMetrics.TAG_QUEUE, "Q1").gauge());
     }
 
+    /**
+     * The consumer count is registered by the queue rather than by this class, so it was the one
+     * gauge deregistration missed: a deactivated queue went on reporting consumers it no longer had.
+     */
+    @Test
+    @DisplayName("deactivating a queue also stops it reporting a consumer count")
+    void deregistrationRemovesTheConsumerGauge() {
+        final IgnisMetrics metrics = new IgnisMetrics(registry);
+        final QueueDepthMetrics depth = new QueueDepthMetrics(metrics,
+                () -> List.of(QueueStat.builder().name("Q1").unConsumed(1).build()), 60_000L);
+        final QueueMeters meters = new QueueMeters(metrics, "Q1");
+        final AtomicInteger consumers = new AtomicInteger(4);
+        meters.gaugeConsumers(consumers, AtomicInteger::doubleValue);
+        depth.register("Q1");
+        assertEquals(4.0, gauge(IgnisMetrics.QUEUE_CONSUMERS, "Q1"));
+
+        depth.deregister("Q1");
+
+        assertNull(registry.find(IgnisMetrics.QUEUE_CONSUMERS).tags(IgnisMetrics.TAG_QUEUE, "Q1").gauge());
+    }
+
     @Test
     @DisplayName("a storage failure serves the previous snapshot instead of propagating")
     void aFailedRefreshKeepsServing() {

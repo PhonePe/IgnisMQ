@@ -34,8 +34,8 @@ public class IgnisMQSettings {
     int workerThreads = Constants.DEFAULT_WORKER_THREADS;
 
     /**
-     * Makes every {@code ignismq.*} meter a no-op when false. Magazine's meters are unaffected -
-     * those are switched off through Magazine's own configuration.
+     * Makes every {@code ignismq.*} meter a no-op when false, and Magazine's {@code magazine.*}
+     * meters with it - a caller cannot be asked to configure a dependency they never chose.
      */
     @Builder.Default
     boolean metricsEnabled = Constants.DEFAULT_METRICS_ENABLED;

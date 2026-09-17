@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.common.QueueMetaData;
+import com.phonepe.ignis.common.ShardDepth;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.metric.QueueMeters;
@@ -166,8 +167,13 @@ public final class MagazineQueue<M> implements IQueue<M>, RefreshableQueue {
     }
 
     @Override
+    public List<ShardDepth> getShardDepths() {
+        return ShardDepth.from(magazine.getMetaData());
+    }
+
+    @Override
     public void createConsumers(final int count) {
-        if (consumers.size() + count >= Constants.MAX_CONSUMERS_ALLOWED) {
+        if (consumers.size() + count > Constants.MAX_CONSUMERS_ALLOWED) {
             throw IgnisMQException.builder()
                     .errorCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED)
                     .build();
@@ -220,8 +226,20 @@ public final class MagazineQueue<M> implements IQueue<M>, RefreshableQueue {
         log.info("Stopped {} consumers of sideline queue '{}', Total consumers = {}",
                 consumerToStopCount, magazine.getMagazineIdentifier(), sidelineConsumers.size());
     }
-    int getNoOfShovelConsumers() {
+    @Override
+    public int getNoOfShovelConsumers() {
+        releaseFinishedShovels();
         return sidelineConsumers.size();
+    }
+
+    /**
+     * A one-shot shovel finishes and is never cancelled, so nothing would otherwise remove its
+     * future. Left in place it holds a slot against the shovel cap for the life of the queue, and a
+     * process that drains its sideline on demand would eventually be unable to shovel at all.
+     * Repeating shovels are only done once cancelled, so this cannot drop a live one.
+     */
+    private void releaseFinishedShovels() {
+        sidelineConsumers.removeIf(ScheduledFuture::isDone);
     }
 
     /**
@@ -245,7 +263,8 @@ public final class MagazineQueue<M> implements IQueue<M>, RefreshableQueue {
                     .errorCode(ErrorCode.INVALID_SHOVEL_TIME_INTERVAL)
                     .build();
         }
-        if (sidelineConsumers.size() + concurrency >= Constants.MAX_CONSUMERS_ALLOWED) {
+        releaseFinishedShovels();
+        if (sidelineConsumers.size() + concurrency > Constants.MAX_CONSUMERS_ALLOWED) {
             throw IgnisMQException.builder()
                     .errorCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED)
                     .build();

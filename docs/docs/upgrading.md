@@ -16,6 +16,11 @@ still compiles, or the configuration still loads, and the behaviour is different
 | Storage | The per-message `fireTS` bin and `addFireTimestamp()` are gone |
 | Correctness | A message is no longer deleted when the transfer to the sideline failed |
 | Configuration | New `IgnisMQSettings`; new `handlerTimeoutInMins` on a queue |
+| Bundle | `IgnisMQBundle`'s five template methods collapse into one `context(T config)` |
+| Handlers | **A queue without batching now reaches `handle(M)`.** It previously reached `handle(List<M>)` with a one-element list |
+| Limits | The consumer and shovel caps are now reachable: 100, not 99 |
+| Correctness | **A message that fails to deserialise is no longer sidelined twice**, and no longer deleted when its sideline write was refused |
+| Bundle | A console is mounted at `/ignismq/v1` and `/ignisConsole`. **New HTTP endpoints appear in your application** |
 
 ---
 
@@ -125,3 +130,126 @@ every batch on every pre-existing queue would time out instantly.
    [runbook](operations/monitoring.md).
 4. Deploy, and watch `ignismq.handler.timeouts`, `ignismq.handler.executions{mode=refused}` and
    `ignismq.sweep{outcome=failure}` first. Those three catch every silent change above.
+
+
+---
+
+## The bundle takes a context, not five methods
+
+`IgnisMQBundle` had four abstract methods plus an overridable `getSettings`. It now has one:
+
+```java
+// 1.x
+protected BaseStorage getStorage(T config) { ... }
+protected String getClientId(T config) { ... }
+protected String getFarmId(T config) { ... }
+protected CuratorFramework getCuratorFramework() { ... }
+protected IgnisMQSettings getSettings(T config) { ... }   // optional
+
+// 2.0
+@Override
+protected IgnisMQContext context(T config) {
+    return IgnisMQContext.builder()
+            .clientId(config.getClientId())
+            .farmId(config.getFarmId())
+            .storage(new AerospikeStorage(config.getAerospike(), namespace))
+            .curatorFramework(curatorFramework)
+            .build();
+}
+```
+
+**This is a compile error, not a silent change**, which is the good case: your subclass will not
+build until it is converted.
+
+**What you lose, stated plainly:** the compiler no longer enforces that all four required values are
+supplied. They are `@NonNull` on the builder instead, so a missing one throws when the bundle runs -
+at application startup, on the first boot, rather than at compile time.
+
+**Why it was worth it:** adding a fifth input previously meant adding an abstract method, which
+breaks every subclass in every downstream service. It is now a new field on a builder, which breaks
+nobody.
+
+---
+
+## A non-batching queue now calls `handle(M)`
+
+`MessageHandler` has always declared both `handle(M)` and `handle(List<M>)`. Only the `List` overload
+was ever called - including for queues with no `batchingConfig`, which received a one-element list.
+
+**This is silent, and it is the one change on this page most likely to alter behaviour without a
+compiler error.** If your handler put its real logic in `handle(List<M>)` and left `handle(M)`
+throwing, returning `false`, or empty, a non-batching queue will now take that path.
+
+```java
+// Safe in both versions: one implementation, one delegation.
+@Override
+public boolean handle(OrderEvent message) {
+    return process(message);
+}
+
+@Override
+public boolean handle(List<OrderEvent> messages) {
+    return messages.stream().allMatch(this::handle);
+}
+```
+
+Queues **with** a `batchingConfig` are unaffected: they still receive `handle(List<M>)`.
+
+---
+
+## The consumer and shovel caps are reachable
+
+`MAX_CONSUMERS_ALLOWED` is 100, and the guard rejected a request that *reached* it, so 99 was the
+real maximum. `CreateQueueRequest.concurrency` is annotated `@Max(100)`, so `concurrency: 100`
+passed validation and then failed at queue creation.
+
+The guard now rejects only requests that exceed the cap. A queue may have 100 consumers and 100
+shovels. Nothing that worked before stops working.
+
+---
+
+## A message that fails to deserialise is dealt with once
+
+**Silent, and it fixes two defects on the same path.**
+
+A payload that cannot be read is sidelined and deleted while the batch is being unpacked, before the
+handler sees it. The rest of the batch then went to the handler — and the batch's own outcome was
+afterwards applied to **every** record in it, including the one already dealt with. So:
+
+- a rejected batch sidelined the poison message a **second** time, leaving two copies of it in the
+  sideline for one delivery;
+- an accepted batch **deleted** a poison message whose sideline write had been refused — and that
+  record was the only copy of the payload left anywhere. That is the data-loss shape 2.0's
+  transfer-then-delete rule exists to prevent, on the one path that bypassed it.
+
+The batch outcome now applies only to the records that reached the handler. If nothing reached it —
+a single-message queue whose one message was unreadable — the handler is not called at all, where it
+previously received an empty list.
+
+Nothing to do. If you counted on an empty `handle(List<M>)` call as a signal, it no longer arrives.
+
+---
+
+## The bundle mounts a console
+
+**New endpoints appear in your application**, which is worth knowing before a deploy rather than
+after:
+
+- `GET /ignismq/v1/...` — read-only views of queues, per-shard depth and this instance
+- `POST /ignismq/v1/...` — shovel, sweep and consumer scaling, requiring the `ignismq_operate` role;
+  deactivation requires a **separate** `ignismq_deactivate` role plus a `confirm` parameter
+- `/ignisConsole` — a dashboard page
+
+The bundle also registers Jersey's `RolesAllowedDynamicFeature`, which was probably already
+registered if you use `@RolesAllowed` elsewhere; registering it twice is harmless.
+
+**The actions are closed unless your application grants the role.** The bundle defines no
+authentication, so with no `SecurityContext` every `POST` returns `403` while the reads stay open.
+If that is not the posture you want, turn the console off:
+
+```java
+.console(ConsoleConfiguration.builder().enabled(false).build())
+```
+
+`dashboardEnabled(false)` keeps the JSON endpoints without serving the page. Full detail in the
+[console guide](operations/console.md).

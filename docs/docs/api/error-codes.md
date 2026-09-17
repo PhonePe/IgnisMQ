@@ -13,7 +13,7 @@ Complete error code reference for IgnisMQ.
 | `NOT_IMPLEMENTED` | Unsupported storage | Nothing today | Unreachable: `BaseStorage` is sealed to `AerospikeStorage` | — |
 | `AEROSPIKE_ERROR` | Aerospike failure | `AerospikeQueueService` | Network/timeout/namespace | Check connectivity, retries |
 | `INVALID_REQUEST` | Validation failed | `createQueue()` | `queueExpiry < messageExpiry`, or a TTL over the allowed maximum. **Bean-validation annotations such as `@NotBlank` are not run by `createQueue`** | Fix request |
-| `MAX_ALLOWED_CONSUMERS_EXCEEDED` | Consumer or shovel cap | `createConsumers`/`increaseConsumers`/`createShovel` | Total would reach 100; 99 is the highest attainable | Reduce concurrency to 99 or below |
+| `MAX_ALLOWED_CONSUMERS_EXCEEDED` | Consumer or shovel cap | `createConsumers`/`increaseConsumers`/`createShovel` | Total would exceed 100 | Reduce concurrency |
 | `INVALID_SHOVEL_TIME_INTERVAL` | Bad interval | `shovel()`/`scheduleShoveling()`/`createQueue()` | >86400, or negative | Use 0..86400 |
 | `INVALID_MESSAGE_HANDLER` | Handler not found | `createQueue`/`refreshQueues` | `messageHandlerType` not registered | Register via `initialiseMessageHandlers()` |
 | `INTERNAL_ERROR` | Unexpected error | Various | Bug | Check logs |

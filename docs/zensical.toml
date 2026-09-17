@@ -18,7 +18,8 @@ nav = [
     {"Error Codes" = "api/error-codes.md"}
   ]},
   {"Operations" = [
-    {"Monitoring Runbook" = "operations/monitoring.md"}
+    {"Monitoring Runbook" = "operations/monitoring.md"},
+    {"Console" = "operations/console.md"}
   ]},
   {"Storage Backends" = [
     {"Aerospike" = "backends/aerospike.md"}

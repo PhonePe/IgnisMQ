@@ -70,6 +70,7 @@ public class QueueStatGuage implements Supplier<List<QueueStat>> {
         final QueueMetaData metaData = queue.getMetaData();
         return QueueStat.builder()
                 .name(name)
+                .active(true)
                 .published(metaData.getPublished())
                 .consumed(metaData.getConsumed())
                 .unConsumed(Math.max(metaData.getPublished() - metaData.getConsumed(), 0L))

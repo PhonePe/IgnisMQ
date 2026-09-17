@@ -175,6 +175,24 @@ public final class IgnisMQManager {
     }
 
     /**
+     * Every queue in storage and what was persisted about it, which is the only view that is true
+     * of the cluster rather than of this process. A queue no instance has adopted still appears.
+     *
+     * @param active whether to list the active or the deactivated queues.
+     * @return queue name to its stored definition.
+     */
+    public Map<String, QueueEntity> getStoredQueues(final boolean active) {
+        return queueService.getQueues(active);
+    }
+
+    /**
+     * @return the stored definition of one queue, whether or not it is active or held here.
+     */
+    public Optional<QueueEntity> getStoredQueue(final String queueName) {
+        return queueService.get(queueName);
+    }
+
+    /**
      * This method will create the magazine queue
      *
      * @param queueRequest -> The request for creating the queue

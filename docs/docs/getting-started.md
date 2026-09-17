@@ -100,8 +100,7 @@ public class OrderEventHandler implements MessageHandler<OrderEvent> {
 
     @Override
     public boolean handle(List<OrderEvent> messages) throws Exception {
-        // This is the overload ignisMQ calls, in every mode. A non-batching
-        // queue passes a one-element list.
+        // Called in batch mode, when the queue has a BatchingConfig.
         for (OrderEvent msg : messages) {
             handle(msg);
         }

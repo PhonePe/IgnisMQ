@@ -14,23 +14,16 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.refresh;
+package com.phonepe.ignis.console.response;
 
-import com.phonepe.ignis.request.ShovelConfig;
+import java.util.Map;
 
-public interface RefreshableQueue {
-
-    int getNoOfConsumers();
-
-    int getNoOfShovelConsumers();
-
-    void createConsumers(int count);
-
-    void stopConsumers(int count);
-
-    ShovelConfig getShovelConfig();
-
-    void scheduleShoveling(int concurrency, int timeIntervalInSecs);
-
-    void stopShovelConsumers(int count);
+/**
+ * One meter as this process currently holds it.
+ *
+ * @param measurements statistic name to value, as Micrometer reports them. A counter has one, a
+ *                     timer has several.
+ */
+public record MeterSample(String name, Map<String, String> tags, String type,
+                          Map<String, Double> measurements) {
 }

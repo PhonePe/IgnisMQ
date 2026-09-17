@@ -238,5 +238,5 @@ flowchart TD
 | **Sweep batch size** | Fixed at 1000 — balances memory usage vs. scan efficiency. |
 | **Namespace sizing** | Size the namespace memory for peak in-flight message volume. |
 | **Thread pool** | Sweep parallelism is capped at 64 threads (`Constants.PARALLEL_FACTOR`). |
-| **Concurrency** | `MAX_CONSUMERS_ALLOWED` is 100 and the check is exclusive, so 99 consumers per queue is the maximum. |
+| **Concurrency** | Max 100 consumers per queue (`MAX_CONSUMERS_ALLOWED`). |
 | **Connection pool** | Tune `maxConnectionsPerNode` based on cluster size and throughput. |

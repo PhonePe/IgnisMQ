@@ -59,7 +59,7 @@ sequenceDiagram
     
     Q->>M: magazine.fire()
     M-->>Q: MagazineData
-    Q->>App: handler.handle(List.of(order))
+    Q->>App: handler.handle(order)
     
     alt Handler returns false
         Q->>S: sidelineMagazine.load(json)
@@ -85,15 +85,14 @@ sequenceDiagram
     // 1. Extend the bundle
     public class MyIgnisMQBundle extends IgnisMQBundle<MyConfig> {
         @Override
-        protected BaseStorage getStorage(MyConfig config) {
-            return new AerospikeStorage(config.getAerospikeConfig(), "my-ns");
+        protected IgnisMQContext context(MyConfig config) {
+            return IgnisMQContext.builder()
+                    .clientId(config.getClientId())
+                    .farmId(config.getFarmId())
+                    .storage(new AerospikeStorage(config.getAerospikeConfig(), "my-ns"))
+                    .curatorFramework(curator)
+                    .build();
         }
-        @Override
-        protected String getClientId(MyConfig c) { return c.getClientId(); }
-        @Override
-        protected String getFarmId(MyConfig c) { return c.getFarmId(); }
-        @Override
-        protected CuratorFramework getCuratorFramework() { return curator; }
     }
 
     // 2. Register in your Application
@@ -207,5 +206,7 @@ flowchart TD
 | [API Reference](api/api-reference.md) | Every class, method, and field documented |
 | [Configuration](api/configuration.md) | All configuration options with defaults and constraints |
 | [Error Codes](api/error-codes.md) | Complete error catalog with causes and solutions |
+| [Monitoring Runbook](operations/monitoring.md) | What to alert on, what each alert means, what to check |
+| [Console](operations/console.md) | The bundled read-only console, per-shard depth, and the guarded actions |
 | [Aerospike Backend](backends/aerospike.md) | Data model, indexing, sweep internals |
 | [References](references.md) | Academic and industry work that inspired IgnisMQ's design |

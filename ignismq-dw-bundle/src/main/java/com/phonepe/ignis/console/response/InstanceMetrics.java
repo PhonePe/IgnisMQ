@@ -14,23 +14,14 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.refresh;
+package com.phonepe.ignis.console.response;
 
-import com.phonepe.ignis.request.ShovelConfig;
+import java.util.List;
 
-public interface RefreshableQueue {
-
-    int getNoOfConsumers();
-
-    int getNoOfShovelConsumers();
-
-    void createConsumers(int count);
-
-    void stopConsumers(int count);
-
-    ShovelConfig getShovelConfig();
-
-    void scheduleShoveling(int concurrency, int timeIntervalInSecs);
-
-    void stopShovelConsumers(int count);
+/**
+ * Meters held by this process, and nothing else. There is no cross-instance total here and there
+ * cannot be: ignisMQ has no register of instances. Scrape and aggregate in a metrics backend.
+ */
+public record InstanceMetrics(String clientId, String farmId, boolean metricsEnabled,
+                              int meterCount, List<MeterSample> meters) {
 }

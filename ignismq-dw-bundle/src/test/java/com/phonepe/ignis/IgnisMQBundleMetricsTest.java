@@ -21,14 +21,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import com.phonepe.aerospike.config.AerospikeHost;
 import com.phonepe.ignis.common.MessageHandler;
+import com.phonepe.ignis.console.ConsoleConfiguration;
+import com.phonepe.ignis.console.ConsoleResource;
 import com.phonepe.ignis.common.TimeToLive;
 import com.phonepe.ignis.common.TimeUnit;
 import com.phonepe.ignis.request.CreateQueueRequest;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import io.dropwizard.Configuration;
 import io.dropwizard.jackson.Jackson;
+import io.dropwizard.jersey.setup.JerseyEnvironment;
+import io.dropwizard.jetty.setup.ServletEnvironment;
 import io.dropwizard.lifecycle.setup.LifecycleEnvironment;
 import io.dropwizard.setup.Environment;
+import org.glassfish.jersey.server.filter.RolesAllowedDynamicFeature;
 import io.appform.testcontainers.aerospike.AerospikeContainerConfiguration;
 import io.appform.testcontainers.aerospike.container.AerospikeContainer;
 import lombok.AllArgsConstructor;
@@ -40,6 +45,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import javax.servlet.ServletRegistration;
 import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.List;
@@ -152,6 +158,52 @@ class IgnisMQBundleMetricsTest {
         assertNotNull(environment.metrics().getGauges().get(IgnisMQBundle.QUEUE_STATS_METRIC));
     }
 
+    /**
+     * The console is part of the bundle's wiring, not something a user assembles, so the wiring is
+     * what is worth asserting: a resource and the role feature that closes its mutations.
+     */
+    @Test
+    @DisplayName("booting the bundle mounts the console and the feature that enforces its role")
+    void theConsoleIsMountedByDefault() throws Exception {
+        final Environment environment = environment();
+        bundle = createBundle();
+
+        bundle.run(new AppConfig("SERVICE"), environment);
+
+        Mockito.verify(environment.jersey()).register(Mockito.any(ConsoleResource.class));
+        // Without this feature @RolesAllowed is inert and every mutation would be wide open.
+        Mockito.verify(environment.jersey()).register(RolesAllowedDynamicFeature.class);
+    }
+
+    @Test
+    @DisplayName("disabling the console registers neither the resource nor the dashboard")
+    void theConsoleCanBeDisabledEntirely() throws Exception {
+        final Environment environment = environment();
+        bundle = createBundle(true, ConsoleConfiguration.builder().enabled(false).build());
+
+        bundle.run(new AppConfig("SERVICE"), environment);
+
+        Mockito.verify(environment.jersey(), Mockito.never()).register(Mockito.any(ConsoleResource.class));
+        Mockito.verify(environment.servlets(), Mockito.never())
+                .addServlet(Mockito.anyString(), Mockito.any(javax.servlet.Servlet.class));
+    }
+
+    /**
+     * The API without the page: a deployment that will not serve static assets still gets the data.
+     */
+    @Test
+    @DisplayName("disabling only the dashboard keeps the read and action endpoints")
+    void theDashboardCanBeDisabledWithoutDisablingTheApi() throws Exception {
+        final Environment environment = environment();
+        bundle = createBundle(true, ConsoleConfiguration.builder().dashboardEnabled(false).build());
+
+        bundle.run(new AppConfig("SERVICE"), environment);
+
+        Mockito.verify(environment.jersey()).register(Mockito.any(ConsoleResource.class));
+        Mockito.verify(environment.servlets(), Mockito.never())
+                .addServlet(Mockito.anyString(), Mockito.any(javax.servlet.Servlet.class));
+    }
+
     private void publishThrough(final String queueName) throws Exception {
         final Map<String, Map.Entry<Class, MessageHandler>> handlers = new HashMap<>();
         handlers.put("handler", new AbstractMap.SimpleEntry<>(String.class, new EchoHandler()));
@@ -178,46 +230,43 @@ class IgnisMQBundleMetricsTest {
         Mockito.when(environment.getObjectMapper()).thenReturn(mapper);
         Mockito.when(environment.lifecycle())
                 .thenReturn(new LifecycleEnvironment(new MetricRegistry()));
+        Mockito.when(environment.jersey()).thenReturn(Mockito.mock(JerseyEnvironment.class));
+        final ServletEnvironment servlets = Mockito.mock(ServletEnvironment.class);
+        Mockito.when(servlets.addServlet(Mockito.anyString(), Mockito.any(javax.servlet.Servlet.class)))
+                .thenReturn(Mockito.mock(ServletRegistration.Dynamic.class));
+        Mockito.when(environment.servlets()).thenReturn(servlets);
         return environment;
     }
 
     private IgnisMQBundle<AppConfig> createBundle() {
-        return createBundle(true);
+        return createBundle(true, ConsoleConfiguration.defaults());
     }
 
     private IgnisMQBundle<AppConfig> createBundle(final boolean metricsEnabled) {
+        return createBundle(metricsEnabled, ConsoleConfiguration.defaults());
+    }
+
+    private IgnisMQBundle<AppConfig> createBundle(final boolean metricsEnabled,
+                                                  final ConsoleConfiguration console) {
         return new IgnisMQBundle<>() {
             @Override
-            protected IgnisMQSettings getSettings(final AppConfig config) {
-                return IgnisMQSettings.builder().metricsEnabled(metricsEnabled).build();
-            }
-
-            @Override
-            protected AerospikeStorage getStorage(final AppConfig config) {
-                return new AerospikeStorage(AerospikeConfiguration.builder()
-                        .hosts(List.of(AerospikeHost.builder()
-                                .host(CONTAINER.getHost())
-                                .port(CONTAINER.getConnectionPort())
-                                .build()))
-                        .retries(3).sleepBetweenRetries(100).socketTimeout(3000).totalTimeout(5000)
-                        .maxConnectionsPerNode(100).threadPoolSize(4)
-                        .scanMaxConcurrentNodes(5).batchMaxConcurrentThreads(5)
-                        .build(), NAMESPACE);
-            }
-
-            @Override
-            protected String getClientId(final AppConfig config) {
-                return config.getServiceName();
-            }
-
-            @Override
-            protected String getFarmId(final AppConfig config) {
-                return "NB6";
-            }
-
-            @Override
-            protected CuratorFramework getCuratorFramework() {
-                return Mockito.mock(CuratorFramework.class);
+            protected IgnisMQContext context(final AppConfig config) {
+                return IgnisMQContext.builder()
+                        .clientId(config.getServiceName())
+                        .farmId("NB6")
+                        .storage(new AerospikeStorage(AerospikeConfiguration.builder()
+                                .hosts(List.of(AerospikeHost.builder()
+                                        .host(CONTAINER.getHost())
+                                        .port(CONTAINER.getConnectionPort())
+                                        .build()))
+                                .retries(3).sleepBetweenRetries(100).socketTimeout(3000).totalTimeout(5000)
+                                .maxConnectionsPerNode(100).threadPoolSize(4)
+                                .scanMaxConcurrentNodes(5).batchMaxConcurrentThreads(5)
+                                .build(), NAMESPACE))
+                        .curatorFramework(Mockito.mock(CuratorFramework.class))
+                        .settings(IgnisMQSettings.builder().metricsEnabled(metricsEnabled).build())
+                        .console(console)
+                        .build();
             }
         };
     }

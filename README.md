@@ -141,29 +141,15 @@ public class MyApplication extends Application<MyConfiguration> {
     private final IgnisMQBundle<MyConfiguration> ignisMQBundle = new IgnisMQBundle<>() {
 
         @Override
-        protected BaseStorage getStorage(final MyConfiguration config) {
-            return new AerospikeStorage(config.getAerospike(), config.getNamespace());
-        }
-
-        @Override
-        protected String getClientId(final MyConfiguration config) {
-            return config.getClientId();
-        }
-
-        @Override
-        protected String getFarmId(final MyConfiguration config) {
-            return config.getFarmId();
-        }
-
-        @Override
-        protected CuratorFramework getCuratorFramework() {
-            return curatorFramework;
-        }
-
-        // Optional. Defaults to IgnisMQSettings.defaults().
-        @Override
-        protected IgnisMQSettings getSettings(final MyConfiguration config) {
-            return IgnisMQSettings.builder().workerThreads(128).build();
+        protected IgnisMQContext context(final MyConfiguration config) {
+            return IgnisMQContext.builder()
+                    .clientId(config.getClientId())
+                    .farmId(config.getFarmId())
+                    .storage(new AerospikeStorage(config.getAerospike(), config.getNamespace()))
+                    .curatorFramework(curatorFramework)
+                    // Optional. Defaults to IgnisMQSettings.defaults().
+                    .settings(IgnisMQSettings.builder().workerThreads(128).build())
+                    .build();
         }
     };
 

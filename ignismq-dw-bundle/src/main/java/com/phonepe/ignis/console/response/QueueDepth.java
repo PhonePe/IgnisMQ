@@ -14,23 +14,13 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.refresh;
-
-import com.phonepe.ignis.request.ShovelConfig;
-
-public interface RefreshableQueue {
-
-    int getNoOfConsumers();
-
-    int getNoOfShovelConsumers();
-
-    void createConsumers(int count);
-
-    void stopConsumers(int count);
-
-    ShovelConfig getShovelConfig();
-
-    void scheduleShoveling(int concurrency, int timeIntervalInSecs);
-
-    void stopShovelConsumers(int count);
+package com.phonepe.ignis.console.response;
+/**
+ * Totals across every shard of a queue, main and sideline.
+ */
+public record QueueDepth(long published,
+                         long consumed,
+                         long unconsumed,
+                         long sidelined,
+                         long shovelled) {
 }

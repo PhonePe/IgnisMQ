@@ -14,23 +14,14 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.refresh;
-
-import com.phonepe.ignis.request.ShovelConfig;
-
-public interface RefreshableQueue {
-
-    int getNoOfConsumers();
-
-    int getNoOfShovelConsumers();
-
-    void createConsumers(int count);
-
-    void stopConsumers(int count);
-
-    ShovelConfig getShovelConfig();
-
-    void scheduleShoveling(int concurrency, int timeIntervalInSecs);
-
-    void stopShovelConsumers(int count);
+package com.phonepe.ignis.console.response;
+/**
+ * What this process is running for one queue. Consumer and shovel counts are per-instance by
+ * construction - the cluster total is the sum over instances, which no instance can see.
+ */
+public record InstanceQueue(String name,
+                            int consumers,
+                            int shovels,
+                            Integer shovelConcurrency,
+                            Integer shovelIntervalSeconds) {
 }

@@ -32,6 +32,7 @@ import com.phonepe.ignis.request.ShovelConfig;
 import com.phonepe.ignis.scheduler.IgnisSchedulers;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.util.AerospikeTestBase;
+import com.phonepe.ignis.common.ShardDepth;
 import com.phonepe.ignis.util.RequestFactory;
 import com.phonepe.ignis.util.TestMessageHandler;
 import com.phonepe.ignis.utils.Constants;
@@ -101,6 +102,50 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Assertions.assertTrue(success);
         Assertions.assertEquals(1, metricRegistry.find("magazine.load.outcomes")
                 .tag("magazine", "QUEUE_1").tag("outcome", "loaded").counter().count(), 0);
+    }
+
+    /**
+     * The per-shard view against a real magazine rather than a mock of one. It is the only view that
+     * shows where a backlog actually sits, and its totals have to agree with the whole-queue numbers
+     * or it is worse than not having it.
+     */
+    @Test
+    public void testPerShardDepthsAgreeWithTheQueueTotals() throws Exception {
+        ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
+        final IQueue<String> queue = ignisMQManager.getQueue("QUEUE_1");
+        for (int message = 0; message < 5; message++) {
+            queue.publish("true");
+        }
+
+        final List<ShardDepth> depths = queue.getShardDepths();
+
+        Assertions.assertFalse(depths.isEmpty(), "a created queue must report at least one shard");
+        Assertions.assertEquals(queue.getMetaData().getPublished(),
+                depths.stream().mapToLong(ShardDepth::getPublished).sum(),
+                "the shards must account for every published message");
+    }
+
+    /**
+     * The cluster inventory the console reads. Unlike getAllQueues it does not depend on this
+     * process having adopted the queue, and unlike getAllQueuesFromDB it keeps the configuration
+     * rather than throwing it away.
+     */
+    @Test
+    public void testStoredQueuesCarryTheirConfigurationAndSurviveDeactivation() throws Exception {
+        // setUp stubs the inventory query out for every other test in this class; this one is about
+        // that query, so it goes back to the real one.
+        Mockito.doCallRealMethod().when(aerospikeQueueService).getQueues(Mockito.anyBoolean());
+        ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
+
+        Assertions.assertEquals(4, ignisMQManager.getStoredQueues(true).get("QUEUE_1").getConcurrency());
+        Assertions.assertTrue(ignisMQManager.getStoredQueue("QUEUE_1").isPresent());
+
+        ignisMQManager.deactivateQueue("QUEUE_1");
+
+        Assertions.assertFalse(ignisMQManager.getStoredQueues(true).containsKey("QUEUE_1"));
+        Assertions.assertTrue(ignisMQManager.getStoredQueues(false).containsKey("QUEUE_1"),
+                "a deactivated queue is still a queue the console has to be able to show");
+        Assertions.assertTrue(ignisMQManager.getStoredQueue("QUEUE_1").isPresent());
     }
 
     @Test
@@ -198,6 +243,48 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
         assertIgnisError(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED, () -> magazineQueue.createConsumers(100));
+    }
+
+    /**
+     * The cap and the request validation disagreed: {@code @Max(100)} accepted a concurrency of 100
+     * that the queue then refused at creation, because the guard rejected on reaching the limit
+     * rather than on passing it.
+     */
+    @Test
+    public void testTheConsumerCapIsReachableRatherThanOneShortOfIt() throws Exception {
+        ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
+        MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
+        final int room = Constants.MAX_CONSUMERS_ALLOWED - magazineQueue.getNoOfConsumers();
+
+        try {
+            magazineQueue.createConsumers(room);
+
+            Assertions.assertEquals(Constants.MAX_CONSUMERS_ALLOWED, magazineQueue.getNoOfConsumers());
+            assertIgnisError(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED, () -> magazineQueue.createConsumers(1));
+        } finally {
+            magazineQueue.stopConsumers(Constants.MAX_CONSUMERS_ALLOWED);
+        }
+    }
+
+    /**
+     * A manual shovel is a one-shot. Its future was kept in the queue's shovel list for ever, so
+     * every on-demand drain permanently consumed one of the queue's shovel slots and a long-lived
+     * process would eventually be unable to shovel at all.
+     */
+    @Test
+    public void testAFinishedOneShotShovelReleasesItsSlot() throws Exception {
+        ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
+        MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
+        final int scheduled = magazineQueue.getNoOfShovelConsumers();
+
+        magazineQueue.shovel(1);
+
+        final long deadline = System.currentTimeMillis() + 30_000L;
+        while (magazineQueue.getNoOfShovelConsumers() > scheduled && System.currentTimeMillis() < deadline) {
+            Thread.sleep(200L);
+        }
+        Assertions.assertEquals(scheduled, magazineQueue.getNoOfShovelConsumers(),
+                "a completed one-shot shovel must not keep holding a slot");
     }
 
     @Test

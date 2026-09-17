@@ -171,6 +171,27 @@ public class QueueStatGuageTest extends AerospikeTestBase {
         assertEquals(stat.getPublished() - stat.getConsumed(), stat.getUnConsumed());
     }
 
+    /**
+     * The gauge reports the intersection of "active in storage" and "held by this process", so a
+     * record it emits is active by construction. The flag was nevertheless left unwritten, which
+     * made it read false on every queue the bundle published.
+     */
+    @Test
+    public void testAReportedQueueIsMarkedActive() throws Exception {
+        Map<String, Map.Entry<Class, MessageHandler>> messageHandlerMap = new HashMap<>();
+        messageHandlerMap.put("handler", new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
+        ignisMQManager.initialiseMessageHandlers(messageHandlerMap);
+
+        ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_ACTIVE_FLAG", "handler"));
+
+        Map<String, QueueEntity> dbQueues = new HashMap<>();
+        dbQueues.put("QUEUE_ACTIVE_FLAG", QueueEntity.builder().active(true).build());
+        doReturn(dbQueues).when(queueService).getQueues(true);
+
+        var stat = new QueueStatGuage(queueService, ignisMQManager::getAllQueues).get().get(0);
+        assertTrue(stat.isActive(), "a queue the gauge reports on is active by construction");
+    }
+
     private double metadataBatchReads() {
         return meterRegistry.find("magazine.aerospike.calls")
                 .tag("operation", "batch_read_metadata")

@@ -14,23 +14,19 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.refresh;
+package com.phonepe.ignis.console.response;
+import com.phonepe.ignis.common.ShardDepth;
 
-import com.phonepe.ignis.request.ShovelConfig;
+import java.util.List;
 
-public interface RefreshableQueue {
-
-    int getNoOfConsumers();
-
-    int getNoOfShovelConsumers();
-
-    void createConsumers(int count);
-
-    void stopConsumers(int count);
-
-    ShovelConfig getShovelConfig();
-
-    void scheduleShoveling(int concurrency, int timeIntervalInSecs);
-
-    void stopShovelConsumers(int count);
+/**
+ * @param depth      null when this process does not hold the queue: depth is read through the live
+ *                   magazines, which only an instance serving the queue has.
+ * @param shards     null for the same reason.
+ * @param instance   null when this process does not hold the queue.
+ */
+public record QueueDetail(QueueSummary queue,
+                          QueueDepth depth,
+                          List<ShardDepth> shards,
+                          InstanceQueue instance) {
 }

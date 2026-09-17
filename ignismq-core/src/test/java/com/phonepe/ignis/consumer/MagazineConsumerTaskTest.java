@@ -586,9 +586,8 @@ public class MagazineConsumerTaskTest {
     /**
      * A payload that will not deserialise is handled per message, before the batch reaches the
      * handler. The handler declares JsonProcessingException ignorable, so the message is deleted
-     * there and then filtered out - and the now-empty batch is accepted, which deletes it a second
-     * time. Deleting an already-deleted record is a no-op, but the second call is real and pinning
-     * it is what makes a change to that path visible.
+     * there and then left out of the batch. Nothing survives for the handler to take, so the turn
+     * ends there rather than handing it an empty list and retiring the same record a second time.
      */
     @Test
     public void testAnUndeserialisableMessageIsDroppedBeforeTheHandlerSeesIt() {
@@ -614,8 +613,120 @@ public class MagazineConsumerTaskTest {
 
         selfSidelinedTask(selfSidelining, handler, Integer.class).run();
 
-        verify(selfSidelining, times(2)).delete(any());
+        verify(selfSidelining, times(1)).delete(any());
         verify(selfSidelining, never()).load(any());
+    }
+
+    /**
+     * A message dealt with during deserialisation has already been disposed of, so the batch's own
+     * outcome must not reach it again. Rejecting the rest of the batch used to sideline the poison
+     * payload a second time, leaving two copies of it in the sideline for one delivery.
+     */
+    @Test
+    public void testAPoisonMessageIsNotSidelinedTwiceWhenTheRestOfTheBatchIsRejected() {
+        when(magazine.fire())
+                .thenReturn(data("not-valid-json{{{"), data("5"))
+                .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+        when(sidelineMagazine.load(any())).thenReturn(true);
+
+        integerBatchTask(rejectingIntegerHandler()).run();
+
+        verify(sidelineMagazine, times(1)).load("not-valid-json{{{");
+        verify(sidelineMagazine, times(1)).load("5");
+    }
+
+    /**
+     * The single-message path has nothing left to hand over once its only message has been dealt
+     * with, so the handler is not called at all. It previously received an empty list, which a
+     * handler written against {@code handle(M)} cannot even see.
+     */
+    @Test
+    public void testAnUnreadableSingleMessageNeverReachesTheHandler() {
+        when(magazine.fire())
+                .thenReturn(data("not-valid-json{{{"))
+                .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+        when(sidelineMagazine.load(any())).thenReturn(true);
+        final IntegerDispatchRecordingHandler handler = new IntegerDispatchRecordingHandler();
+
+        new MagazineConsumerTask<>(magazine, sidelineMagazine, handler, new ObjectMapper(),
+                Integer.class, null, Constants.CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor,
+                HANDLER_TIMEOUT_IN_MS, meters).run();
+
+        assertTrue(handler.single.isEmpty(), "there is no message to hand to handle(M)");
+        assertTrue(handler.batched.isEmpty(), "and no batch to hand to handle(List) either");
+    }
+
+    /**
+     * B2's contract, on the path that bypassed it. A record the sideline would not take is left in
+     * the main magazine for the sweeper - and the rest of the batch succeeding must not delete it,
+     * because that record is the only copy of the payload left anywhere.
+     */
+    @Test
+    public void testASidelineRefusalSurvivesTheRestOfTheBatchSucceeding() {
+        when(magazine.fire())
+                .thenReturn(data("not-valid-json{{{"), data("5"))
+                .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+        when(sidelineMagazine.load(any())).thenReturn(false);
+
+        integerBatchTask(acceptingIntegerHandler()).run();
+
+        verify(magazine, times(1)).delete(any());
+    }
+
+    private MagazineConsumerTask<Integer> integerBatchTask(final MessageHandler<Integer> handler) {
+        return new MagazineConsumerTask<>(magazine, sidelineMagazine, handler, new ObjectMapper(),
+                Integer.class, BatchingConfig.builder().maxBatchSize(2).maxWaitTimeInSecs(1).build(),
+                Constants.CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor, HANDLER_TIMEOUT_IN_MS, meters);
+    }
+
+    private static MessageHandler<Integer> rejectingIntegerHandler() {
+        return integerHandler(false);
+    }
+
+    private static MessageHandler<Integer> acceptingIntegerHandler() {
+        return integerHandler(true);
+    }
+
+    private static MessageHandler<Integer> integerHandler(final boolean outcome) {
+        return new MessageHandler<>() {
+            @Override
+            public Set<Class<?>> getIgnorableExceptions() {
+                return Set.of();
+            }
+
+            @Override
+            public boolean handle(final Integer message) {
+                return outcome;
+            }
+
+            @Override
+            public boolean handle(final List<Integer> messages) {
+                return outcome;
+            }
+        };
+    }
+
+    /** {@link DispatchRecordingHandler} for a type that has to go through the mapper. */
+    private static final class IntegerDispatchRecordingHandler implements MessageHandler<Integer> {
+        private final List<Integer> single = Collections.synchronizedList(new ArrayList<>());
+        private final List<List<Integer>> batched = Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public Set<Class<?>> getIgnorableExceptions() {
+            return Set.of();
+        }
+
+        @Override
+        public boolean handle(final Integer message) {
+            single.add(message);
+            return true;
+        }
+
+        @Override
+        public boolean handle(final List<Integer> messages) {
+            batched.add(List.copyOf(messages));
+            return true;
+        }
     }
 
     private <T> MagazineConsumerTask<T> selfSidelinedTask(final Magazine<String> selfSidelining,
@@ -679,6 +790,56 @@ public class MagazineConsumerTaskTest {
         when(magazine.fire())
                 .thenReturn(data(message))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+    }
+
+    @Test
+    public void testAQueueWithoutBatchingCallsTheSingleMessageOverload() {
+        firesThen("msg1");
+        final DispatchRecordingHandler handler = new DispatchRecordingHandler();
+
+        task(handler).run();
+
+        assertEquals(List.of("msg1"), handler.single,
+                "a non-batching queue must hand the message to handle(M)");
+        assertTrue(handler.batched.isEmpty(),
+                "a non-batching queue must not wrap a single message in a list");
+    }
+
+    /** The converse: configuring batching must not start routing through the single overload. */
+    @Test
+    public void testABatchingQueueCallsTheListOverload() {
+        when(magazine.fire())
+                .thenReturn(data("msg1"), data("msg2"))
+                .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+        final DispatchRecordingHandler handler = new DispatchRecordingHandler();
+
+        batchTask(handler, 2, 1).run();
+
+        assertEquals(List.of(List.of("msg1", "msg2")), handler.batched);
+        assertTrue(handler.single.isEmpty());
+    }
+
+    /** Records which overload was called, and delegates neither way. */
+    private static final class DispatchRecordingHandler implements MessageHandler<String> {
+        private final List<String> single = Collections.synchronizedList(new ArrayList<>());
+        private final List<List<String>> batched = Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public Set<Class<?>> getIgnorableExceptions() {
+            return Set.of();
+        }
+
+        @Override
+        public boolean handle(final String message) {
+            single.add(message);
+            return true;
+        }
+
+        @Override
+        public boolean handle(final List<String> messages) {
+            batched.add(List.copyOf(messages));
+            return true;
+        }
     }
 
     private MagazineConsumerTask<String> task(final MessageHandler<String> handler) {

@@ -57,7 +57,7 @@ Sidelining is IgnisMQ's mechanism for isolating messages that could not be proce
 ```mermaid
 flowchart TD
     Fire["magazine.fire()"] --> Deser["Deserialize JSON → M"]
-    Deser --> Call["handler.handle(List.of(message))"]
+    Deser --> Call["handler.handle(message)"]
     Call -->|returns true| Delete["magazine.delete()"]
     Call -->|returns false| Sideline["sidelineMagazine.load()"]
     Sideline --> Delete
@@ -94,8 +94,7 @@ public class OrderHandler implements MessageHandler<OrderEvent> {
 
     @Override
     public boolean handle(List<OrderEvent> messages) {
-        // This is the one ignisMQ actually calls, in every mode. A non-batching
-        // queue calls it with a single-element list.
+        // Called only when the queue has a BatchingConfig.
         return orderService.processAll(messages);
     }
 
@@ -110,14 +109,14 @@ public class OrderHandler implements MessageHandler<OrderEvent> {
 }
 ```
 
-!!! danger "Only `handle(List<M>)` is ever called"
-    `MessageHandler` declares both `handle(M)` and `handle(List<M>)` and you must implement both to
-    compile, but **ignisMQ only ever calls the `List` overload** — including on queues with no
-    `batchingConfig`, which call it with a one-element list. `handle(M)` is dead from ignisMQ's
-    point of view.
+!!! note "Both overloads are required, and the queue picks one"
+    `MessageHandler` declares both `handle(M)` and `handle(List<M>)`, so every handler implements
+    both. Which one a queue calls is decided by its `batchingConfig`: without one, each message goes
+    to `handle(M)`; with one, each flushed batch goes to `handle(List<M>)`.
 
-    Put your logic in `handle(List<M>)`. A handler that implements only `handle(M)` and leaves the
-    list overload throwing or returning `false` will sideline every message it receives.
+    **Changed in 2.0:** a queue without batching previously reached `handle(List<M>)` with a
+    one-element list, so `handle(M)` was never called at all. If your handler's real logic lives in
+    the list overload, delegate to it - see the upgrade note.
 
     Note also that `getIgnorableExceptions` returns `Set<Class<?>>`, not
     `Set<Class<? extends Exception>>`.
@@ -158,7 +157,7 @@ sequenceDiagram
 
 **One-shot mode** (`autoDelete=true`)
 
-- Executes a single shovel pass and then simply does not repeat; nothing is cancelled. Its future stays in the queue's shovel list, so it keeps counting against the shovel cap for the life of the queue.
+- Executes a single shovel pass and then simply does not repeat; nothing cancels it. Its slot against the shovel cap is released once it has finished.
 - If an error occurs during the pass, it self-reschedules with a **10-second delay** before retrying.
 - Useful for on-demand sideline draining.
 
@@ -397,7 +396,7 @@ Three mechanisms, each closing a different hole:
 | Consumer run budget | 30 seconds |
 | Handler timeout | `handlerTimeoutInMins`, default 10 min, clamped to half of `sweepDuration` |
 | Handler saturation grace | 1 second |
-| Max consumers per queue | 99 attainable; `MAX_CONSUMERS_ALLOWED` is 100 and the check is exclusive |
+| Max consumers per queue | 100 (`MAX_CONSUMERS_ALLOWED`), counted separately from shovels |
 | Shutdown grace | 10 seconds |
 
 Fixed **delay**, not fixed rate: the 1 second gap is measured after the task finishes, so a slow
@@ -415,10 +414,8 @@ resized too — otherwise scaling a queue down and up repeatedly would ratchet t
 demand that no longer exists.
 
 !!! warning
-    `MAX_CONSUMERS_ALLOWED` is 100, but the guard rejects a request that would *reach* it, so **99 is
-    the highest attainable count**. `createQueue` and `increaseConsumers` raise
-    `MAX_ALLOWED_CONSUMERS_EXCEEDED` rather than capping silently — and note that `concurrency: 100`
-    passes request validation, which permits 100, and then fails at queue creation.
+    The maximum is **100 consumers per queue**. Beyond that, `createQueue` and `increaseConsumers`
+    raise `MAX_ALLOWED_CONSUMERS_EXCEEDED` rather than capping silently.
 
 !!!tip
     For high-throughput queues, raise the consumer count rather than trying to speed up an individual

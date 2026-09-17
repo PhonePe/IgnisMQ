@@ -14,23 +14,10 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.refresh;
-
-import com.phonepe.ignis.request.ShovelConfig;
-
-public interface RefreshableQueue {
-
-    int getNoOfConsumers();
-
-    int getNoOfShovelConsumers();
-
-    void createConsumers(int count);
-
-    void stopConsumers(int count);
-
-    ShovelConfig getShovelConfig();
-
-    void scheduleShoveling(int concurrency, int timeIntervalInSecs);
-
-    void stopShovelConsumers(int count);
+package com.phonepe.ignis.console.response;
+/**
+ * @param scope whether the action changed this process or the whole cluster, which differs per
+ *              action and is the thing an operator most needs told.
+ */
+public record ActionResult(String queue, String action, String scope, String detail) {
 }

@@ -295,7 +295,7 @@ sequenceDiagram
     MS-->>M: Record
     M-->>CT: MagazineData
     CT->>CT: deserialize(JSON → M)
-    CT->>H: handle(List) on the handler pool, with a timeout
+    CT->>H: handle(message) or handle(batch), on the handler pool, with a timeout
 
     alt Handler returns true
         H-->>CT: true

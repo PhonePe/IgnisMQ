@@ -32,6 +32,7 @@ import com.phonepe.magazine.exception.MagazineException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeoutException;
@@ -103,6 +104,9 @@ public final class MagazineConsumerTask<M> implements Runnable {
      * @param deadline when this invocation must hand its thread back.
      */
     private void consumeSingleMessage(final long deadline) {
+        // One list for the whole run, refilled per message. consume() never hands it to user code -
+        // the handler is given the decoded messages, which are freshly allocated each time.
+        final List<MagazineData<String>> batch = new ArrayList<>(1);
         while (!Thread.currentThread().isInterrupted()) {
             final MagazineData<String> magazineData = fireFromMagazine();
             if (Objects.isNull(magazineData)) {
@@ -112,7 +116,9 @@ public final class MagazineConsumerTask<M> implements Runnable {
             // returns it, so abandoning it here would leave it below the fire pointer with no
             // consumer coming - recoverable only by the sweeper, one sweepDuration later. The
             // budget bounds the turn; it must never cost a delivery.
-            consume(List.of(magazineData));
+            batch.clear();
+            batch.add(magazineData);
+            consume(batch);
             if (budgetExhausted(deadline)) {
                 return;
             }
@@ -200,31 +206,48 @@ public final class MagazineConsumerTask<M> implements Runnable {
         return null;
     }
 
-    private void consume(final List<MagazineData<String>> magazineDataList) {
+    private void consume(final List<MagazineData<String>> batch) {
         meters.recordConsume(() -> {
+            log.debug("Consuming messages {}", batch);
+            final List<M> messages = decodeAndDropUnreadable(batch);
+            if (messages.isEmpty()) {
+                // Nothing the handler could be given. What is left carries no payload at all, so
+                // there is nothing to preserve and it is simply retired.
+                batch.forEach(magazine::delete);
+                return;
+            }
             try {
-                log.debug("Consuming messages {}", magazineDataList);
-                final Boolean success = handle(deserialise(magazineDataList));
-                if (Boolean.TRUE.equals(success)) {
-                    magazineDataList.forEach(magazine::delete);
-                    meters.acked(magazineDataList.size());
+                if (Boolean.TRUE.equals(handle(messages))) {
+                    batch.forEach(magazine::delete);
+                    meters.acked(batch.size());
                 } else {
-                    magazineDataList.forEach(data -> sidelineThenDelete(data, IgnisMetrics.REASON_REJECTED));
+                    batch.forEach(data -> sidelineThenDelete(data, IgnisMetrics.REASON_REJECTED));
                 }
             } catch (Exception e) {
-                magazineDataList.forEach(magazineData -> handleException(magazineData, e));
+                batch.forEach(data -> handleException(data, e));
             }
         });
     }
 
     /**
-     * A message whose payload cannot be read is dealt with here and left out of the batch; it stays
-     * in the caller's list, so a batch the handler then accepts still deletes it.
+     * Decodes the batch, and <b>removes from it</b> any message this method had to deal with itself.
+     * <p>
+     * A payload that cannot be read is sidelined and deleted here and now, so its fate is already
+     * settled. Leaving it in the batch would let the handler's answer settle it a second time -
+     * storing a second copy of it in the sideline, or deleting the copy the sideline refused. So the
+     * batch is left holding exactly the records the handler's answer still decides.
+     * <p>
+     * A record with no payload at all stays in the batch: there is nothing to hand to a handler, but
+     * the record is still ours to retire.
+     *
+     * @return one message per record still in the batch that had a payload.
      */
-    private List<M> deserialise(final List<MagazineData<String>> magazineDataList) {
-        final List<M> messages = new ArrayList<>(magazineDataList.size());
-        for (final MagazineData<String> magazineData : magazineDataList) {
-            final String payload = magazineData.getData();
+    private List<M> decodeAndDropUnreadable(final List<MagazineData<String>> batch) {
+        final List<M> messages = new ArrayList<>(batch.size());
+        final Iterator<MagazineData<String>> records = batch.iterator();
+        while (records.hasNext()) {
+            final MagazineData<String> record = records.next();
+            final String payload = record.getData();
             if (Objects.isNull(payload)) {
                 continue;
             }
@@ -235,7 +258,8 @@ public final class MagazineConsumerTask<M> implements Runnable {
             try {
                 messages.add(reader.readValue(payload));
             } catch (JsonProcessingException e) {
-                handleException(magazineData, e);
+                records.remove();
+                handleException(record, e);
             }
         }
         return messages;
@@ -320,12 +344,18 @@ public final class MagazineConsumerTask<M> implements Runnable {
 
     private Boolean callHandler(final List<M> messages) throws Exception {
         try {
-            return handlerExecutor.call(() -> messageHandler.handle(messages), handlerTimeoutMillis);
+            return handlerExecutor.call(() -> singleMessageMode(messages)
+                    ? messageHandler.handle(messages.get(0))
+                    : messageHandler.handle(messages), handlerTimeoutMillis);
         } catch (TimeoutException e) {
             meters.handlerTimedOut();
             throw new HandlerTimeoutException(magazine.getMagazineIdentifier(), messages.size(),
                     handlerTimeoutMillis, e);
         }
+    }
+
+    private boolean singleMessageMode(final List<M> messages) {
+        return Objects.isNull(batchingConfig) && messages.size() == 1;
     }
 
     private static String sidelineReason(final Exception e) {

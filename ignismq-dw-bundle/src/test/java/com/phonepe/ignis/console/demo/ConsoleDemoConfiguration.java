@@ -14,23 +14,9 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.refresh;
+package com.phonepe.ignis.console.demo;
 
-import com.phonepe.ignis.request.ShovelConfig;
+import io.dropwizard.Configuration;
 
-public interface RefreshableQueue {
-
-    int getNoOfConsumers();
-
-    int getNoOfShovelConsumers();
-
-    void createConsumers(int count);
-
-    void stopConsumers(int count);
-
-    ShovelConfig getShovelConfig();
-
-    void scheduleShoveling(int concurrency, int timeIntervalInSecs);
-
-    void stopShovelConsumers(int count);
+public class ConsoleDemoConfiguration extends Configuration {
 }

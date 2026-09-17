@@ -30,7 +30,7 @@ public class MyAppConfiguration extends Configuration {
 
 ### Bundle Implementation
 
-Subclass `IgnisMQBundle` and implement the four abstract methods:
+Subclass `IgnisMQBundle` and implement its single abstract method, which returns everything the bundle needs:
 
 ```java
 public class MyIgnisMQBundle extends IgnisMQBundle<MyAppConfiguration> {
@@ -38,23 +38,13 @@ public class MyIgnisMQBundle extends IgnisMQBundle<MyAppConfiguration> {
     private CuratorFramework curatorFramework;
 
     @Override
-    protected BaseStorage getStorage(MyAppConfiguration config) {
-        return new AerospikeStorage(config.getAerospikeConfig(), "my-namespace");
-    }
-
-    @Override
-    protected String getClientId(MyAppConfiguration config) {
-        return config.getClientId();
-    }
-
-    @Override
-    protected String getFarmId(MyAppConfiguration config) {
-        return config.getFarmId();
-    }
-
-    @Override
-    protected CuratorFramework getCuratorFramework() {
-        return curatorFramework;
+    protected IgnisMQContext context(MyAppConfiguration config) {
+        return IgnisMQContext.builder()
+                .clientId(config.getClientId())
+                .farmId(config.getFarmId())
+                .storage(new AerospikeStorage(config.getAerospikeConfig(), "my-namespace"))
+                .curatorFramework(curatorFramework)
+                .build();
     }
 
     public void setCuratorFramework(CuratorFramework curatorFramework) {
@@ -63,12 +53,18 @@ public class MyIgnisMQBundle extends IgnisMQBundle<MyAppConfiguration> {
 }
 ```
 
-| Method | Returns | Purpose |
-|--------|---------|---------|
-| `getStorage(T config)` | `BaseStorage` | Creates the Aerospike storage backend |
-| `getClientId(T config)` | `String` | Unique identifier for this application/service |
-| `getFarmId(T config)` | `String` | Identifier for the deployment region/datacenter |
-| `getCuratorFramework()` | `CuratorFramework` | ZooKeeper client for leader election |
+| Field | Type | Purpose |
+|-------|------|---------|
+| `storage` | `BaseStorage` | The Aerospike storage backend. Required |
+| `clientId` | `String` | Unique identifier for this application/service. Required |
+| `farmId` | `String` | Identifier for the deployment region/datacenter. Required |
+| `curatorFramework` | `CuratorFramework` | ZooKeeper client for leader election. Required |
+| `settings` | `IgnisMQSettings` | Worker-pool size and the metrics switch. Optional; defaults to `IgnisMQSettings.defaults()` |
+
+!!! note "One method, not five"
+    The four required fields are `@NonNull` on the builder, so omitting one throws at startup rather
+    than failing to compile. That is the trade a single extension point makes: a new input becomes a
+    new field here instead of a new abstract method every existing subclass has to implement.
 
 ### Application Class
 
@@ -281,8 +277,8 @@ public interface MessageHandler<M> {
 
 | Method | Called When | Return `true` | Return `false` |
 |--------|-----------|---------------|----------------|
-| `handle(List<M>)` | **Every consumed message, in both modes.** A non-batching queue passes a one-element list | All messages in the list acknowledged and deleted | All messages in the list sidelined for retry |
-| `handle(M)` | **Never.** Required by the interface, but ignisMQ does not call it | — | — |
+| `handle(M)` | Each message, when the queue has **no** `batchingConfig` | Message acknowledged and deleted | Message sidelined for retry |
+| `handle(List<M>)` | Each flushed batch, when the queue **has** a `batchingConfig` | All messages in the batch acknowledged and deleted | All messages in the batch sidelined for retry |
 | `getIgnorableExceptions()` | Exception thrown during handling | — | Exceptions in this set are swallowed (message skipped, not sidelined) |
 
 ### Simple Handler
@@ -517,7 +513,7 @@ queue.shovel(4); // 4 concurrent threads, runs once
 !!! warning "Shovel behavior"
     - **Scheduled shoveling** runs repeatedly at the configured interval
     - **Manual shovel** (`queue.shovel(concurrency)`) runs once and stops when sideline is drained
-    - Shovels are capped separately from consumers, by the same exclusive check — up to 99 of each
+    - Shovels are capped separately from consumers, by the same check — up to 100 of each
 
 ---
 
@@ -555,7 +551,7 @@ manager.decreaseConsumers("order-events", 2);
 ```
 
 !!! note "Consumer limits"
-    `MAX_CONSUMERS_ALLOWED` is 100 and the guard is exclusive, so **99 is the highest attainable count**. Reaching 100 throws `IgnisMQException` with error code `MAX_ALLOWED_CONSUMERS_EXCEEDED`.
+    The maximum is **100 consumers per queue** (`MAX_CONSUMERS_ALLOWED`). Exceeding it throws `IgnisMQException` with error code `MAX_ALLOWED_CONSUMERS_EXCEEDED`.
 
 ### Deactivating a Queue
 

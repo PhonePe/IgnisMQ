@@ -15,6 +15,7 @@ The primary interface for interacting with a queue. Generic parameter `M` is the
 | `publish` | `boolean publish(M message) throws JsonProcessingException` | Serializes the message to JSON and loads it into the Magazine. Returns `true` on success. |
 | `getUnconsumedCount` | `long getUnconsumedCount()` | Returns `publishedCount - consumedCount`, floored at `0`. |
 | `getMetaData` | `QueueMetaData getMetaData()` | Returns a snapshot of published, consumed, sidelined, and shovelled counts. |
+| `getShardDepths` | `List<ShardDepth> getShardDepths()` | The same published and consumed counts split by shard of the main magazine, ordered by shard index. Publishing picks a shard at random, so an even spread is expected; a shard far above the others is one whose consumers are behind. |
 | `shovel` | `void shovel(int concurrency)` | Triggers a one-shot shovel operation with auto-delete enabled. |
 
 ---
@@ -113,7 +114,31 @@ Returns the full in-memory map of queue name to `IQueue` instance.
 Set<String> getAllQueuesFromDB()
 ```
 
-Queries Aerospike and returns the set of all active queue names persisted in the database.
+Queries Aerospike and returns the set of all active queue names persisted in the database. Names
+only; use `getStoredQueues` when the configuration matters.
+
+---
+
+#### getStoredQueues
+
+```java
+Map<String, QueueEntity> getStoredQueues(boolean active)
+```
+
+Queries Aerospike and returns every queue with the given active flag, each with its stored
+configuration. Unlike `getAllQueues` this does not depend on this process having adopted the queue,
+so it is the cluster-truthful inventory. Pass `false` to list deactivated queues.
+
+---
+
+#### getStoredQueue
+
+```java
+Optional<QueueEntity> getStoredQueue(String queueName)
+```
+
+The stored definition of one queue, whether or not it is active or served by this process. Empty when
+no such queue exists.
 
 ---
 
@@ -214,8 +239,8 @@ User-implemented interface for processing messages consumed from a queue.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `handle` (batch) | `boolean handle(List<M> messages) throws Exception` | **The only overload ignisMQ calls**, in both batching and non-batching mode; a non-batching queue passes a one-element list. Return `true` to mark all as consumed, `false` to sideline **all** messages in the list. |
-| `handle` (single) | `boolean handle(M message) throws Exception` | Required to compile, but **never invoked by ignisMQ**. Put your logic in the `List` overload. |
+| `handle` (single) | `boolean handle(M message) throws Exception` | Called for each message on a queue with **no** `batchingConfig`. Return `true` to mark as consumed, `false` to sideline it. |
+| `handle` (batch) | `boolean handle(List<M> messages) throws Exception` | Called for each flushed batch on a queue **with** a `batchingConfig`. Return `true` to mark all as consumed, `false` to sideline **all** of them. |
 | `getIgnorableExceptions` | `Set<Class<?>> getIgnorableExceptions()` | Returns exception types that should **not** cause sidelining. When a thrown exception matches one of these types, the message is deleted instead of sidelined. |
 
 ---
@@ -345,6 +370,25 @@ public class QueueMetaData
 | `consumed` | `long` | Total messages consumed. |
 | `sidelined` | `long` | Total messages sidelined. |
 | `shovelled` | `long` | Total messages shovelled back into the queue. |
+
+---
+
+## ShardDepth
+
+One shard's share of a queue, using the same pointers `QueueMetaData` totals.
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `shard` | `String` | Shard identifier as the magazine reports it. |
+| `published` | `long` | Load pointer for this shard. |
+| `consumed` | `long` | Fire pointer for this shard. |
+| `pending` | `long` | `published - consumed`, floored at `0`. |
+
+Obtained from `IQueue.getShardDepths()`, or over HTTP from the console's
+`GET /ignismq/v1/queues/{name}/shards`. Shards are assigned at random on publish, so this is a view
+of whether any shard is falling behind — not of key distribution, of which there is none.
 
 ---
 
@@ -492,14 +536,26 @@ public abstract class IgnisMQBundle<T extends Configuration> implements Configur
 
 Dropwizard bundle for integrating IgnisMQ into a Dropwizard application.
 
-### Abstract Methods
+### Abstract Method
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `getStorage` | `BaseStorage getStorage(T config)` | Provide the storage backend from app config. |
-| `getClientId` | `String getClientId(T config)` | Provide the client identifier from app config. |
-| `getFarmId` | `String getFarmId(T config)` | Provide the farm/cluster identifier from app config. |
-| `getCuratorFramework` | `CuratorFramework getCuratorFramework()` | Provide the ZooKeeper CuratorFramework instance. |
+| `context` | `IgnisMQContext context(T config)` | Provide the storage, identity and coordination the manager is built from. Called once, during `run`. |
+
+### IgnisMQContext
+
+Built with `IgnisMQContext.builder()`.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `clientId` | `String` | Yes | Client identifier. |
+| `farmId` | `String` | Yes | Farm / cluster identifier. |
+| `storage` | `BaseStorage` | Yes | Storage backend. |
+| `curatorFramework` | `CuratorFramework` | Yes | ZooKeeper client for leader election. |
+| `settings` | `IgnisMQSettings` | No | Defaults to `IgnisMQSettings.defaults()`. |
+| `console` | `ConsoleConfiguration` | No | Defaults to `ConsoleConfiguration.defaults()`: console and dashboard on, five-second cache. See the [console guide](../operations/console.md). |
+
+Required fields are `@NonNull`, so a missing one throws `NullPointerException` when the context is built.
 
 ### Methods
 
@@ -544,7 +600,7 @@ public enum ErrorCode
 | `NOT_IMPLEMENTED` | Declared for an unsupported storage backend. Unreachable today: `BaseStorage` is sealed and permits only `AerospikeStorage`. |
 | `AEROSPIKE_ERROR` | An error occurred in the Aerospike layer. |
 | `INVALID_REQUEST` | The request failed validation. |
-| `MAX_ALLOWED_CONSUMERS_EXCEEDED` | Consumer or shovel count would reach `MAX_CONSUMERS_ALLOWED` (100). The check is exclusive, so 99 is the highest attainable. |
+| `MAX_ALLOWED_CONSUMERS_EXCEEDED` | Consumer or shovel count would exceed `MAX_CONSUMERS_ALLOWED` (100). |
 | `INVALID_SHOVEL_TIME_INTERVAL` | Shovel interval is negative or exceeds 86,400 seconds. |
 | `INVALID_MESSAGE_HANDLER` | The specified message handler type is not registered. |
 | `INTERNAL_ERROR` | An unexpected internal error occurred. |
@@ -563,7 +619,7 @@ public class QueueStat
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | `String` | Queue name. |
-| `active` | `boolean` | **Not populated** — always `false`. `QueueStatGuage` builds this record without it. |
+| `active` | `boolean` | Always `true`. The gauge reports only queues that are active in storage **and** held by this process, so anything it emits is both. |
 | `published` | `long` | Total published count. |
 | `consumed` | `long` | Total consumed count. |
 | `unConsumed` | `long` | Unconsumed count (`published - consumed`). |

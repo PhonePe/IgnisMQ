@@ -41,17 +41,24 @@ what `concurrency` means.
 
 **Wanted:** one publisher, several independent readers, each receiving every message.
 
-**Not available, and the blocker is below IgnisMQ.** Magazine — the storage engine underneath —
-keeps a single fire pointer per shard, and claiming a message is a destructive compare-and-set. There
-is no per-consumer offset and no rewind. Two readers of the same queue **compete**; they do not each
-get a copy. That property is exactly what makes competing consumers scale, and it is the same property
-that prevents fan-out.
+**Not available today, and the reason is a deliberate design choice rather than a hard limit.** A
+queue keeps a **single fire pointer** per shard, and claiming a message is a destructive
+compare-and-set. That is what competing consumers need, and it is exactly what makes them scale:
+two readers of the same queue share the work rather than each getting a copy.
 
-Doing it properly needs a per-group pointer, or a durable cursor over a non-destructive read, in
-Magazine. Duplicating each message into N queues at publish time works today, but costs N times the
-storage and fixes the subscriber set at publish time, so a reader added later sees no history.
+Fan-out is a different shape, and it is reachable. Several fire pointers can be maintained over the
+same data — one per consumer group — so each group advances independently over every message. The
+piece that has to change alongside it is the **explicit delete**: today a message is deleted once
+its single reader is done, which is correct for one pointer and wrong for several. With independent
+groups, a message can only be retired once every group has passed it, so retirement becomes a
+function of the slowest pointer and TTL rather than of any one consumer.
 
-**If you need this, it is a Magazine change and worth raising as one.**
+Nobody has asked for it, so it is not built. It is not off the table either — it is a real amount of
+work across both IgnisMQ and its storage engine, and it can be brought into scope if there is a use
+case for it.
+
+Duplicating each message into N queues at publish time works today. It costs N times the storage and
+fixes the subscriber set at publish time, so a reader added later sees no history.
 
 ### Retry with backoff, and a maximum delivery count
 
@@ -116,6 +123,7 @@ yours to change. Listed because a limit you cannot see is worse than one you can
 |---|---|---|
 | Deduplication | Off | Publish-side suppression of identical payloads |
 | Active-shard refresh | 5 seconds | Steady-state read load, and wake-up latency on an idle queue |
+| Active-shard cache size | 1024 entries | How many queues one process can hold before it re-reads shard information. See below |
 | Fire-history recording | Always on | A small write cost on every queue, including ones that never sweep |
 | Fire-history depth | 32 checkpoints | How far back the sweeper can safely reach |
 | Metadata TTL | 2 x queue expiry | How long a queue's bookkeeping outlives its messages |
@@ -129,3 +137,7 @@ Active-shard information is cached per magazine, capped at 1024 entries, and Ign
 magazines per queue. A single process holding more than roughly **500 queues** will start evicting
 and re-reading that information. Nothing breaks; the read rate rises. No deployment has reached this,
 and it is stated here because it is not obvious from anything else.
+
+The cap is currently a **fixed constant rather than a setting** — unlike the refresh interval
+listed above it, which is already a parameter. Making it configurable is a small change, and an
+obvious one to take if any deployment gets close to the limit.

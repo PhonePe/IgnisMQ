@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console;
+package com.phonepe.ignis.config;
 
 import lombok.Builder;
 import lombok.Value;

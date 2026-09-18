@@ -106,6 +106,12 @@ public final class IgnisMetrics {
     public static final String REASON_EXCEPTION = "exception";
     public static final String REASON_TIMEOUT = "timeout";
     public static final String REASON_SATURATED = "saturated";
+    /**
+     * ignisMQ could not turn the stored payload into the consumer's message type, so the handler
+     * never saw it. Distinct from {@link #REASON_EXCEPTION} because the fix is different: this is
+     * publisher and consumer disagreeing about the format, not a failing handler.
+     */
+    public static final String REASON_UNREADABLE = "unreadable";
     /** The sideline would not take it, so the payload is still in the main magazine. */
     public static final String REASON_SIDELINE_REFUSED = "sideline_refused";
 

@@ -16,7 +16,7 @@
 
 package com.phonepe.ignis;
 
-import com.phonepe.ignis.console.ConsoleConfiguration;
+import com.phonepe.ignis.config.ConsoleConfiguration;
 import com.phonepe.ignis.storage.BaseStorage;
 import lombok.Builder;
 import lombok.NonNull;
@@ -28,8 +28,6 @@ import org.apache.curator.framework.CuratorFramework;
  * <p>
  * A single extension point rather than one abstract method per value, so that a new input is a new
  * field here instead of a new abstract method every existing subclass must implement.
- *
- * @author shantanu.tiwari
  */
 @Value
 @Builder

@@ -5,7 +5,7 @@
     <parent>
         <groupId>com.phonepe</groupId>
         <artifactId>ignisMQ</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>2.0.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>ignismq-core</artifactId>
@@ -17,6 +17,13 @@
             <groupId>com.phonepe</groupId>
             <artifactId>magazine-core</artifactId>
             <version>${magazine.version}</version>
+        </dependency>
+        <!-- Compiled against directly by the Aerospike queue service and store client, so it is
+             declared rather than inherited through magazine-core. -->
+        <dependency>
+            <groupId>com.aerospike</groupId>
+            <artifactId>aerospike-client</artifactId>
+            <version>${aerospike.client.version}</version>
         </dependency>
         <dependency>
             <groupId>io.micrometer</groupId>
@@ -43,11 +50,6 @@
                     <artifactId>jsr305</artifactId>
                 </exclusion>
             </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.codepoetics</groupId>
-            <artifactId>protonpack</artifactId>
-            <version>${protonpack.version}</version>
         </dependency>
         <!-- curator-client is omitted deliberately: curator-framework already brings it, and
              declaring it directly pins a second copy that can drift from the framework. -->

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console;
+package com.phonepe.ignis.resource;
 
 import com.phonepe.ignis.IQueue;
 import com.phonepe.ignis.IgnisMQManager;
@@ -22,12 +22,17 @@ import com.phonepe.ignis.IgnisMQSettings;
 import com.phonepe.ignis.MagazineQueue;
 import com.phonepe.ignis.common.QueueMetaData;
 import com.phonepe.ignis.common.ShardDepth;
-import com.phonepe.ignis.console.response.ActionResult;
-import com.phonepe.ignis.console.response.InstanceMetrics;
-import com.phonepe.ignis.console.response.InstanceView;
-import com.phonepe.ignis.console.response.QueueDetail;
-import com.phonepe.ignis.console.response.QueueSummary;
+import com.phonepe.ignis.response.ActionResult;
+import com.phonepe.ignis.response.InstanceMetrics;
+import com.phonepe.ignis.response.InstanceView;
+import com.phonepe.ignis.response.Permissions;
+import com.phonepe.ignis.response.QueueDetail;
+import com.phonepe.ignis.response.QueueSummary;
+import com.phonepe.ignis.service.IgnisMQService;
 import com.phonepe.ignis.entity.QueueEntity;
+import com.phonepe.ignis.exception.ErrorCode;
+import com.phonepe.ignis.exception.IgnisMQException;
+import com.phonepe.ignis.exception.IgnisMQExceptionMapper;
 import com.phonepe.ignis.request.ShovelConfig;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -65,7 +70,7 @@ import static org.mockito.Mockito.when;
  * closed without the operator role.
  */
 @ExtendWith(DropwizardExtensionsSupport.class)
-class ConsoleResourceTest {
+class IgnisMQResourceTest {
 
     private static final String ORDERS = "orders";
     private static final String ELSEWHERE = "payments";
@@ -77,15 +82,25 @@ class ConsoleResourceTest {
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private final ResourceExtension readOnly = resources();
-    private final ResourceExtension asOperator = resources(ConsoleResource.OPERATE_ROLE);
-    private final ResourceExtension asDeactivator = resources(ConsoleResource.DEACTIVATE_ROLE);
+    private final ResourceExtension asOperator = resources(IgnisMQResource.OPERATE_ROLE);
+    private final ResourceExtension asDeactivator = resources(IgnisMQResource.DEACTIVATE_ROLE);
+    private final ResourceExtension asRolelessButAuthenticated = resources(new String[0], true);
 
     private ResourceExtension resources(final String... roles) {
+        return resources(roles, roles.length > 0);
+    }
+
+    /**
+     * {@code authenticated} is separate from the roles so a caller who authenticated successfully but
+     * holds nothing can be expressed - the case the console most needs to tell apart.
+     */
+    private ResourceExtension resources(final String[] roles, final boolean authenticated) {
         final ResourceExtension.Builder builder = ResourceExtension.builder()
-                .addResource(() -> new ConsoleResource(new ConsoleService(manager, "billing", "farm-1",
+                .addResource(() -> new IgnisMQResource(new IgnisMQService(manager, "billing", "farm-1",
                         IgnisMQSettings.defaults(), meterRegistry, 0)))
-                .addProvider(RolesAllowedDynamicFeature.class);
-        if (roles.length > 0) {
+                .addProvider(RolesAllowedDynamicFeature.class)
+                .addProvider(new IgnisMQExceptionMapper());
+        if (authenticated) {
             builder.addProvider(new GrantRoleFilter(roles));
         }
         return builder.build();
@@ -111,7 +126,7 @@ class ConsoleResourceTest {
         when(queue.getMetaData()).thenReturn(QueueMetaData.builder()
                 .published(120).consumed(100).sidelined(5).shovelled(2).build());
         when(queue.getShardDepths()).thenReturn(List.of(
-                depth("orders_0", 100, 90), depth("orders_1", 20, 10)));
+                depth("SHARD_0", 100, 90), depth("SHARD_1", 20, 10)));
         when(queue.getNoOfConsumers()).thenReturn(4);
         when(queue.getNoOfShovelConsumers()).thenReturn(1);
         when(queue.getShovelConfig()).thenReturn(ShovelConfig.builder()
@@ -176,7 +191,7 @@ class ConsoleResourceTest {
 
         assertEquals(120, detail.depth().published());
         assertEquals(20, detail.depth().unconsumed());
-        assertEquals(List.of("orders_0", "orders_1"), detail.shards().stream().map(ShardDepth::getShard).toList());
+        assertEquals(List.of("SHARD_0", "SHARD_1"), detail.shards().stream().map(ShardDepth::getShard).toList());
         assertEquals(4, detail.instance().consumers());
         assertEquals(1, detail.instance().shovels());
     }
@@ -234,6 +249,88 @@ class ConsoleResourceTest {
         assertEquals(IgnisMQSettings.defaults().getWorkerThreads(), view.workerThreads());
         assertEquals(List.of(ORDERS), view.queues().stream().map(queue -> queue.name()).toList());
         assertEquals(4, view.queues().get(0).consumers());
+    }
+
+    /**
+     * The console asks this so it can disable what the caller cannot do, rather than offering every
+     * action and letting it fail. It reports capability, never identity: no principal, no role list,
+     * nothing an unauthenticated caller could not already learn by attempting one POST.
+     */
+    @Test
+    void whoamiReportsNoPermissionsWithoutARole() {
+        final Permissions permissions = readOnly.target("/ignismq/v1/whoami")
+                .request().get(Permissions.class);
+
+        assertFalse(permissions.authenticated(), "no SecurityContext was installed at all");
+        assertFalse(permissions.operate());
+        assertFalse(permissions.deactivate());
+    }
+
+    @Test
+    void whoamiReportsTheOperatorRoleWithoutGrantingDeactivation() {
+        final Permissions permissions = asOperator.target("/ignismq/v1/whoami")
+                .request().get(Permissions.class);
+
+        assertTrue(permissions.authenticated());
+        assertTrue(permissions.operate());
+        assertFalse(permissions.deactivate(),
+                "deactivation is a separate grant; conflating them would offer an irreversible "
+                        + "action to a caller who cannot perform it");
+    }
+
+    @Test
+    void whoamiReportsDeactivationWithoutImplyingTheOperatorRole() {
+        final Permissions permissions = asDeactivator.target("/ignismq/v1/whoami")
+                .request().get(Permissions.class);
+
+        assertTrue(permissions.deactivate());
+        assertFalse(permissions.operate());
+    }
+
+    /**
+     * Distinguishing "you sent nothing" from "what you sent lacks the role" is the whole point: the
+     * first is fixed by supplying a token, the second by being granted the role, and the console
+     * says so.
+     */
+    @Test
+    void whoamiDistinguishesAnAuthenticatedCallerWithNoRolesFromAnUnauthenticatedOne() {
+        final Permissions permissions = asRolelessButAuthenticated.target("/ignismq/v1/whoami")
+                .request().get(Permissions.class);
+
+        assertTrue(permissions.authenticated());
+        assertFalse(permissions.operate());
+        assertFalse(permissions.deactivate());
+    }
+
+    /**
+     * Asking for more consumers than the cap allows is a request that can never succeed, however many
+     * times it is retried. It answered 500, which tells the caller the opposite.
+     */
+    @Test
+    void exceedingTheConsumerCapIsReportedAsAConflictRatherThanAServerError() {
+        org.mockito.Mockito.doThrow(IgnisMQException.builder()
+                        .errorCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED)
+                        .message("100 consumers already").build())
+                .when(manager).increaseConsumers(anyString(), anyInt());
+
+        final Response response = asOperator.target("/ignismq/v1/queues/" + ORDERS + "/consumers")
+                .queryParam("delta", 99).request().post(null);
+
+        assertEquals(409, response.getStatus());
+        assertEquals("MAX_ALLOWED_CONSUMERS_EXCEEDED",
+                response.readEntity(IgnisMQExceptionMapper.ErrorBody.class).errorCode(),
+                "the code is what lets the console say which limit was hit");
+    }
+
+    /** The counterpart: storage being down is not something the caller can fix by changing anything. */
+    @Test
+    void aStorageFailureIsStillReportedAsAServerError() {
+        org.mockito.Mockito.doThrow(IgnisMQException.builder()
+                        .errorCode(ErrorCode.AEROSPIKE_ERROR).message("node unreachable").build())
+                .when(manager).sweepQueue(anyString());
+
+        assertEquals(503, asOperator.target("/ignismq/v1/queues/" + ORDERS + "/sweep")
+                .request().post(null).getStatus());
     }
 
     @Test
@@ -392,7 +489,7 @@ class ConsoleResourceTest {
      */
     @Test
     void aCachedInventoryIsReadFromStorageOnceWithinItsWindow() {
-        final ConsoleService cached = new ConsoleService(manager, "billing", "farm-1",
+        final IgnisMQService cached = new IgnisMQService(manager, "billing", "farm-1",
                 IgnisMQSettings.defaults(), meterRegistry, 30);
 
         cached.queues();
@@ -404,7 +501,7 @@ class ConsoleResourceTest {
 
     @Test
     void anUncachedInventoryReadsStorageEveryTime() {
-        final ConsoleService uncached = new ConsoleService(manager, "billing", "farm-1",
+        final IgnisMQService uncached = new IgnisMQService(manager, "billing", "farm-1",
                 IgnisMQSettings.defaults(), meterRegistry, 0);
 
         uncached.queues();

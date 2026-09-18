@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console;
+package com.phonepe.ignis.resource;
 
 import javax.annotation.Priority;
 import javax.ws.rs.Priorities;

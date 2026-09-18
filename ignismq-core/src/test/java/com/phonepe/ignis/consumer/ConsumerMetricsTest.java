@@ -16,6 +16,8 @@
 
 package com.phonepe.ignis.consumer;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.config.BatchingConfig;
@@ -264,6 +266,62 @@ class ConsumerMetricsTest {
         }
     }
 
+    /**
+     * A payload nobody can read and a handler that threw are both failures, and until now both were
+     * counted as {@code reason=exception}. They mean different things: an unreadable payload is
+     * almost always a publisher and consumer disagreeing about the format - a deploy skew, fixed by
+     * rolling one of them - whereas a handler that threw is a bug in the handler. An operator
+     * alerting on one rate cannot tell which they are looking at.
+     */
+    @Test
+    @DisplayName("a payload that will not deserialise is sidelined as unreadable, not as an exception")
+    void anUnreadablePayloadIsSidelinedUnderItsOwnReason() {
+        firesUnreadableThen();
+        when(sidelineMagazine.load(any())).thenReturn(true);
+
+        integerTask(integerHandler()).run();
+
+        assertEquals(1.0, sidelined(IgnisMetrics.REASON_UNREADABLE));
+        assertEquals(0.0, sidelined(IgnisMetrics.REASON_EXCEPTION),
+                "the handler never ran, so nothing here is a handler exception");
+    }
+
+    /**
+     * The converse, and the reason the reason cannot be derived from the exception type: a handler
+     * is free to do its own parsing and throw {@link com.fasterxml.jackson.core.JsonProcessingException}
+     * from inside {@code handle}. That is a handler bug like any other, and keying the reason off the
+     * exception class would relabel it as a payload ignisMQ could not read.
+     */
+    @Test
+    @DisplayName("a handler that throws a Jackson exception is still an exception, not unreadable")
+    void aHandlerThrowingAJacksonExceptionIsStillCountedAsAnException() {
+        firesThen("msg");
+        when(sidelineMagazine.load(any())).thenReturn(true);
+
+        task(jacksonThrowingHandler()).run();
+
+        assertEquals(1.0, sidelined(IgnisMetrics.REASON_EXCEPTION));
+        assertEquals(0.0, sidelined(IgnisMetrics.REASON_UNREADABLE),
+                "ignisMQ read this payload perfectly well; the handler is what failed");
+    }
+
+    /**
+     * The new reason must not quietly turn an ignorable exception into a sideline. A handler that
+     * declares the deserialisation failure ignorable is asking for the message to be dropped, and
+     * that answer is given before any reason is chosen.
+     */
+    @Test
+    @DisplayName("an unreadable payload the handler declares ignorable is still dropped, not sidelined")
+    void anIgnorableUnreadablePayloadIsStillDropped() {
+        firesUnreadableThen();
+
+        integerTask(ignorableIntegerHandler()).run();
+
+        assertEquals(1.0, messages(IgnisMetrics.IGNORED));
+        assertEquals(0.0, sidelined(IgnisMetrics.REASON_UNREADABLE));
+        verify(sidelineMagazine, org.mockito.Mockito.never()).load(any());
+    }
+
     private Thread occupy(final HandlerExecutor executor, final CountDownLatch release)
             throws InterruptedException {
         final CountDownLatch occupied = new CountDownLatch(1);
@@ -310,6 +368,81 @@ class ConsumerMetricsTest {
                 throw new IllegalStateException("ignorable");
             }
         };
+    }
+
+    /** A payload that is not valid JSON, so an Integer-typed consumer cannot read it. */
+    private void firesUnreadableThen() {
+        Mockito.doReturn(data("not-valid-json{{{"))
+                .doThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null))
+                .when(magazine).fire();
+    }
+
+    /**
+     * Integer-typed, because a String-typed consumer hands the payload over raw and has nothing to
+     * fail at.
+     */
+    private MagazineConsumerTask<Integer> integerTask(final MessageHandler<Integer> handler) {
+        return new MagazineConsumerTask<>(magazine, sidelineMagazine, handler, new ObjectMapper(),
+                Integer.class, null, Constants.CONSUMER_RUN_BUDGET_IN_MS, handlerExecutor,
+                HANDLER_TIMEOUT_IN_MS, new QueueMeters(metrics, QUEUE));
+    }
+
+    private static MessageHandler<Integer> integerHandler() {
+        return integerHandler(Collections.emptySet());
+    }
+
+    private static MessageHandler<Integer> ignorableIntegerHandler() {
+        return integerHandler(Set.of(JsonProcessingException.class));
+    }
+
+    private static MessageHandler<Integer> integerHandler(final Set<Class<?>> ignorable) {
+        return new MessageHandler<>() {
+            @Override
+            public Set<Class<?>> getIgnorableExceptions() {
+                return ignorable;
+            }
+
+            @Override
+            public boolean handle(final Integer message) {
+                return true;
+            }
+
+            @Override
+            public boolean handle(final List<Integer> messages) {
+                return true;
+            }
+        };
+    }
+
+    /**
+     * Throws Jackson's own exception from inside the handler, where ignisMQ's reader is not involved.
+     * <p>
+     * {@code handle} declares no checked exception, so this needs a sneaky throw to escape - which is
+     * exactly what {@code @SneakyThrows} on a handler that does its own {@code readValue} produces,
+     * and that is a common shape rather than a contrived one.
+     */
+    private static MessageHandler<String> jacksonThrowingHandler() {
+        return new MessageHandler<>() {
+            @Override
+            public Set<Class<?>> getIgnorableExceptions() {
+                return Collections.emptySet();
+            }
+
+            @Override
+            public boolean handle(final String message) {
+                return sneakyThrow(new JsonParseException(null, "the handler parsed, and failed"));
+            }
+
+            @Override
+            public boolean handle(final List<String> messages) {
+                return sneakyThrow(new JsonParseException(null, "the handler parsed, and failed"));
+            }
+        };
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <E extends Throwable> boolean sneakyThrow(final Throwable t) throws E {
+        throw (E) t;
     }
 
     private double sidelined(final String reason) {

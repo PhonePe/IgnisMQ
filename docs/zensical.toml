@@ -24,6 +24,8 @@ nav = [
   {"Storage Backends" = [
     {"Aerospike" = "backends/aerospike.md"}
   ]},
+  {"Benchmark" = "benchmark.md"},
+  {"Roadmap" = "roadmap.md"},
   {"References" = "references.md"}
 ]
 

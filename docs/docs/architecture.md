@@ -72,11 +72,17 @@ classDiagram
         <<abstract>>
         -IgnisMQManager ignisMQManager
         +run(config, environment)
-        #getStorage(config) BaseStorage
-        #getClientId(config) String
-        #getFarmId(config) String
-        #getCuratorFramework() CuratorFramework
-        #getSettings(config) IgnisMQSettings
+        +getIgnisMQManager() IgnisMQManager
+        #context(config) IgnisMQContext
+    }
+
+    class IgnisMQContext {
+        +BaseStorage storage
+        +String clientId
+        +String farmId
+        +CuratorFramework curatorFramework
+        +IgnisMQSettings settings
+        +ConsoleConfiguration console
     }
 
     class IgnisMQManager {
@@ -176,7 +182,8 @@ classDiagram
         -AerospikeConfiguration config
     }
 
-    IgnisMQBundle --> IgnisMQManager : creates
+    IgnisMQBundle ..> IgnisMQContext : context(config) returns
+    IgnisMQBundle --> IgnisMQManager : creates from the context
     IgnisMQManager o-- IQueue : ConcurrentHashMap
     IQueue <|.. MagazineQueue : permits
     MagazineQueue *-- Magazine : main
@@ -342,7 +349,7 @@ sequenceDiagram
 sequenceDiagram
     participant Sched as Control pool
     participant SW as Sweeper
-    participant FJP as Sweep pool (fixed, 64)
+    participant SP as Sweep pool (fixed, 64)
     participant QS as QueueService
     participant M as Main Magazine
     participant SL as Sideline Magazine
@@ -352,16 +359,16 @@ sequenceDiagram
     QS-->>SW: Map<String, QueueEntity>
 
     loop For each queue (parallel, capped at 64)
-        SW->>FJP: submit(sweepTask)
-        FJP->>M: firePointerBefore(now - sweepDuration)
-        M-->>FJP: per-shard watermark, or absent
+        SW->>SP: submit(sweepTask)
+        SP->>M: firePointerBefore(now - sweepDuration)
+        M-->>SP: per-shard watermark, or absent
         loop Until each shard reaches its watermark
-            FJP->>M: peek(pointers, batched across shards)
-            M-->>FJP: records still present = abandoned
-            FJP->>SL: load(payload)
-            FJP->>M: delete(record) only if the load succeeded
+            SP->>M: peek(pointers, batched across shards)
+            M-->>SP: records still present = abandoned
+            SP->>SL: load(payload)
+            SP->>M: delete(record) only if the load succeeded
         end
-        FJP->>QS: updateSweepProgress(pointers, swept)
+        SP->>QS: updateSweepProgress(pointers, swept)
     end
 ```
 

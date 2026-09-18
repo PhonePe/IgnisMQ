@@ -18,7 +18,6 @@ package com.phonepe.ignis;
 
 import com.aerospike.client.IAerospikeClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.Preconditions;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.client.impl.AerospikeStoreClient;
 import com.phonepe.ignis.common.MagazineRegistry;
@@ -127,8 +126,10 @@ public final class IgnisMQManager {
     }
 
     public void initialiseMessageHandlers(final Map<String, Map.Entry<Class, MessageHandler>> messageHandlers) {
-        Preconditions.checkNotNull(messageHandlers, "Message handler map cannot be null");
-        Preconditions.checkArgument(this.messageHandlers.isEmpty(), "Message handler map is already initialised.");
+        Objects.requireNonNull(messageHandlers, "Message handler map cannot be null");
+        if (!this.messageHandlers.isEmpty()) {
+            throw new IllegalArgumentException("Message handler map is already initialised.");
+        }
         this.messageHandlers = messageHandlers;
         refreshQueues();
     }
@@ -263,7 +264,8 @@ public final class IgnisMQManager {
     public void scheduleShoveling(final String queueName, @Valid final ShovelConfig shovelConfig) {
         final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
         queue.scheduleShoveling(shovelConfig.getConcurrency(), shovelConfig.getTimeIntervalInSecs());
-        queueService.updateShovelConfig(queueName, queue.getNoOfShovelConsumers(), shovelConfig.getTimeIntervalInSecs());
+        queueService.updateShovelConfig(queueName, queue.getNoOfShovelConsumers(),
+                shovelConfig.getTimeIntervalInSecs());
     }
 
     public void sweepQueue(final String queueName) {
@@ -351,7 +353,8 @@ public final class IgnisMQManager {
                         .batchingConfig(queueRequest.getBatchingConfig())
                         .build(),
                 // Queue needs to be persisted for (queueExpiry + messageExpiry) to avoid magazine identifier clashes.
-                // And (queueExpiry > messageExpiry) ==> (queueExpiry * 2) >= (queueExpiry + messageExpiry). So factor = 2 is chosen
+                // And (queueExpiry > messageExpiry) ==> (queueExpiry * 2) >= (queueExpiry + messageExpiry),
+                // so factor = 2 is chosen
                 queueRequest.getQueueExpiry().toSeconds() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY
         );
         ignisMQMap.put(queueRequest.getName(), queue);
@@ -428,7 +431,8 @@ public final class IgnisMQManager {
         );
     }
 
-    private QueueService buildQueueCommands(final BaseStorage storage, final StorageClient storageClient) throws Exception {
+    private QueueService buildQueueCommands(final BaseStorage storage, final StorageClient storageClient)
+            throws Exception {
         return storage.accept(new StorageVisitor<>() {
             @Override
             public QueueService visit(final AerospikeStorage aerospikeStorage) {

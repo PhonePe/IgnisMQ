@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console.demo;
+package com.phonepe.ignis.demo;
 
 import com.phonepe.ignis.IQueue;
 import com.phonepe.ignis.IgnisMQManager;
@@ -22,9 +22,13 @@ import com.phonepe.ignis.IgnisMQSettings;
 import com.phonepe.ignis.MagazineQueue;
 import com.phonepe.ignis.common.QueueMetaData;
 import com.phonepe.ignis.common.ShardDepth;
-import com.phonepe.ignis.console.ConsoleResource;
-import com.phonepe.ignis.console.ConsoleService;
-import com.phonepe.ignis.console.GrantRoleFilter;
+import com.phonepe.ignis.resource.IgnisMQResource;
+import com.phonepe.ignis.service.IgnisMQService;
+import com.phonepe.ignis.resource.GrantRoleFilter;
+import com.phonepe.ignis.exception.ErrorCode;
+import com.phonepe.ignis.utils.Constants;
+import com.phonepe.ignis.exception.IgnisMQException;
+import com.phonepe.ignis.exception.IgnisMQExceptionMapper;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.request.ShovelConfig;
 import io.dropwizard.Application;
@@ -61,7 +65,7 @@ import static org.mockito.Mockito.when;
  * <pre>
  * mvn -B -pl ignismq-dw-bundle test-compile
  * mvn -B -pl ignismq-dw-bundle exec:java -Dexec.classpathScope=test \
- *   -Dexec.mainClass=com.phonepe.ignis.console.demo.ConsoleDemoApplication -Dexec.args=server
+ *   -Dexec.mainClass=com.phonepe.ignis.demo.ConsoleDemoApplication -Dexec.args=server
  * </pre>
  * <p>
  * Then open <a href="http://localhost:8080/ignisConsole/">http://localhost:8080/ignisConsole/</a>.
@@ -97,9 +101,12 @@ public final class ConsoleDemoApplication extends Application<ConsoleDemoConfigu
         // Demo only: the role is granted unconditionally so the actions can be tried. A real
         // deployment registers its own authentication and grants the role selectively.
         environment.jersey().register(new GrantRoleFilter(
-                ConsoleResource.OPERATE_ROLE, ConsoleResource.DEACTIVATE_ROLE));
+                IgnisMQResource.OPERATE_ROLE, IgnisMQResource.DEACTIVATE_ROLE));
         environment.jersey().register(RolesAllowedDynamicFeature.class);
-        environment.jersey().register(new ConsoleResource(new ConsoleService(manager(),
+        // Registered by IgnisMQBundle in a real application; here by hand, because the demo builds the
+        // resource itself and would otherwise report failures differently from what it is demonstrating.
+        environment.jersey().register(new IgnisMQExceptionMapper());
+        environment.jersey().register(new IgnisMQResource(new IgnisMQService(manager(),
                 "billing-service", "farm-1", IgnisMQSettings.defaults(), demoMeters(), 0)));
     }
 
@@ -146,8 +153,16 @@ public final class ConsoleDemoApplication extends Application<ConsoleDemoConfigu
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
         when(manager.getStoredQueue(anyString()))
                 .thenAnswer(invocation -> Optional.ofNullable(stored.get(invocation.<String>getArgument(0))));
-        doAnswer(invocation -> consumers.addAndGet(invocation.getArgument(1)))
-                .when(manager).increaseConsumers(anyString(), anyInt());
+        doAnswer(invocation -> {
+            // The cap is enforced here so the demo shows what a real manager does with it: a 409
+            // naming the error code, rather than the 500 this used to produce.
+            if (consumers.get() + (int) invocation.getArgument(1) > Constants.MAX_CONSUMERS_ALLOWED) {
+                throw IgnisMQException.builder().errorCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED)
+                        .message("A queue may run at most " + Constants.MAX_CONSUMERS_ALLOWED + " consumers")
+                        .build();
+            }
+            return consumers.addAndGet(invocation.getArgument(1));
+        }).when(manager).increaseConsumers(anyString(), anyInt());
         doAnswer(invocation -> consumers.addAndGet(-(int) invocation.getArgument(1)))
                 .when(manager).decreaseConsumers(anyString(), anyInt());
         doAnswer(invocation -> {
@@ -170,7 +185,8 @@ public final class ConsoleDemoApplication extends Application<ConsoleDemoConfigu
         final long[] loaded = {16_040, 15_930, 16_105, 15_988, 16_012, 15_961, 16_074, 15_890};
         final long[] pending = {412, 388, 401, 377, 394, 383, 1_240, 399};
         for (int index = 0; index < loaded.length; index++) {
-            shards.add(shard("order-events_" + index, loaded[index], loaded[index] - pending[index]));
+            // Magazine names its shards SHARD_<n>; the demo uses the same ids a real queue reports.
+            shards.add(shard("SHARD_" + index, loaded[index], loaded[index] - pending[index]));
         }
         final long published = shards.stream().mapToLong(ShardDepth::getPublished).sum();
         final long consumed = shards.stream().mapToLong(ShardDepth::getConsumed).sum();

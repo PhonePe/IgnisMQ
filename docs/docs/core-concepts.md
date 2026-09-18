@@ -226,7 +226,7 @@ flowchart TD
 When sweeping the sideline magazine, the sweeper uses a more conservative threshold:
 
 ```
-sweepThreshold = min(sweepTillFireTS, now - 2 * shovelInterval)
+sweepThreshold = min(now - sweepDuration, now - 2 * shovelInterval)
 ```
 
 This prevents the sweeper from re-sidelining messages that are currently being shoveled back to the main queue. The `2x` multiplier provides a safety margin.

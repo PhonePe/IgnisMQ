@@ -19,7 +19,7 @@ meter. Tag values come from closed sets, so cardinality is `queue count x a cons
 |---|---|
 | `queue` | Queue name |
 | `outcome` | `success`, `failure`, `acked`, `sidelined`, `ignored`, `timeout`, `saturated`, `retried`, `fatal` — depends on the meter |
-| `reason` | `rejected`, `exception`, `timeout`, `saturated`, `sideline_refused` |
+| `reason` | `rejected`, `exception`, `unreadable`, `timeout`, `saturated`, `sideline_refused` |
 | `result` | `message`, `empty` |
 | `magazine` | `main`, `sideline` |
 | `pool` | `control`, `worker` |
@@ -37,6 +37,20 @@ IgnisMQ also passes its `MeterRegistry` to Magazine, so `magazine.*` meters appe
 | `ignismq.poll` | Counter | `queue`, `result` | Whether a poll returned work. A high `empty` rate means consumers are over-provisioned for the traffic |
 | `ignismq.sideline` | Counter | `queue`, `reason` | Why a message was sidelined, including `sideline_refused` |
 | `ignismq.consumer.budget.exhausted` | Counter | `queue` | A consumer handed its thread back with work still waiting |
+
+### Why a message was sidelined
+
+`ignismq.sideline` is the meter to alert on, and its `reason` is what decides who gets paged. The
+values are deliberately narrow, because they imply different fixes:
+
+| `reason` | What happened | Where to look |
+|---|---|---|
+| `rejected` | The handler ran and returned `false` | The handler's own logic; usually a business outcome rather than a fault |
+| `exception` | The handler ran and threw | A bug in the handler |
+| `unreadable` | The stored payload could not be turned into the consumer's message type, so **the handler never saw this message**. The rest of its batch is unaffected | Publisher and consumer disagreeing about the format - most often a partial deploy |
+| `timeout` | The handler exceeded `handlerTimeoutInMins`. The thread was released but the handler may still be running | Handler latency, and anything it calls downstream |
+| `saturated` | No handler thread was free, so the batch was refused without running | `workerThreads`, and the pool saturation meters below |
+| `sideline_refused` | The sideline write itself failed. **Nothing moved** - the payload is still in the main queue awaiting the sweeper | Storage health. This one is not a completed sideline |
 
 !!! important "What `ignismq.consume` does not include"
     It starts **after** `fire()` has returned a batch, so it excludes the poll that claimed the

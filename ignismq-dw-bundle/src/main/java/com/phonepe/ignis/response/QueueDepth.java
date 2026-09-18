@@ -14,16 +14,13 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console.response;
-
-import java.util.Map;
-
+package com.phonepe.ignis.response;
 /**
- * One meter as this process currently holds it.
- *
- * @param measurements statistic name to value, as Micrometer reports them. A counter has one, a
- *                     timer has several.
+ * Totals across every shard of a queue, main and sideline.
  */
-public record MeterSample(String name, Map<String, String> tags, String type,
-                          Map<String, Double> measurements) {
+public record QueueDepth(long published,
+                         long consumed,
+                         long unconsumed,
+                         long sidelined,
+                         long shovelled) {
 }

@@ -41,7 +41,8 @@ public final class QueueMeters {
 
     private static final String[] SIDELINE_REASONS = {
             IgnisMetrics.REASON_REJECTED, IgnisMetrics.REASON_EXCEPTION, IgnisMetrics.REASON_TIMEOUT,
-            IgnisMetrics.REASON_SATURATED, IgnisMetrics.REASON_SIDELINE_REFUSED};
+            IgnisMetrics.REASON_SATURATED, IgnisMetrics.REASON_UNREADABLE,
+            IgnisMetrics.REASON_SIDELINE_REFUSED};
     private static final String[] HANDLER_OUTCOMES = {
             IgnisMetrics.SUCCESS, IgnisMetrics.FAILURE, IgnisMetrics.REASON_TIMEOUT,
             IgnisMetrics.REASON_SATURATED};

@@ -127,7 +127,9 @@ delay; a handler returning `false`, throwing, or exceeding its timeout sends the
 sideline queue - except for exceptions listed in `getIgnorableExceptions()`, which delete the
 message instead.
 
-Shut down with `manager.stop()`, which stops every consumer, shovel and sweeper this manager owns.
+Shut down with `manager.getTaskInitializer().stop()` followed by `manager.stop()`. The first releases
+leader election and the sweeper; the second stops the schedulers and the storage client. `stop()` alone
+leaves the leader elector's thread and its ZooKeeper selector running.
 
 ### Dropwizard Bundle
 
@@ -176,6 +178,10 @@ public class MyApplication extends Application<MyConfiguration> {
 ## Documentation
 
 Full documentation is available at [https://phonepe.github.io/ignisMQ/](https://phonepe.github.io/ignisMQ/).
+
+Worth reading before you adopt it: the [Roadmap](docs/docs/roadmap.md) states plainly what IgnisMQ
+does **not** do — no fan-out to independent consumers, no retry with backoff, no delayed delivery,
+at-least-once rather than exactly-once — and why.
 
 ## Building
 

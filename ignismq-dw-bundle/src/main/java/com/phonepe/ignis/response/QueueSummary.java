@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console.response;
+package com.phonepe.ignis.response;
 /**
  * One queue as storage describes it, plus whether this process is one of the instances serving it.
  * <p>

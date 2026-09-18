@@ -21,8 +21,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import com.phonepe.aerospike.config.AerospikeHost;
 import com.phonepe.ignis.common.MessageHandler;
-import com.phonepe.ignis.console.ConsoleConfiguration;
-import com.phonepe.ignis.console.ConsoleResource;
+import com.phonepe.ignis.config.ConsoleConfiguration;
+import com.phonepe.ignis.resource.IgnisMQResource;
+import com.phonepe.ignis.exception.IgnisMQExceptionMapper;
 import com.phonepe.ignis.common.TimeToLive;
 import com.phonepe.ignis.common.TimeUnit;
 import com.phonepe.ignis.request.CreateQueueRequest;
@@ -170,7 +171,7 @@ class IgnisMQBundleMetricsTest {
 
         bundle.run(new AppConfig("SERVICE"), environment);
 
-        Mockito.verify(environment.jersey()).register(Mockito.any(ConsoleResource.class));
+        Mockito.verify(environment.jersey()).register(Mockito.any(IgnisMQResource.class));
         // Without this feature @RolesAllowed is inert and every mutation would be wide open.
         Mockito.verify(environment.jersey()).register(RolesAllowedDynamicFeature.class);
     }
@@ -183,9 +184,24 @@ class IgnisMQBundleMetricsTest {
 
         bundle.run(new AppConfig("SERVICE"), environment);
 
-        Mockito.verify(environment.jersey(), Mockito.never()).register(Mockito.any(ConsoleResource.class));
+        Mockito.verify(environment.jersey(), Mockito.never()).register(Mockito.any(IgnisMQResource.class));
         Mockito.verify(environment.servlets(), Mockito.never())
                 .addServlet(Mockito.anyString(), Mockito.any(javax.servlet.Servlet.class));
+    }
+
+    /**
+     * The mapper is the library's, not the console's: an application that turns the console off still
+     * calls ignisMQ from its own resources, and its callers are the ones seeing a 500 today.
+     */
+    @Test
+    @DisplayName("the exception mapper is registered even with the console disabled")
+    void theExceptionMapperIsRegisteredIndependentlyOfTheConsole() throws Exception {
+        final Environment environment = environment();
+        bundle = createBundle(true, ConsoleConfiguration.builder().enabled(false).build());
+
+        bundle.run(new AppConfig("SERVICE"), environment);
+
+        Mockito.verify(environment.jersey()).register(Mockito.any(IgnisMQExceptionMapper.class));
     }
 
     /**
@@ -199,7 +215,7 @@ class IgnisMQBundleMetricsTest {
 
         bundle.run(new AppConfig("SERVICE"), environment);
 
-        Mockito.verify(environment.jersey()).register(Mockito.any(ConsoleResource.class));
+        Mockito.verify(environment.jersey()).register(Mockito.any(IgnisMQResource.class));
         Mockito.verify(environment.servlets(), Mockito.never())
                 .addServlet(Mockito.anyString(), Mockito.any(javax.servlet.Servlet.class));
     }

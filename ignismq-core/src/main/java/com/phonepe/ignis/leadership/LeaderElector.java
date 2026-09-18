@@ -16,8 +16,6 @@
 
 package com.phonepe.ignis.leadership;
 
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.phonepe.ignis.common.LoadBalancer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
@@ -55,8 +53,8 @@ public class LeaderElector implements LeaderSelectorListener {
     private final CuratorFramework curatorFramework;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final Map<Integer, Set<LoadBalancer>> workers;
-    private Map<Integer, AtomicBoolean> isRunning = Maps.newHashMap();
-    private Set<String> knownMembers = Sets.newHashSet();
+    private Map<Integer, AtomicBoolean> isRunning = new HashMap<>();
+    private Set<String> knownMembers = new HashSet<>();
     private LeaderSelector leaderSelector;
 
     private final Watcher memberWatcher = event -> {
@@ -145,7 +143,8 @@ public class LeaderElector implements LeaderSelectorListener {
 
     public void start() throws Exception {
         workers.keySet().forEach(worker -> isRunning.put(worker, new AtomicBoolean(false)));
-        scheduler.scheduleWithFixedDelay(() -> updateState(false), INITIAL_DELAY_IN_SEC, DELAY_IN_SEC, TimeUnit.SECONDS);
+        scheduler.scheduleWithFixedDelay(() -> updateState(false), INITIAL_DELAY_IN_SEC, DELAY_IN_SEC,
+                TimeUnit.SECONDS);
         log.info("[{}] Watching reader path: {}", clientId, memberPathPrefix());
         final String leaderPath = String.format("/%s-ignis-workers/%s/loadbalancer-leader", clientId, clientId);
         this.leaderSelector = new LeaderSelector(curatorFramework, leaderPath, this);
@@ -223,7 +222,7 @@ public class LeaderElector implements LeaderSelectorListener {
         try {
             members = curatorFramework.getChildren().usingWatcher(memberWatcher).forPath(memberPath);
             log.debug("Members: " + members);
-            if (Sets.symmetricDifference(knownMembers, Sets.newHashSet(members)).isEmpty() && !force) {
+            if (knownMembers.equals(new HashSet<>(members)) && !force) {
                 log.debug("No membership changes detected");
                 return;
             }
@@ -241,7 +240,7 @@ public class LeaderElector implements LeaderSelectorListener {
             return;
         }
 
-        knownMembers = Sets.newHashSet(members);
+        knownMembers = new HashSet<>(members);
         final List<String> finalMembers = members;
         AtomicInteger counter = new AtomicInteger(0);
         workers.keySet().forEach(partition -> {

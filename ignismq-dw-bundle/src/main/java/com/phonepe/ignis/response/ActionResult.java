@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console.response;
+package com.phonepe.ignis.response;
 /**
- * What this process is running for one queue. Consumer and shovel counts are per-instance by
- * construction - the cluster total is the sum over instances, which no instance can see.
+ * @param scope whether the action changed this process or the whole cluster, which differs per
+ *              action and is the thing an operator most needs told.
  */
-public record InstanceQueue(String name,
-                            int consumers,
-                            int shovels,
-                            Integer shovelConcurrency,
-                            Integer shovelIntervalSeconds) {
+public record ActionResult(String queue, String action, String scope, String detail) {
 }

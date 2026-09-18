@@ -65,8 +65,8 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * <strong>Re-homing is at-least-once.</strong> A message is loaded into the sideline and only then
  * deleted from the source, so a crash between the two leaves it in both and the next pass re-homes
- * it again. That is the deliberate direction: the alternative ordering loses messages, which is what
- * B2 was.
+ * it again. That is the deliberate direction: the alternative ordering deletes the only copy of a
+ * payload whose transfer never completed, and loses it.
  * <p>
  * Stateless and safe to reuse: one instance per process, holding the collaborators every sweep
  * needs.

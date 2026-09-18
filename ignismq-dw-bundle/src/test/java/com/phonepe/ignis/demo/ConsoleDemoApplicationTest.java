@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console.demo;
+package com.phonepe.ignis.demo;
 
-import com.phonepe.ignis.console.response.ActionResult;
-import com.phonepe.ignis.console.response.QueueDetail;
-import com.phonepe.ignis.console.response.QueueSummary;
+import com.phonepe.ignis.response.ActionResult;
+import com.phonepe.ignis.response.QueueDetail;
+import com.phonepe.ignis.response.QueueSummary;
 import io.dropwizard.testing.ConfigOverride;
 import io.dropwizard.testing.junit5.DropwizardAppExtension;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
@@ -119,7 +119,7 @@ class ConsoleDemoApplicationTest {
 
     /**
      * The role check, end to end. The demo grants the role, so this is the positive half; the
-     * negative half is in {@code ConsoleResourceTest}, where no role is granted at all.
+     * negative half is in {@code IgnisMQResourceTest}, where no role is granted at all.
      */
     @Test
     void anActionRunsWhenTheRoleIsGrantedAndChangesWhatTheConsoleThenShows() {

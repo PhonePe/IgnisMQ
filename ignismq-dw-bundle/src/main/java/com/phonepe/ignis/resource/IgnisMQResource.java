@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console;
+package com.phonepe.ignis.resource;
 
 import com.phonepe.ignis.common.ShardDepth;
-import com.phonepe.ignis.console.response.ActionResult;
-import com.phonepe.ignis.console.response.InstanceMetrics;
-import com.phonepe.ignis.console.response.InstanceView;
-import com.phonepe.ignis.console.response.QueueDetail;
-import com.phonepe.ignis.console.response.QueueSummary;
+import com.phonepe.ignis.response.ActionResult;
+import com.phonepe.ignis.response.InstanceMetrics;
+import com.phonepe.ignis.response.InstanceView;
+import com.phonepe.ignis.response.Permissions;
+import com.phonepe.ignis.response.QueueDetail;
+import com.phonepe.ignis.response.QueueSummary;
+import com.phonepe.ignis.service.IgnisMQService;
 import lombok.RequiredArgsConstructor;
 
 import javax.annotation.security.RolesAllowed;
@@ -32,34 +34,20 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.SecurityContext;
 import java.util.List;
 
-/**
- * Read-only by default; everything that changes state is behind {@link #OPERATE_ROLE}.
- *
- * @author shantanu.tiwari
- */
 @Path("/ignismq/v1")
 @Produces(MediaType.APPLICATION_JSON)
 @RequiredArgsConstructor
-public final class ConsoleResource {
+public final class IgnisMQResource {
 
-    /**
-     * Role required by every mutating endpoint. Grant it from the application's own authoriser; the
-     * bundle deliberately defines no authentication, so without a {@code SecurityContext} these
-     * endpoints stay closed.
-     */
     public static final String OPERATE_ROLE = "ignismq_operate";
-
-    /**
-     * Required by deactivation, and by nothing else. Deliberately not {@link #OPERATE_ROLE}:
-     * deactivation cannot be undone by any API, so the grant that allows draining a sideline should
-     * not also allow destroying a queue.
-     */
     public static final String DEACTIVATE_ROLE = "ignismq_deactivate";
 
-    private final ConsoleService service;
+    private final IgnisMQService service;
 
     @GET
     @Path("/queues")
@@ -89,6 +77,13 @@ public final class ConsoleResource {
     @Path("/instance/metrics")
     public InstanceMetrics metrics() {
         return service.metrics();
+    }
+
+    @GET
+    @Path("/whoami")
+    public Permissions whoami(@Context final SecurityContext security) {
+        return new Permissions(security.getUserPrincipal() != null,
+                security.isUserInRole(OPERATE_ROLE), security.isUserInRole(DEACTIVATE_ROLE));
     }
 
     @POST

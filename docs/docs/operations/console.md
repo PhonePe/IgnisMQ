@@ -53,9 +53,10 @@ if you set one.
 |---|---|---|---|
 | `GET` | `/queues` | Cluster | none |
 | `GET` | `/queues/{name}` | Cluster, plus the instance view when this process serves it | none |
-| `GET` | `/queues/{name}/shards` | Cluster | none |
+| `GET` | `/queues/{name}/shards` | Instance - `409` if this process does not serve the queue | none |
 | `GET` | `/instance` | Instance | none |
 | `GET` | `/instance/metrics` | Instance | none |
+| `GET` | `/whoami` | The caller | none |
 | `POST` | `/queues/{name}/shovel` | Instance, or cluster with `intervalSeconds` | `ignismq_operate` |
 | `POST` | `/queues/{name}/sweep` | Cluster | `ignismq_operate` |
 | `POST` | `/queues/{name}/consumers` | Instance | `ignismq_operate` |
@@ -91,8 +92,8 @@ GET /ignismq/v1/queues/orders
   },
   "depth": {"published": 120, "consumed": 100, "unconsumed": 20, "sidelined": 5, "shovelled": 2},
   "shards": [
-    {"shard": "orders_0", "published": 100, "consumed": 90, "pending": 10},
-    {"shard": "orders_1", "published": 20, "consumed": 10, "pending": 10}
+    {"shard": "SHARD_0", "published": 100, "consumed": 90, "pending": 10},
+    {"shard": "SHARD_1", "published": 20, "consumed": 10, "pending": 10}
   ],
   "instance": {"name": "orders", "consumers": 4, "shovels": 1,
                "shovelConcurrency": 2, "shovelIntervalSeconds": 600}
@@ -116,8 +117,9 @@ Nothing routes by content. (Ordering-key routing is a candidate feature, not a c
 So an even spread is the expected shape, and this view is for the opposite question: **is any shard
 sitting far from where random assignment would have put it?** A shard well above the others is one
 whose consumers are not keeping up with it — most often because messages on it are being retried,
-sidelined slowly, or handled by something that has stalled. The dashboard marks a shard above three
-times the even share, and states the even share so you can judge it yourself.
+sidelined slowly, or handled by something that has stalled. The dashboard marks a shard above
+`max(3 x even share, even share + 50)`, and states the even share so you can judge it yourself. The
+absolute floor stops a nearly empty queue flagging ordinary noise as an outlier.
 
 What it is **not** evidence for is the shard count. Whether eight shards or thirty-two is right is a
 question about contention on each shard's pointer counters and about discovery fan-out, and it is
@@ -199,6 +201,29 @@ URL.
 A `401` or `403` says which of the two situations you are in: whether credentials were sent at all, or
 whether they were sent and simply lack the role.
 
+### Asking what the caller may do
+
+`GET /ignismq/v1/whoami` answers with the two grants, so the dashboard can disable an action rather
+than offer it and let it fail:
+
+```json
+{
+  "authenticated": true,
+  "operate": true,
+  "deactivate": false
+}
+```
+
+`authenticated` is reported separately from the grants because the remedies differ: `false` means no
+credentials arrived and a token is needed, while `true` with no grants means the credentials are fine
+and a role is missing. The dashboard puts exactly that sentence in the disabled button's tooltip.
+
+**It reports capability, never identity.** No principal name, no role list, nothing beyond what the
+caller could already discover by attempting one `POST` - which is why it is open like the other reads.
+
+It is a **courtesy, not a control**. Every mutating endpoint still enforces its own role server-side,
+and if this call fails the dashboard disables every action rather than assuming permission.
+
 Grant the role from your own authentication. Whatever supplies it, it has to run at
 `Priorities.AUTHENTICATION`: `RolesAllowedDynamicFeature` evaluates at `Priorities.AUTHORIZATION`, so
 a filter left at the default user priority populates the `SecurityContext` only after the role check
@@ -219,7 +244,12 @@ public final class OperatorRoleFilter implements ContainerRequestFilter {
 
             @Override
             public boolean isUserInRole(final String role) {
-                return ConsoleResource.OPERATE_ROLE.equals(role) && operator.mayOperateQueues();
+                // Both roles are answered here. Checking only OPERATE_ROLE would leave
+                // deactivation permanently denied, which is safe but silent.
+                if (IgnisMQResource.OPERATE_ROLE.equals(role)) {
+                    return operator.mayOperateQueues();
+                }
+                return IgnisMQResource.DEACTIVATE_ROLE.equals(role) && operator.mayDeactivateQueues();
             }
 
             @Override
@@ -298,7 +328,7 @@ in-memory stand-in for the manager, so there is nothing to install and no Aerosp
 ```bash
 mvn -B -pl ignismq-dw-bundle test-compile
 mvn -B -pl ignismq-dw-bundle exec:java -Dexec.classpathScope=test \
-  -Dexec.mainClass=com.phonepe.ignis.console.demo.ConsoleDemoApplication -Dexec.args=server
+  -Dexec.mainClass=com.phonepe.ignis.demo.ConsoleDemoApplication -Dexec.args=server
 ```
 
 Then open <http://localhost:8080/ignisConsole/>.

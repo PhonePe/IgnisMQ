@@ -30,7 +30,7 @@ IgnisMQ is a Java library that provides reliable asynchronous message processing
 
     ---
 
-ZooKeeper-based **leader election** picks the instance that assigns the sweep partition; the assigned instance - leader or not - is the one that sweeps. Exactly one sweeps at a time.
+    ZooKeeper-based **leader election** picks the instance that assigns the sweep partition; the assigned instance - leader or not - is the one that sweeps. Exactly one sweeps at a time.
 
 -   :material-tune:{ .lg .middle } **Configurable Everything**
 
@@ -207,6 +207,7 @@ flowchart TD
 | [Configuration](api/configuration.md) | All configuration options with defaults and constraints |
 | [Error Codes](api/error-codes.md) | Complete error catalog with causes and solutions |
 | [Monitoring Runbook](operations/monitoring.md) | What to alert on, what each alert means, what to check |
-| [Console](operations/console.md) | The bundled read-only console, per-shard depth, and the guarded actions |
+| [Console](operations/console.md) | The bundled console: read views, per-shard depth, and the role-guarded actions |
 | [Aerospike Backend](backends/aerospike.md) | Data model, indexing, sweep internals |
+| [Roadmap](roadmap.md) | What IgnisMQ does **not** do yet, and why |
 | [References](references.md) | Academic and industry work that inspired IgnisMQ's design |

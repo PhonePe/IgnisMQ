@@ -14,13 +14,9 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console.response;
-/**
- * Totals across every shard of a queue, main and sideline.
- */
-public record QueueDepth(long published,
-                         long consumed,
-                         long unconsumed,
-                         long sidelined,
-                         long shovelled) {
+package com.phonepe.ignis.demo;
+
+import io.dropwizard.Configuration;
+
+public class ConsoleDemoConfiguration extends Configuration {
 }

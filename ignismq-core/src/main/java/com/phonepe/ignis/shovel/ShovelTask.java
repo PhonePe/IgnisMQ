@@ -16,7 +16,6 @@
 
 package com.phonepe.ignis.shovel;
 
-import com.codepoetics.protonpack.StreamUtils;
 import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.metric.QueueMeters;
 import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
@@ -60,23 +59,24 @@ public final class ShovelTask implements Runnable {
         String outcome = IgnisMetrics.SUCCESS;
         try {
             log.debug("Created shovel task for queue '{}'", magazine.getMagazineIdentifier());
-            StreamUtils.takeWhile(
-                    Stream.generate(this::fireFromMagazine),
-                    Objects::nonNull
-            ).forEach(magazineData -> {
-                final String message = magazineData.getData();
-                if (transferred(message)) {
-                    meters.shovelMoved();
-                    sidelineMagazine.delete(magazineData);
-                } else {
-                    // Neither magazine holds a fresh copy, so the record fired out of the sideline is
-                    // the only one left. Leave it: it stays below the sideline fire pointer, which is
-                    // exactly where the sideline sweep looks, and the transfer is retried from there.
-                    log.error("Could not move message into the main magazine nor return it to the " +
-                                    "sideline for queue '{}'. Leaving the source record for the sweeper",
-                            magazine.getMagazineIdentifier());
-                }
-            });
+            Stream.generate(this::fireFromMagazine)
+                    .takeWhile(Objects::nonNull)
+                    .forEach(magazineData -> {
+                        final String message = magazineData.getData();
+                        if (transferred(message)) {
+                            meters.shovelMoved();
+                            sidelineMagazine.delete(magazineData);
+                        } else {
+                            // Neither magazine holds a fresh copy, so the record fired out of the
+                            // sideline is the only one left. Leave it: it stays below the sideline
+                            // fire pointer, which is exactly where the sideline sweep looks, and the
+                            // transfer is retried from there.
+                            log.error("Could not move message into the main magazine nor return it to "
+                                            + "the sideline for queue '{}'. Leaving the source record "
+                                            + "for the sweeper",
+                                    magazine.getMagazineIdentifier());
+                        }
+                    });
             log.debug("Shovel task completed for queue '{}'", magazine.getMagazineIdentifier());
         } catch (Exception e) {
             outcome = IgnisMetrics.FAILURE;
@@ -103,7 +103,8 @@ public final class ShovelTask implements Runnable {
     }
 
     private void logExceptionInFiring(Exception e) {
-        log.error("Magazine exception in shovel task of queue {}. Scheduling new task with some delay if autoDelete is set",
+        log.error("Magazine exception in shovel task of queue {}. Scheduling new task with some delay "
+                        + "if autoDelete is set",
                 magazine.getMagazineIdentifier(), e);
     }
 

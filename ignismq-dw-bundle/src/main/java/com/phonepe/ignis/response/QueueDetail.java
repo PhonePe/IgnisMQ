@@ -14,9 +14,19 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console.demo;
+package com.phonepe.ignis.response;
+import com.phonepe.ignis.common.ShardDepth;
 
-import io.dropwizard.Configuration;
+import java.util.List;
 
-public class ConsoleDemoConfiguration extends Configuration {
+/**
+ * @param depth      null when this process does not hold the queue: depth is read through the live
+ *                   magazines, which only an instance serving the queue has.
+ * @param shards     null for the same reason.
+ * @param instance   null when this process does not hold the queue.
+ */
+public record QueueDetail(QueueSummary queue,
+                          QueueDepth depth,
+                          List<ShardDepth> shards,
+                          InstanceQueue instance) {
 }

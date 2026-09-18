@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console.response;
+package com.phonepe.ignis.response;
 import java.util.List;
 
 /**

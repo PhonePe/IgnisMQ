@@ -207,11 +207,13 @@
     setToken(el('token-input').value.trim());
     el('token-panel').classList.add('hidden');
     toast('ok', 'Token saved', 'Sent with every request from this tab.');
+    refreshPermissions();
   });
   el('token-clear').addEventListener('click', () => {
     el('token-input').value = '';
     setToken('');
     toast('ok', 'Token cleared', 'Requests now rely on cookies alone.');
+    refreshPermissions();
   });
   setToken(token());
 
@@ -334,7 +336,7 @@
       regardless.</div>`;
     const config = [
       ['state', queue.active ? 'active' : 'deactivated'],
-      ['shards', queue.shards],
+      ['configured shards', queue.shards],
       ['concurrency', queue.concurrency],
       ['handler', queue.messageHandlerType],
       ['handler timeout', duration(queue.handlerTimeoutMillis)],
@@ -401,15 +403,53 @@
       <tbody>${rows}</tbody></table>`;
   }
 
+  let permissions = {authenticated: false, operate: false, deactivate: false};
+  let lastDetail = null;
+
+  /**
+   * Asks the server what this caller may do, so an action they cannot perform is disabled with a
+   * stated reason rather than offered and then refused. A failure here grants nothing: the buttons
+   * stay closed and the server remains the only thing that actually decides.
+   */
+  async function refreshPermissions() {
+    try {
+      permissions = await json(`${api}/whoami`);
+    } catch (ignored) {
+      permissions = {authenticated: false, operate: false, deactivate: false};
+    }
+    if (lastDetail) {
+      setActionState(lastDetail);
+    }
+  }
+
+  function missingRoleReason(role) {
+    return permissions.authenticated
+      ? `Your credentials do not carry the ${role} role.`
+      : `No credentials were sent. If this application uses a bearer token, set one with the Token button.`;
+  }
+
+  /**
+   * Two independent reasons an action is unavailable, and the button says which: the queue's state,
+   * and the caller's roles. Disabling on the role is a courtesy - every endpoint is still enforced
+   * server-side.
+   */
   function setActionState(detail) {
+    lastDetail = detail;
     const adopted = Boolean(detail.instance);
     const active = detail.queue.active;
-    el('add-consumers').disabled = !adopted;
-    el('stop-consumers').disabled = !adopted;
-    el('shovel').disabled = !adopted;
-    el('schedule-shovel').disabled = !active;
-    el('sweep').disabled = !active;
-    el('deactivate').disabled = !active;
+    const gate = (id, allowedByState, stateReason, granted, role) => {
+      const node = el(id);
+      node.disabled = !allowedByState || !granted;
+      node.title = !allowedByState ? stateReason : (granted ? '' : missingRoleReason(role));
+    };
+    const notHere = 'This instance does not serve this queue.';
+    const inactive = 'This queue is not active.';
+    gate('add-consumers', adopted, notHere, permissions.operate, 'ignismq_operate');
+    gate('stop-consumers', adopted, notHere, permissions.operate, 'ignismq_operate');
+    gate('shovel', adopted, notHere, permissions.operate, 'ignismq_operate');
+    gate('schedule-shovel', active, inactive, permissions.operate, 'ignismq_operate');
+    gate('sweep', active, inactive, permissions.operate, 'ignismq_operate');
+    gate('deactivate', active, inactive, permissions.deactivate, 'ignismq_deactivate');
   }
 
   const ACTION_BUTTONS = ['add-consumers', 'stop-consumers', 'shovel', 'schedule-shovel', 'sweep', 'deactivate'];
@@ -625,9 +665,12 @@
     el('scope').innerHTML = `<b>${esc(clientId)}</b> &middot; farm ${esc(farmId)}`;
   }
 
+  refreshPermissions();
   refreshInventory();
   refreshInstance();
   setInterval(() => {
+    // Re-asked on every cycle because a role can be revoked while the tab is open.
+    refreshPermissions();
     refreshInventory();
     if (selected) {
       loadQueue(version);

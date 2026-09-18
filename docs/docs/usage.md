@@ -35,10 +35,17 @@ Subclass `IgnisMQBundle` and implement its single abstract method, which returns
 ```java
 public class MyIgnisMQBundle extends IgnisMQBundle<MyAppConfiguration> {
 
+    @Getter
     private CuratorFramework curatorFramework;
 
     @Override
     protected IgnisMQContext context(MyAppConfiguration config) {
+        // Built here, not in Application.run: a ConfiguredBundle's run() executes before the
+        // application's, so anything handed in afterwards is still null at this point.
+        this.curatorFramework = CuratorFrameworkFactory.newClient(
+                config.getZookeeperConnectionString(), new ExponentialBackoffRetry(1000, 3));
+        this.curatorFramework.start();
+
         return IgnisMQContext.builder()
                 .clientId(config.getClientId())
                 .farmId(config.getFarmId())
@@ -46,12 +53,13 @@ public class MyIgnisMQBundle extends IgnisMQBundle<MyAppConfiguration> {
                 .curatorFramework(curatorFramework)
                 .build();
     }
-
-    public void setCuratorFramework(CuratorFramework curatorFramework) {
-        this.curatorFramework = curatorFramework;
-    }
 }
 ```
+
+!!! danger "Build the CuratorFramework inside `context(config)`"
+    Dropwizard runs every `ConfiguredBundle.run()` **before** `Application.run()`. `context(config)` is
+    called from the bundle's `run()`, and `curatorFramework` is `@NonNull`, so a client injected from
+    `Application.run()` arrives too late and startup fails with a `NullPointerException`.
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -80,15 +88,7 @@ public class MyApplication extends Application<MyAppConfiguration> {
 
     @Override
     public void run(MyAppConfiguration config, Environment environment) throws Exception {
-        // Set up CuratorFramework before the bundle runs
-        CuratorFramework curator = CuratorFrameworkFactory.newClient(
-                config.getZookeeperConnectionString(),
-                new ExponentialBackoffRetry(1000, 3)
-        );
-        curator.start();
-        ignisMQBundle.setCuratorFramework(curator);
-
-        // Get the manager created by the bundle
+        // The bundle has already run by this point, so the manager exists and ZooKeeper is connected.
         IgnisMQManager manager = ignisMQBundle.getIgnisMQManager();
 
         // Register all message handlers BEFORE creating queues
@@ -196,8 +196,12 @@ If you're not using Dropwizard, create an `IgnisMQManager` directly.
     queue watcher, which refreshes queues every 5 minutes. Aerospike must be reachable.
 
     It does **not** start leader election or the sweeper: `getTaskInitializer().start()` does, and the
-    Dropwizard bundle calls it for you on application start. `stop()` releases everything the manager
-    owns, and leaves a `StorageClient` you supplied open.
+    Dropwizard bundle calls it for you on application start.
+
+    Shutdown mirrors that, and **`stop()` alone is not enough**: it stops the scheduler pools and the
+    storage client, but leader election and the sweeper belong to the `TaskInitializer`. Call
+    `getTaskInitializer().stop()` first, then `stop()` - which is exactly what the bundle's `Managed`
+    does. A `StorageClient` you supplied yourself is left open, since you own it.
 
 ---
 
@@ -263,6 +267,42 @@ Any Jackson-serializable Java object works as a message:
 
 ---
 
+### Publishing now, consuming later
+
+A queue created with `concurrency: 0` is **publish-only**: it accepts messages and starts nothing.
+Consumption is turned on afterwards, without recreating the queue.
+
+```java
+manager.createQueue(CreateQueueRequest.builder()
+        .name("order-events")
+        .concurrency(0)                     // accepts publishes, consumes nothing
+        .messageHandlerType("order-handler")
+        .messageExpiry(new TimeToLive(TimeUnit.DAY, 2))
+        .queueExpiry(new TimeToLive(TimeUnit.DAY, 7))
+        .build());
+
+manager.<OrderEvent>getQueue("order-events").publish(event);   // accumulates
+
+manager.increaseConsumers("order-events", 4);   // consumption starts, here and everywhere
+```
+
+`increaseConsumers` **persists the new count**, and every other instance reconciles to it on its next
+refresh pass - so this starts consumption across the deployment, not only in the process that made the
+call. `decreaseConsumers(name, n)` is the reverse, and taking it back to zero pauses consumption
+while publishes continue.
+
+!!! warning "A paused queue still expires"
+    Nothing about `concurrency: 0` suspends TTLs. Messages are deleted `messageExpiry` after they were
+    published whether or not anything ever consumed them, and the sweeper still runs. Pausing for
+    longer than `messageExpiry` loses messages.
+
+!!! note "This is the only trigger that exists today"
+    Starting consumption on a schedule, on a queue-depth threshold, or on an external event is not
+    built in - `increaseConsumers` is the hook you would drive from your own scheduler or alert. See
+    the roadmap in the project plan for where that may go.
+
+---
+
 ## 4. Implementing MessageHandler
 
 The `MessageHandler<M>` interface has three methods you must implement:
@@ -279,7 +319,7 @@ public interface MessageHandler<M> {
 |--------|-----------|---------------|----------------|
 | `handle(M)` | Each message, when the queue has **no** `batchingConfig` | Message acknowledged and deleted | Message sidelined for retry |
 | `handle(List<M>)` | Each flushed batch, when the queue **has** a `batchingConfig` | All messages in the batch acknowledged and deleted | All messages in the batch sidelined for retry |
-| `getIgnorableExceptions()` | Exception thrown during handling | — | Exceptions in this set are swallowed (message skipped, not sidelined) |
+| `getIgnorableExceptions()` | Exception thrown during handling | — | Exceptions in this set are swallowed: the message is **deleted**, not sidelined |
 
 ### Simple Handler
 
@@ -346,7 +386,7 @@ public class PaymentHandler implements MessageHandler<PaymentEvent> {
 
 ### Handler with Ignorable Exceptions
 
-Exceptions in the ignorable set are caught and swallowed — the message is **skipped** without being sidelined.
+Exceptions in the ignorable set are caught and swallowed — the message is **deleted** without being sidelined, and is never redelivered.
 
 ```java
 public class EventSyncHandler implements MessageHandler<SyncEvent> {
@@ -355,7 +395,7 @@ public class EventSyncHandler implements MessageHandler<SyncEvent> {
     public boolean handle(SyncEvent event) throws Exception {
         if (eventStore.exists(event.getEventId())) {
             throw new DuplicateEventException(event.getEventId());
-            // This exception is ignorable — message is simply skipped
+            // This exception is ignorable - the message is deleted, not sidelined
         }
         eventStore.save(event);
         return true;
@@ -382,7 +422,7 @@ public class EventSyncHandler implements MessageHandler<SyncEvent> {
 !!! info "Exception handling flow"
     When an exception is thrown during `handle()`:
 
-    1. If the exception class is in `getIgnorableExceptions()` → message is **skipped** (not sidelined)
+    1. If the exception class is in `getIgnorableExceptions()` → message is **deleted** (not sidelined, and gone for good)
     2. Otherwise → message is **sidelined** to the sideline Magazine for later retry
 
 ---
@@ -507,7 +547,7 @@ Trigger an immediate, one-time shovel that stops when the sideline is empty:
 
 ```java
 IQueue<?> queue = manager.getQueue("payment-events");
-queue.shovel(4); // 4 concurrent threads, runs once
+queue.shovel(4); // 4 concurrent one-shot tasks on the shared worker pool
 ```
 
 !!! warning "Shovel behavior"

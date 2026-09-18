@@ -224,7 +224,7 @@ public final class MagazineConsumerTask<M> implements Runnable {
                     batch.forEach(data -> sidelineThenDelete(data, IgnisMetrics.REASON_REJECTED));
                 }
             } catch (Exception e) {
-                batch.forEach(data -> handleException(data, e));
+                batch.forEach(data -> dispose(data, e, handlerFailureReason(e)));
             }
         });
     }
@@ -259,21 +259,30 @@ public final class MagazineConsumerTask<M> implements Runnable {
                 messages.add(reader.readValue(payload));
             } catch (JsonProcessingException e) {
                 records.remove();
-                handleException(record, e);
+                dispose(record, e, IgnisMetrics.REASON_UNREADABLE);
             }
         }
         return messages;
     }
 
-    private void handleException(final MagazineData<String> magazineData,
-                                 final Exception e) {
-        log.error("Exception in handling the message {}", magazineData.getData(), e);
+    /**
+     * Retires a message that failed, under the reason the <b>caller</b> chose.
+     * <p>
+     * The reason is a property of where the failure happened, not of the exception's type: a handler
+     * is free to throw a Jackson exception of its own, and that is still a handler failing rather
+     * than a payload ignisMQ could not read.
+     */
+    private void dispose(final MagazineData<String> magazineData,
+                         final Exception e,
+                         final String reason) {
+        log.error("Message from queue {} retired as {}: {}", magazine.getMagazineIdentifier(), reason,
+                magazineData.getData(), e);
         if (isExceptionIgnorable(e)) {
             meters.ignored();
             magazine.delete(magazineData);
             return;
         }
-        sidelineThenDelete(magazineData, sidelineReason(e));
+        sidelineThenDelete(magazineData, reason);
     }
 
     /**
@@ -358,7 +367,8 @@ public final class MagazineConsumerTask<M> implements Runnable {
         return Objects.isNull(batchingConfig) && messages.size() == 1;
     }
 
-    private static String sidelineReason(final Exception e) {
+    /** Why the <b>handler</b> failed. Deserialisation failures never reach here; they name themselves. */
+    private static String handlerFailureReason(final Exception e) {
         if (e instanceof HandlerTimeoutException) {
             return IgnisMetrics.REASON_TIMEOUT;
         }

@@ -14,7 +14,7 @@ Complete error code reference for IgnisMQ.
 | `AEROSPIKE_ERROR` | Aerospike failure | `AerospikeQueueService` | Network/timeout/namespace | Check connectivity, retries |
 | `INVALID_REQUEST` | Validation failed | `createQueue()` | `queueExpiry < messageExpiry`, or a TTL over the allowed maximum. **Bean-validation annotations such as `@NotBlank` are not run by `createQueue`** | Fix request |
 | `MAX_ALLOWED_CONSUMERS_EXCEEDED` | Consumer or shovel cap | `createConsumers`/`increaseConsumers`/`createShovel` | Total would exceed 100 | Reduce concurrency |
-| `INVALID_SHOVEL_TIME_INTERVAL` | Bad interval | `shovel()`/`scheduleShoveling()`/`createQueue()` | >86400, or negative | Use 0..86400 |
+| `INVALID_SHOVEL_TIME_INTERVAL` | Bad interval | `scheduleShoveling()`/`createQueue()` | >86400, or negative. `shovel(int)` passes a fixed `0` and cannot raise it | Use 0..86400 |
 | `INVALID_MESSAGE_HANDLER` | Handler not found | `createQueue`/`refreshQueues` | `messageHandlerType` not registered | Register via `initialiseMessageHandlers()` |
 | `INTERNAL_ERROR` | Unexpected error | Various | Bug | Check logs |
 
@@ -23,6 +23,44 @@ Complete error code reference for IgnisMQ.
 - Extends `RuntimeException` (unchecked)
 - Field: `ErrorCode errorCode`
 - Static `propagate()` methods
+
+## Over HTTP
+
+The Dropwizard bundle registers `IgnisMQExceptionMapper`, so an `IgnisMQException` escaping a Jersey
+resource becomes the status its cause deserves instead of a blanket `500`. The dividing line is
+whether the caller can do anything about it. Retrying a request to scale past the consumer cap will
+not help until something else changes, whereas a storage failure may well succeed on the next
+attempt.
+
+| Error Code | Status | Why |
+|---|---|---|
+| `QUEUE_NOT_FOUND` | `404` | The named queue is not there |
+| `QUEUE_ALREADY_EXISTS` | `409` | The request conflicts with what exists |
+| `MAX_ALLOWED_CONSUMERS_EXCEEDED` | `409` | Well-formed, and refused by the **current state**. Not a `400`: the same request succeeds against a queue with fewer consumers, which is exactly what `409` means |
+| `INVALID_REQUEST` | `400` | The request itself is wrong |
+| `INVALID_SHOVEL_TIME_INTERVAL` | `400` | As above |
+| `INVALID_MESSAGE_HANDLER` | `400` | As above |
+| `NOT_IMPLEMENTED` | `501` | Unreachable today |
+| `AEROSPIKE_ERROR` | `503` | Not the caller's doing, and retryable — which `503` says and `500` does not |
+| `INTERNAL_ERROR` | `500` | Ours |
+
+The body names the code, so a client can branch on it without parsing prose:
+
+```json
+{
+  "errorCode": "MAX_ALLOWED_CONSUMERS_EXCEEDED",
+  "message": "Total consumers would exceed 100"
+}
+```
+
+!!! note "A 5xx body carries no message"
+    For any `5xx` this mapper produces, the `message` is the fixed string `The request could not be completed.` and the real
+    one is logged. A storage failure's message is a driver string naming nodes and error numbers,
+    which belongs in your logs rather than in a response.
+
+The mapper is registered **whether or not the console is enabled** — the exception is the library's,
+not the console's, and an application calling IgnisMQ from its own resources is exactly the one whose
+callers see the `500` today.
 
 ## Error Handling Example
 

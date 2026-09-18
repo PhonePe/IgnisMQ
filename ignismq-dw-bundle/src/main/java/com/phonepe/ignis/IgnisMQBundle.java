@@ -17,9 +17,10 @@
 package com.phonepe.ignis;
 
 import com.codahale.metrics.CachedGauge;
-import com.phonepe.ignis.console.ConsoleConfiguration;
-import com.phonepe.ignis.console.ConsoleResource;
-import com.phonepe.ignis.console.ConsoleService;
+import com.phonepe.ignis.config.ConsoleConfiguration;
+import com.phonepe.ignis.resource.IgnisMQResource;
+import com.phonepe.ignis.service.IgnisMQService;
+import com.phonepe.ignis.exception.IgnisMQExceptionMapper;
 import com.phonepe.ignis.metric.DropwizardMagazineMetrics;
 import com.phonepe.ignis.metric.QueueStat;
 import io.dropwizard.Configuration;
@@ -68,6 +69,8 @@ public abstract class IgnisMQBundle<T extends Configuration> implements Configur
                     }
                 });
 
+        environment.jersey().register(new IgnisMQExceptionMapper());
+
         registerConsole(config, environment, context, meterRegistry);
 
         environment.lifecycle().manage(new Managed() {
@@ -99,12 +102,12 @@ public abstract class IgnisMQBundle<T extends Configuration> implements Configur
             return;
         }
         environment.jersey().register(RolesAllowedDynamicFeature.class);
-        environment.jersey().register(new ConsoleResource(new ConsoleService(ignisMQManager,
+        environment.jersey().register(new IgnisMQResource(new IgnisMQService(ignisMQManager,
                 context.getClientId(), context.getFarmId(), context.getSettings(), meterRegistry,
                 console.getCacheSeconds())));
         log.info("ignisMQ console mounted. Actions require role '{}' and deactivation requires '{}'; "
                 + "register your own authentication and grant them, or they stay closed.",
-                ConsoleResource.OPERATE_ROLE, ConsoleResource.DEACTIVATE_ROLE);
+                IgnisMQResource.OPERATE_ROLE, IgnisMQResource.DEACTIVATE_ROLE);
         if (console.isDashboardEnabled()) {
             new AssetsBundle("/ignisAssets/", DASHBOARD_PATH, "ignisIndex.html", "ignisAssets")
                     .run(config, environment);

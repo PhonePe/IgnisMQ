@@ -14,19 +14,16 @@
  * limitations under the License.
  */
 
-package com.phonepe.ignis.console.response;
-import com.phonepe.ignis.common.ShardDepth;
+package com.phonepe.ignis.response;
 
-import java.util.List;
+import java.util.Map;
 
 /**
- * @param depth      null when this process does not hold the queue: depth is read through the live
- *                   magazines, which only an instance serving the queue has.
- * @param shards     null for the same reason.
- * @param instance   null when this process does not hold the queue.
+ * One meter as this process currently holds it.
+ *
+ * @param measurements statistic name to value, as Micrometer reports them. A counter has one, a
+ *                     timer has several.
  */
-public record QueueDetail(QueueSummary queue,
-                          QueueDepth depth,
-                          List<ShardDepth> shards,
-                          InstanceQueue instance) {
+public record MeterSample(String name, Map<String, String> tags, String type,
+                          Map<String, Double> measurements) {
 }

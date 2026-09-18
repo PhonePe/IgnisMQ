@@ -16,10 +16,12 @@ still compiles, or the configuration still loads, and the behaviour is different
 | Storage | The per-message `fireTS` bin and `addFireTimestamp()` are gone |
 | Correctness | A message is no longer deleted when the transfer to the sideline failed |
 | Configuration | New `IgnisMQSettings`; new `handlerTimeoutInMins` on a queue |
-| Bundle | `IgnisMQBundle`'s five template methods collapse into one `context(T config)` |
+| Bundle | `IgnisMQBundle`'s four abstract methods and one overridable collapse into one `context(T config)` |
 | Handlers | **A queue without batching now reaches `handle(M)`.** It previously reached `handle(List<M>)` with a one-element list |
 | Limits | The consumer and shovel caps are now reachable: 100, not 99 |
 | Correctness | **A message that fails to deserialise is no longer sidelined twice**, and no longer deleted when its sideline write was refused |
+| Metrics | `ignismq.sideline` gains `reason=unreadable`, previously counted as `reason=exception` |
+| Bundle | `IgnisMQException` now maps to a **4xx** where the caller is at fault, instead of a blanket `500` |
 | Bundle | A console is mounted at `/ignismq/v1` and `/ignisConsole`. **New HTTP endpoints appear in your application** |
 
 ---
@@ -136,6 +138,7 @@ every batch on every pre-existing queue would time out instantly.
 
 ## The bundle takes a context, not five methods
 
+
 `IgnisMQBundle` had four abstract methods plus an overridable `getSettings`. It now has one:
 
 ```java
@@ -227,6 +230,56 @@ a single-message queue whose one message was unreadable — the handler is not c
 previously received an empty list.
 
 Nothing to do. If you counted on an empty `handle(List<M>)` call as a signal, it no longer arrives.
+
+---
+
+## Unreadable payloads have their own sideline reason
+
+**Silent, and it will move numbers on an existing dashboard.**
+
+`ignismq.sideline` gains a `reason` value: `unreadable`, for a payload that could not be turned into
+the consumer's message type. Previously these were counted as `reason=exception`, identical to a
+handler that threw.
+
+The two mean different things and are fixed differently — `unreadable` is publisher and consumer
+disagreeing about the format, usually a half-finished deploy, and the handler never ran at all. They
+were not separable before.
+
+**What to do:** any alert or dashboard filtering on `ignismq.sideline{reason="exception"}` will see
+its rate drop, and the difference now appears under `unreadable`. If you alert on the total, use
+`sum without (reason)` and nothing changes. Only the tag value is new; no meter was renamed and no
+behaviour changed — the same messages are sidelined, under the same transfer-then-delete rule.
+
+A handler that declares the deserialisation failure in `getIgnorableExceptions()` still has its
+message dropped without any sideline at all, exactly as before.
+
+---
+
+## `IgnisMQException` no longer always means 500
+
+**Silent, application-wide, and it will move your 5xx rate.**
+
+The bundle registers an `ExceptionMapper` for `IgnisMQException`. Previously any one of them escaping
+a Jersey resource produced a `500`; now the status follows the error code, and six of the nine codes
+are the caller's fault. Asking to scale past the consumer cap, for instance, answered `500` and now
+answers `409`.
+
+The full table is in [Error codes](api/error-codes.md#over-http). The two that matter for alerting:
+`AEROSPIKE_ERROR` becomes **`503`** rather than `500`, and `INTERNAL_ERROR` stays `500`.
+
+**What to do:**
+
+- **Alerts that count `500`s** will see the rate fall, and part of it reappear as `503`. If you alert
+  on `5xx` as a class, nothing changes. If you alert on `500` exactly, widen it.
+- **Clients that treat 4xx as permanent and 5xx as retryable now behave correctly** for these cases,
+  which is the point — but a client that blindly retried everything will now stop retrying requests
+  that cannot succeed. That is the intended change, and it is worth knowing before it happens.
+- **A 5xx body produced by this mapper no longer carries the exception's message.** It is a fixed string, and the
+  real message is logged. Anything scraping response bodies for detail should read the logs instead.
+
+**This is registered even when the console is disabled**, because the exception is the library's
+rather than the console's. To opt out entirely, do not use `IgnisMQBundle`'s registration - the mapper
+is a plain `@Provider` you can choose not to register if you build your own wiring.
 
 ---
 

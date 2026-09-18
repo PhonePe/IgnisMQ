@@ -20,7 +20,6 @@ import com.aerospike.client.AerospikeClient;
 import com.aerospike.client.Host;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.policy.*;
-import com.google.common.base.Strings;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import com.phonepe.aerospike.config.AerospikeHost;
@@ -98,14 +97,17 @@ public final class AerospikeStoreClient implements StorageClient<IAerospikeClien
         clientPolicy.scanPolicyDefault = scanPolicy;
         clientPolicy.batchPolicyDefault = batchPolicy;
         final Set<String> tlsProtocols = configuration.getTlsProtocols();
-        if (!Strings.isNullOrEmpty(configuration.getUser())
-                && !Strings.isNullOrEmpty(configuration.getPassword())) {
+        if (isPresent(configuration.getUser()) && isPresent(configuration.getPassword())) {
             clientPolicy.tlsPolicy = new TlsPolicy();
         }
         if (tlsProtocols != null && !tlsProtocols.isEmpty()) {
             clientPolicy.tlsPolicy.protocols = tlsProtocols.toArray(new String[0]);
         }
         return clientPolicy;
+    }
+
+    private static boolean isPresent(final String value) {
+        return value != null && !value.isEmpty();
     }
 
     private WritePolicy configureWritePolicy(final AerospikeConfiguration aerospikeConfiguration) {

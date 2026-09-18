@@ -23,6 +23,7 @@ import com.aerospike.client.Key;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.common.TimeToLive;
+import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.common.TimeUnit;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.exception.ErrorCode;
@@ -83,7 +84,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
         // Initialise Message handler
         Map<String, Map.Entry<Class, MessageHandler>> messageHandlerMap = new HashMap<>();
-        messageHandlerMap.put(MESSAGE_HANDLER_TYPE, new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
+        messageHandlerMap.put(MESSAGE_HANDLER_TYPE,
+                new AbstractMap.SimpleEntry<>(String.class, new TestMessageHandler()));
         ignisMQManager.initialiseMessageHandlers(messageHandlerMap);
     }
 
@@ -188,6 +190,34 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.increaseConsumers("QUEUE_1", count);
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
         Assertions.assertEquals(count + queueRequest.getConcurrency(), magazineQueue.getNoOfConsumers());
+    }
+
+    /**
+     * A queue created with no concurrency accepts publishes and runs nothing, and consumption can be
+     * turned on later without recreating it. This is the publish-now-consume-later shape, and it is
+     * pinned here because it is documented as supported rather than as an accident of validation.
+     */
+    @Test
+    public void aQueueWithNoConcurrencyPublishesWithoutConsumingUntilConsumersAreAdded() throws Exception {
+        final CreateQueueRequest request = CreateQueueRequest.builder()
+                .concurrency(0)
+                .name("QUEUE_1")
+                .messageHandlerType(MESSAGE_HANDLER_TYPE)
+                .messageExpiry(TimeToLive.builder().duration(5).timeUnit(TimeUnit.MINUTE).build())
+                .queueExpiry(TimeToLive.builder().duration(5).timeUnit(TimeUnit.MINUTE).build())
+                .batchingConfig(BatchingConfig.builder().build())
+                .build();
+        ignisMQManager.createQueue(request);
+
+        final MagazineQueue<String> queue = (MagazineQueue<String>) ignisMQManager.<String>getQueue("QUEUE_1");
+        Assertions.assertEquals(0, queue.getNoOfConsumers(), "nothing should be consuming yet");
+        Assertions.assertTrue(queue.publish("held for later"), "the queue still accepts publishes");
+
+        ignisMQManager.increaseConsumers("QUEUE_1", 2);
+
+        Assertions.assertEquals(2, queue.getNoOfConsumers());
+        Assertions.assertEquals(2, ignisMQManager.getStoredQueue("QUEUE_1").orElseThrow().getConcurrency(),
+                "the new count is persisted, so every other instance adopts it on its next refresh");
     }
 
     @Test
@@ -363,7 +393,8 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
 
     @Test
     public void invalidMessageHandlerExceptionTest() throws Exception {
-        assertIgnisError(ErrorCode.INVALID_MESSAGE_HANDLER, () -> ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", "INVALID")));
+        assertIgnisError(ErrorCode.INVALID_MESSAGE_HANDLER,
+                () -> ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", "INVALID")));
     }
 
     @Test

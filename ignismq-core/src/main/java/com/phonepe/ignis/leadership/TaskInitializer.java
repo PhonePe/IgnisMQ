@@ -16,8 +16,6 @@
 
 package com.phonepe.ignis.leadership;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.phonepe.ignis.common.LoadBalancer;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.common.MagazineRegistry;
@@ -92,7 +90,7 @@ public class TaskInitializer {
 
         final Sweeper sweeperTask = new Sweeper(queueService, clientId, storage, client, farmId,
                 metrics, magazineRegistry);
-        final Map<Integer, Set<LoadBalancer>> workers = ImmutableMap.of(1, ImmutableSet.of(sweeperTask));
+        final Map<Integer, Set<LoadBalancer>> workers = Map.of(1, Set.of(sweeperTask));
         leaderElector = new LeaderElector(clientId, curatorFramework, workers);
         leaderElector.start();
         scheduleSweeperTask(sweeperTask);

@@ -14,7 +14,7 @@ stateDiagram-v2
     Published --> Fired : magazine.fire()
     Fired --> Consumed : handler returns true
     Fired --> Sidelined : handler returns false / exception
-    Consumed --> Deleted : magazine.delete()
+    Consumed --> Deleted : magazine.deleteAll()
     Sidelined --> Deleted : magazine.delete() from main
     Sidelined --> Shoveled : ShovelTask
     Shoveled --> Published : reloaded to main magazine
@@ -30,8 +30,9 @@ stateDiagram-v2
 2. **Fire** — a consumer claims the next slot by advancing that shard's fire pointer and reading it.
    The message is now in flight, and no other consumer will see it.
 3. **Consume** — your `MessageHandler` processes it, on the handler pool, under a timeout.
-4. **Delete, or sideline then delete** — on success the record is deleted. On failure it is copied to
-   the sideline magazine **first**, and only deleted once the sideline has accepted it.
+4. **Delete, or sideline then delete** — on success the whole accepted batch is retired in one
+   `magazine.deleteAll()` call. On failure the record is copied to the sideline magazine **first**,
+   one message at a time, and only deleted once the sideline has accepted it.
 
 ```java
 // Publishing. This is the only one of the four you call yourself.
@@ -58,13 +59,13 @@ Sidelining is IgnisMQ's mechanism for isolating messages that could not be proce
 flowchart TD
     Fire["magazine.fire()"] --> Deser["Deserialize JSON → M"]
     Deser --> Call["handler.handle(message)"]
-    Call -->|returns true| Delete["magazine.delete()"]
+    Call -->|returns true| Delete["magazine.deleteAll()<br/>the whole accepted batch, one call"]
     Call -->|returns false| Sideline["sidelineMagazine.load()"]
-    Sideline --> Delete
+    Sideline --> DeleteOne["magazine.delete()<br/>per message"]
     Call -->|throws exception| Check{"Is exception<br/>ignorable?"}
-    Check -->|Yes| Delete
+    Check -->|Yes| DeleteOne
     Check -->|No| Sideline2["sidelineMagazine.load()"]
-    Sideline2 --> Delete
+    Sideline2 --> DeleteOne
 ```
 
 ### Decision logic in `MagazineConsumerTask`

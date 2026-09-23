@@ -505,6 +505,13 @@ public class AnalyticsHandler implements MessageHandler<AnalyticsEvent> {
 !!! tip "When to use batching"
     Batching is most beneficial when the per-message overhead is high (e.g., database round-trips, HTTP calls). For simple in-memory processing, single-message consumption is typically sufficient.
 
+    **Batching also reduces IgnisMQ's own storage cost**, independently of what your handler does.
+    An accepted batch is deleted in **one** round trip rather than one per message, so the Aerospike
+    work per message drops from four calls to `3 + 1/maxBatchSize`. Measured on the
+    [benchmark](benchmark.md) at `maxBatchSize=10`, that was **+22% to +49% drain throughput** and
+    22% fewer Aerospike calls. So a cheap handler can still be worth batching — though a batch is
+    also all-or-nothing on failure, which is the trade to weigh against it.
+
 ---
 
 ## 6. Shoveling Configuration

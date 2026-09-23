@@ -90,9 +90,9 @@ public class ShovelTaskTest {
     }
 
     /**
-     * B2: the source record fired out of the sideline is the last copy of the message. If it could
-     * not be moved into the main magazine and could not be put back on the sideline either, deleting
-     * it destroys the message.
+     * Transfer then delete: the source record fired out of the sideline is the last copy of the
+     * message. If it could not be moved into the main magazine and could not be put back on the
+     * sideline either, deleting it destroys the message.
      */
     @Test
     public void testShovelKeepsSourceRecordWhenLoadAndReloadBothFail() {
@@ -110,7 +110,7 @@ public class ShovelTaskTest {
     }
 
     /**
-     * B2: same contract when the fallback reload throws rather than returning false. Against
+     * The same contract when the fallback reload throws rather than returning false. Against
      * Magazine 2's Aerospike storage this is the reachable failure mode; the boolean rarely is.
      */
     @Test

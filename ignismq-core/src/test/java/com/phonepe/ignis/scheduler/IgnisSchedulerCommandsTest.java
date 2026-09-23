@@ -122,10 +122,6 @@ public class IgnisSchedulerCommandsTest {
         assertEquals(base, scheduler.corePoolSize());
     }
 
-    /**
-     * C5's stated requirement: no scheduler thread may survive {@code stop()}. A task blocked on a
-     * long sleep is interrupted rather than waited out.
-     */
     @Test
     public void testStopLeavesNoThreadsRunning() throws Exception {
         scheduler = new IgnisSchedulerCommands();

@@ -118,6 +118,7 @@ classDiagram
         +load(T data) boolean
         +fire() MagazineData~T~
         +delete(MagazineData~T~ magazineData)
+        +deleteAll(Collection~MagazineData~T~~ magazineData)
     }
 
     class MagazineConsumerTask~M~ {
@@ -306,14 +307,14 @@ sequenceDiagram
 
     alt Handler returns true
         H-->>CT: true
-        CT->>M: delete(record)
-        M->>MS: delete(slot)
-        MS->>AS: delete(key)
+        CT->>M: deleteAll(batch)
+        M->>MS: deleteAll(slots)
+        MS->>AS: one batched delete, or one delete per key<br/>when the batch holds a single record
     else Returns false, throws, times out, or the pool is saturated
         H-->>CT: failure
         CT->>CT: sidelineMagazine.load(payload)
         alt Sideline accepted it
-            CT->>M: delete(record)
+            CT->>M: delete(record), one at a time
         else Sideline refused it
             CT->>CT: leave the record for the sweeper
         end

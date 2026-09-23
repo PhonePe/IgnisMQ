@@ -140,8 +140,8 @@ public class QueueSweeperTest extends AerospikeTestBase {
     }
 
     /**
-     * B2, still the rule: a message may only be deleted from where it is once it demonstrably exists
-     * somewhere else.
+     * Transfer then delete, still the rule: a message may only be deleted from where it is once it
+     * demonstrably exists somewhere else.
      */
     @Test
     public void testSweepKeepsSourceWhenSidelineRefusesTheMessage() {
@@ -232,7 +232,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
     }
 
     /**
-     * B3: the shard loop is now Magazine's own persisted count rather than ignisMQ's stored one, so
+     * The shard loop uses Magazine's own persisted count rather than ignisMQ's stored one, so
      * the two can no longer disagree and skip whole shards. An unsharded magazine reports one shard
      * and keys its records without a shard fragment; the sweeper must follow it rather than the
      * queue record, which here claims eight.
@@ -278,11 +278,12 @@ public class QueueSweeperTest extends AerospikeTestBase {
         sweepTwice(queue, entity, magazine, sideline);
 
         assertNothingToFire(sideline);
-        assertEquals(Long.valueOf(3L), reload(queue).getSweepPointers().get("SHARD_0"), "progress must move past a range that held nothing");
+        assertEquals(Long.valueOf(3L), reload(queue).getSweepPointers().get("SHARD_0"),
+                "progress must move past a range that held nothing");
     }
 
     /**
-     * C7: the manager already holds a live pair for every queue this process serves, so the sweeper
+     * The manager already holds a live pair for every queue this process serves, so the sweeper
      * uses those rather than constructing a throwaway pair per pass. Building its own also builds a
      * fresh checkpoint-claim map, which re-issues a write per shard the consumers already made.
      */

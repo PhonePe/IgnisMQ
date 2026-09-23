@@ -9,7 +9,7 @@ and **where time goes inside the consume path**.
 | Does the handler handoff need removing? | **No.** 7.6 µs, flat to 50 consumers — about 0.2% of the message path |
 | Does the overdue-task gauge need to be O(1)? | **No.** 2.1 µs at 50 tasks, scraped once per interval |
 | Do idle consumers need a backoff? | **Not for storage cost.** Idle Aerospike traffic is already flat in consumer count |
-| Is the per-message delete worth batching? | **Yes — the one live item.** 24.75% of the per-message Aerospike work |
+| Is the per-message delete worth batching? | **Yes, and it shipped.** It was 24.75% of the per-message Aerospike work; batching it is worth **+22% to +49% throughput** at `batchSize=10` |
 | Is the instrumentation worth removing? | **Not measurable.** Well inside fork-to-fork noise |
 
 !!! warning "One laptop, one Aerospike container, a synthetic drain"
@@ -225,7 +225,7 @@ orders of magnitude below the path they were supposed to be slowing.
 | **Handler handoff** | 7.6 µs, flat 1→50 consumers. Inline call is 12 ns | **Keep.** ~0.2% of the message path. The executor's hard cap on concurrent handlers costs almost nothing |
 | **Overdue-task gauge** | 702 ns at 1 task → 2,126 ns at 50. O(n) confirmed, ~30 ns/task | **Keep.** 2 µs per scrape, once per scrape interval |
 | **Idle poll floor** | 0.93 empty polls/consumer/s — the 1-second period, confirmed | **Keep.** See below |
-| **Per-message delete** | 782.6 µs against 2,379.4 µs for `fire` | **Change it.** 24.75% of the per-message Aerospike work |
+| **Per-message delete** | 782.6 µs against 2,379.4 µs for `fire` | **Changed, and measured.** Was 24.75% of the per-message Aerospike work; batching it gave +22% to +49% throughput |
 
 ### The delete is the one worth acting on
 
@@ -250,11 +250,63 @@ through the real consumer, this one reports 4.004 driving Magazine directly. Two
 instruments agreeing to within 0.01 attempts is the evidence that neither is miscounting.
 
 A quarter of the storage cost of consuming a message is spent retiring it, one round trip at a time.
-**The fix is a batched delete, and it needs Magazine to expose one.** No delay is involved: the
-deletes are already issued back-to-back immediately after the handler returns for the whole batch,
-so collapsing them into a single call removes round trips from a burst that is already happening.
-It pays only where batching is enabled — at the default of one message per delivery there is nothing
-to batch.
+**The fix is a batched delete, and it has since been built and measured.** Magazine 2.0 exposes
+`deleteAll(Collection<MagazineData<T>>)` — one round trip for the whole batch on the Aerospike
+backend — and the consumer now retires an accepted batch through it instead of deleting message by
+message. No delay is involved: the deletes were already issued back-to-back immediately after the
+handler returned for the whole batch, so collapsing them into a single call removes round trips from
+a burst that is already happening. The delete batch *is* the delivery batch; nothing accumulates
+across deliveries.
+
+### What batching the delete actually bought
+
+![Batched delete: drain throughput, and attempts per message against batch size](assets/batch-delete.svg)
+
+Same instrument, same machine, re-run after the change. First, driving Magazine directly, varying
+only how the fired records are retired:
+
+| Retirement | Attempts/msg | `delete` µs/msg | delete share of `fire`+`delete` |
+|---|---:|---:|---:|
+| `delete` per message | 4.004 | 826.8 | **24.762%** |
+| `deleteAll`, batch 2 | 3.504 | 543.2 | 17.253% |
+| `deleteAll`, batch 10 | 3.104 | 125.9 | **4.638%** |
+| `deleteAll`, batch 50 | 3.024 | 29.4 | 1.140% |
+
+**The attempt counts land exactly where arithmetic says they must**: `3.004 + 1/N`, because `fire`
+costs three calls and the batch adds one delete call per N messages. `fire` itself stays flat at
+2,535–2,559 µs across all four, which is the control — only the retirement changed. At a batch of
+10 the delete stops being a quarter of the storage path and becomes a twentieth.
+
+!!! note "This also re-validates the original measurement"
+    The `delete`-per-message row reproduces **24.762%** against the **24.75%** recorded before the
+    change — an independent re-run agreeing to just over a hundredth of a percentage point.
+
+Second, and the one that matters, through the **real** `MagazineQueue` + `MagazineConsumerTask`
+drain — 10,000 messages, 5 forks, 32 shards, `batchSize=10` against no batching:
+
+| Consumers | Unbatched msg/s | Batched msg/s | Throughput | Attempts/delivery |
+|---:|---:|---:|---:|---|
+| 1 | 302.2 | 368.7 | **+22.0%** | 4.007 → 3.107 |
+| 4 | 792.6 | 1,029.4 | **+29.9%** | 4.008 → 3.108 |
+| 8 | 1,238.5 | 1,649.5 | **+33.2%** | 4.008 → 3.109 |
+| 16 | 1,768.2 | 2,591.2 | **+46.5%** | 4.008 → 3.110 |
+| 32 | 2,499.6 | 3,713.9 | **+48.6%** | 4.011 → 3.113 |
+| 50 | 2,972.9 | 3,933.3 | **+32.3%** | 4.013 → 3.116 |
+
+**Between +22% and +49% more throughput, median +32.7%**, for a change that removes no work other
+than round trips. Total Aerospike calls for a 10,000-message drain fall from ~40,083 to ~31,094, a
+**22.4%** reduction, and every one of the 60 runs delivered all 10,000 messages exactly once with
+nothing sidelined.
+
+!!! warning "This pays only when batching is enabled"
+    All of the above is at `batchSize=10`. **At the default of one message per delivery there is
+    nothing to batch**: a one-record batch takes the single-key path by design, and the numbers in
+    the sections above — which were measured non-batched — are unchanged by this work. The gain is
+    available to queues that configure a `batchingConfig`, not to every queue automatically.
+
+    Note also what the batched consume path trades: `consumeMeanMicros` roughly doubles, because one
+    consume now covers ten messages. Per message it is far cheaper, which is what the throughput
+    column reports.
 
 ### Idle consumers already cost nothing in storage
 

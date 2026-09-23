@@ -56,8 +56,8 @@ import static org.mockito.Mockito.when;
  * <p>
  * All three sideline reasons look identical in the data - a message moved to the sideline - and call
  * for completely different responses: a handler rejecting work is a business outcome, a handler
- * throwing is a bug, and a handler timing out means C9's bound fired and a thread may still be
- * running. Without the {@code reason} tag an operator sees one undifferentiated rate.
+ * throwing is a bug, and a handler timing out means the handler-execution bound fired and a thread
+ * may still be running. Without the {@code reason} tag an operator sees one undifferentiated rate.
  */
 class ConsumerMetricsTest {
 
@@ -107,9 +107,9 @@ class ConsumerMetricsTest {
     }
 
     /**
-     * The one C9 shipped without a meter. A timeout is a distinct sideline reason and also its own
-     * counter, because the handler thread may still be running: this is the signal that a queue is
-     * leaking handler threads.
+     * The one sideline reason that shipped without a meter. A timeout is a distinct sideline reason
+     * and also its own counter, because the handler thread may still be running: this is the signal
+     * that a queue is leaking handler threads.
      */
     @Test
     @DisplayName("a handler that times out is counted as a timeout and sidelined as one")
@@ -120,7 +120,7 @@ class ConsumerMetricsTest {
         task(throwingHandler(null)).run();
 
         assertEquals(1.0, counter(IgnisMetrics.HANDLER_TIMEOUTS, Tags.of(IgnisMetrics.TAG_QUEUE, QUEUE)),
-                "a handler timeout must be counted, or C9's bound is invisible whether it fires or not");
+                "a handler timeout must be counted, or the bound is invisible whether it fires or not");
         assertEquals(1.0, sidelined("timeout"));
         assertEquals(0.0, sidelined("exception"),
                 "a timeout is not an ordinary exception; the operator response is different");

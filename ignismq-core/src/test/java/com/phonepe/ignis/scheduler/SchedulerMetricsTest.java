@@ -33,10 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pool saturation, which C10 shipped a knob for and no way of reading.
+ * Pool saturation, which shipped with a knob to tune it and no way of reading it.
  * <p>
  * These are the meters that make {@code workerThreads} tunable: without them the only symptom of an
- * undersized pool is latency with nothing attached to it, and the handler timeout C9 added is
+ * undersized pool is latency with nothing attached to it, and the handler-execution timeout is
  * invisible whether it fires or not.
  */
 class SchedulerMetricsTest {
@@ -137,9 +137,9 @@ class SchedulerMetricsTest {
     }
 
     /**
-     * The C10 residual, settled. An {@code Error} still stops the schedule - rescheduling through an
-     * OutOfMemoryError would loop on a condition that is not going to clear - but the defect being
-     * removed was the silence, not the stopping.
+     * The residual left by the pool-isolation work, settled. An {@code Error} still stops the
+     * schedule - rescheduling through an OutOfMemoryError would loop on a condition that is not
+     * going to clear - but the defect being removed was the silence, not the stopping.
      */
     @Test
     @DisplayName("a task killed by an Error is counted as fatal, and one that merely throws is not")

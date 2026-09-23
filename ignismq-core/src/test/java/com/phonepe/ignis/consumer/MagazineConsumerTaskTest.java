@@ -31,9 +31,11 @@ import com.phonepe.magazine.exception.MagazineException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -65,6 +67,17 @@ public class MagazineConsumerTaskTest {
         when(magazine.getMagazineIdentifier()).thenReturn("TEST_QUEUE");
     }
 
+    @SuppressWarnings("unchecked")
+    private static int messagesRetired(final Magazine<String> magazine) {
+        final ArgumentCaptor<Collection<MagazineData<String>>> batches =
+                ArgumentCaptor.forClass(Collection.class);
+        verify(magazine, atLeast(0)).deleteAll(batches.capture());
+        final ArgumentCaptor<MagazineData<String>> singles = ArgumentCaptor.forClass(MagazineData.class);
+        verify(magazine, atLeast(0)).delete(singles.capture());
+        return batches.getAllValues().stream().mapToInt(Collection::size).sum()
+                + singles.getAllValues().size();
+    }
+
     @Test
     public void testSuccessfulHandlingDeletesWithoutSidelining() {
         firesThen("msg1");
@@ -72,7 +85,7 @@ public class MagazineConsumerTaskTest {
         task(handler(true)).run();
 
         verify(sidelineMagazine, never()).load(any());
-        verify(magazine, times(1)).delete(any());
+        assertEquals(1, messagesRetired(magazine));
     }
 
     @Test
@@ -87,8 +100,9 @@ public class MagazineConsumerTaskTest {
     }
 
     /**
-     * B2: the handler rejected the message and the sideline would not take it. The record in the main
-     * magazine is the only copy left, so it must survive for the sweeper to retry.
+     * Transfer then delete: the handler rejected the message and the sideline would not take it.
+     * The record in the main magazine is the only copy left, so it must survive for the sweeper to
+     * retry.
      */
     @Test
     public void testRejectedMessageIsNotDeletedWhenSidelineLoadReturnsFalse() {
@@ -102,7 +116,7 @@ public class MagazineConsumerTaskTest {
     }
 
     /**
-     * B2: same contract when the sideline load throws, which is the reachable failure mode against
+     * The same contract when the sideline load throws, which is the reachable failure mode against
      * Magazine 2's Aerospike storage.
      */
     @Test
@@ -116,7 +130,7 @@ public class MagazineConsumerTaskTest {
     }
 
     /**
-     * B2: a handler that throws takes the same route. Previously the delete happened regardless of
+     * A handler that throws takes the same route. Previously the delete happened regardless of
      * whether the sideline had accepted the message.
      */
     @Test
@@ -276,7 +290,7 @@ public class MagazineConsumerTaskTest {
         final long elapsed = System.currentTimeMillis() - started;
 
         assertTrue(elapsed < 15_000, "a backlogged consumer must hand its thread back; ran for " + elapsed + "ms");
-        verify(magazine, atLeastOnce()).delete(any());
+        assertTrue(messagesRetired(magazine) > 0, "a backlogged consumer must still retire what it consumed");
     }
 
     /**
@@ -302,7 +316,7 @@ public class MagazineConsumerTaskTest {
 
         final int handedOver = handler.batchSizes.stream().mapToInt(Integer::intValue).sum();
         verify(magazine, times(handedOver)).fire();
-        verify(magazine, times(handedOver)).delete(any());
+        assertEquals(handedOver, messagesRetired(magazine));
     }
 
     @Test
@@ -318,6 +332,21 @@ public class MagazineConsumerTaskTest {
         assertEquals(2, handler.batches.size());
         assertEquals(List.of("msg1", "msg2"), handler.batches.get(0));
         assertEquals(List.of("msg3", "msg4"), handler.batches.get(1));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testAnAcceptedBatchIsRetiredInOneCall() {
+        when(magazine.fire()).thenReturn(data("a"), data("b"), data("c"))
+                .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
+
+        batchTask(handler(true), 3, 1).run();
+
+        final ArgumentCaptor<Collection<MagazineData<String>>> batches =
+                ArgumentCaptor.forClass(Collection.class);
+        verify(magazine, times(1)).deleteAll(batches.capture());
+        assertEquals(3, batches.getValue().size());
+        verify(magazine, never()).delete(any());
     }
 
     private MagazineConsumerTask<String> batchTask(final MessageHandler<String> handler,
@@ -463,7 +492,7 @@ public class MagazineConsumerTaskTest {
 
         verify(selfSidelining, times(4)).fire();
         verify(selfSidelining, times(1)).load(any());
-        verify(selfSidelining, times(3)).delete(any());
+        assertEquals(3, messagesRetired(selfSidelining));
     }
 
     /**
@@ -498,16 +527,16 @@ public class MagazineConsumerTaskTest {
 
         verify(selfSidelining, times(5)).fire();
         verify(selfSidelining, times(1)).load(any());
-        verify(selfSidelining, times(4)).delete(any());
+        assertEquals(4, messagesRetired(selfSidelining));
     }
 
     /**
      * Seven messages at a batch size of three: two full batches and a remainder held until the
      * batching deadline.
      * <p>
-     * C2 changed how the consumer decides it is ready. It no longer reads magazine depth first -
-     * the messages themselves are the signal - so the exact number of {@code fire()} calls is now a
-     * function of the poll interval and not something worth pinning. What the messages did is.
+     * The consumer no longer reads magazine depth to decide it is ready - the messages themselves
+     * are the signal - so the exact number of {@code fire()} calls is now a function of the poll
+     * interval and not something worth pinning. What the messages did is.
      */
     @Test
     public void testABatchedDrainSidelinesOnlyTheRejectedBatch() {
@@ -524,7 +553,7 @@ public class MagazineConsumerTaskTest {
 
         // The rejected batch is sidelined message by message; both accepted batches are deleted.
         verify(selfSidelining, times(3)).load(any());
-        verify(selfSidelining, times(7)).delete(any());
+        assertEquals(7, messagesRetired(selfSidelining));
         // Depth is never consulted: that read was one per consumer per wait, with nothing to do.
         verify(selfSidelining, never()).getMetaData();
     }
@@ -557,7 +586,7 @@ public class MagazineConsumerTaskTest {
     }
 
     /**
-     * B2: RETRIES_EXHAUSTED means the claim itself may not have completed, so there is no message
+     * RETRIES_EXHAUSTED means the claim itself may not have completed, so there is no message
      * in hand to retire - deleting anything here would destroy a record nobody has seen.
      */
     @Test
@@ -657,9 +686,10 @@ public class MagazineConsumerTaskTest {
     }
 
     /**
-     * B2's contract, on the path that bypassed it. A record the sideline would not take is left in
-     * the main magazine for the sweeper - and the rest of the batch succeeding must not delete it,
-     * because that record is the only copy of the payload left anywhere.
+     * The transfer-then-delete rule, on the path that used to bypass it. A record the sideline
+     * would not take is left in the main magazine for the sweeper - and the rest of the batch
+     * succeeding must not delete it, because that record is the only copy of the payload left
+     * anywhere.
      */
     @Test
     public void testASidelineRefusalSurvivesTheRestOfTheBatchSucceeding() {
@@ -670,7 +700,7 @@ public class MagazineConsumerTaskTest {
 
         integerBatchTask(acceptingIntegerHandler()).run();
 
-        verify(magazine, times(1)).delete(any());
+        assertEquals(1, messagesRetired(magazine));
     }
 
     private MagazineConsumerTask<Integer> integerBatchTask(final MessageHandler<Integer> handler) {

@@ -58,7 +58,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The end-to-end wiring check A1 deliberately left owed, and D8 owes back.
+ * The end-to-end wiring check the metrics rewrite deliberately left owed, and now pays back.
  * <p>
  * Every other metric test in this repository asserts against a {@code SimpleMeterRegistry} held by
  * the test itself. That proves the meters are recorded; it proves nothing about whether a real
@@ -125,7 +125,7 @@ class IgnisMQBundleMetricsTest {
 
         final Set<String> names = names(environment.metrics());
         assertTrue(names.stream().anyMatch(name -> name.contains("ignismq.queue.create")),
-                "createQueue is one of the timers A1 deleted and D8 owes back: " + names);
+                "createQueue is one of the timers the metrics rewrite dropped and now restores: " + names);
         assertTrue(names.stream().anyMatch(name -> name.contains("ignismq.publish")),
                 "the per-queue publish timer must survive the bridge: " + names);
         assertFalse(names.stream().anyMatch(name -> name.startsWith("commands.")),
@@ -155,7 +155,7 @@ class IgnisMQBundleMetricsTest {
         assertTrue(names(environment.metrics()).stream().noneMatch(name -> name.startsWith("magazine")),
                 "nothing under magazine.* may be published either, because a caller cannot switch "
                         + "off a library it does not know it depends on: " + names(environment.metrics()));
-        // The bundle's own queue-stats gauge is not part of D8's instrumentation and stays.
+        // The bundle's own queue-stats gauge is not part of the ignismq.* instrumentation and stays.
         assertNotNull(environment.metrics().getGauges().get(IgnisMQBundle.QUEUE_STATS_METRIC));
     }
 

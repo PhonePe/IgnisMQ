@@ -634,16 +634,6 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Mockito.verify(storageClient, never()).stop();
     }
 
-    /**
-     * C5: the manager owns every repeating task in the process, so stopping it must leave none of
-     * its threads running - in <em>both</em> pools, which is why this asserts on each rather than
-     * on the aggregate. A control pool that outlived stop() would keep a watcher and a sweeper
-     * running against a closed storage client.
-     * <p>
-     * Scoped to this manager's own schedulers rather than to every thread whose name looks like one.
-     * A global count is wrong here: each test in this class builds its own manager, so the JVM
-     * holds many live schedulers and the assertion would be about them rather than about stop().
-     */
     @Test
     public void testStopLeavesNoSchedulerThreadsBehind() throws Exception {
         final Field schedulersField = IgnisMQManager.class.getDeclaredField("schedulers");

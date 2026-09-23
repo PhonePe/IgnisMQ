@@ -18,7 +18,7 @@ IgnisMQ is a Java library that provides reliable asynchronous message processing
 
     ---
 
-    Backed by Aerospike — handles millions of messages per second with sub-millisecond latency. Sharded queues distribute load across the cluster.
+    Backed by Aerospike, with a consume path that costs a flat four storage operations per message however many consumers you add. Sharded queues spread load across the cluster, and throughput scales with consumers until the storage tier is the limit. See the [benchmark](benchmark.md).
 
 -   :material-shield-check:{ .lg .middle } **Reliable Delivery**
 
@@ -70,7 +70,7 @@ sequenceDiagram
             Note over M: Left in place for the sweeper<br/>- deleting would lose the only copy
         end
     else Handler returns true
-        Q->>M: magazine.delete(data)
+        Q->>M: magazine.deleteAll(batch)
     end
     
     Note over S: A shovel task runs periodically

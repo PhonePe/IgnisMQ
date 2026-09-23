@@ -213,12 +213,12 @@ public final class MagazineConsumerTask<M> implements Runnable {
             if (messages.isEmpty()) {
                 // Nothing the handler could be given. What is left carries no payload at all, so
                 // there is nothing to preserve and it is simply retired.
-                batch.forEach(magazine::delete);
+                magazine.deleteAll(batch);
                 return;
             }
             try {
                 if (Boolean.TRUE.equals(handle(messages))) {
-                    batch.forEach(magazine::delete);
+                    magazine.deleteAll(batch);
                     meters.acked(batch.size());
                 } else {
                     batch.forEach(data -> sidelineThenDelete(data, IgnisMetrics.REASON_REJECTED));

@@ -106,7 +106,7 @@
         <metrics-core.version>4.2.25</metrics-core.version>
         <slf4j.version>1.7.36</slf4j.version>
         <aerospike.client.version>6.3.1</aerospike.client.version>
-        <magazine.version>2.0.0-SNAPSHOT</magazine.version>
+        <magazine.version>2.0.0</magazine.version>
         <micrometer.version>1.14.4</micrometer.version>
         <jackson.version>2.13.5</jackson.version>
         <validation-api.version>2.0.1.Final</validation-api.version>

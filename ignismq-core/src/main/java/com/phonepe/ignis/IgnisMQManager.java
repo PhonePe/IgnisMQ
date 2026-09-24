@@ -81,7 +81,7 @@ public final class IgnisMQManager {
      */
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
                           final MeterRegistry meterRegistry, final CuratorFramework curatorFramework,
-                          final String farmId, final IgnisMQSettings settings) throws Exception {
+                          final String farmId, final IgnisMQSettings settings) {
         this(clientId, storage, mapper, meterRegistry, null, curatorFramework, farmId, settings);
     }
 
@@ -93,7 +93,7 @@ public final class IgnisMQManager {
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
                           final MeterRegistry meterRegistry, final StorageClient storageClient,
                           final CuratorFramework curatorFramework, final String farmId,
-                          final IgnisMQSettings settings) throws Exception {
+                          final IgnisMQSettings settings) {
         final IgnisMQSettings effective = Objects.isNull(settings) ? IgnisMQSettings.defaults() : settings;
         this.clientId = clientId;
         this.storage = storage;
@@ -376,25 +376,6 @@ public final class IgnisMQManager {
         queueRefresher.refresh();
     }
 
-    private IQueue<?> createQueueFromEntity(final String queueName, final QueueEntity entity) {
-        final ShovelConfig shovelConfig = entity.getShovelConcurrency() > 0
-                && entity.getShovelTimeIntervalInSecs() > 0
-                ? ShovelConfig.builder()
-                .concurrency(entity.getShovelConcurrency())
-                .timeIntervalInSecs(entity.getShovelTimeIntervalInSecs())
-                .build()
-                : null;
-        return createMagazine(queueName, entity.getShards(), entity.getMessageExpiry(),
-                entity.getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
-                entity.getConcurrency(), entity.getMessageHandlerType(), shovelConfig,
-                entity.getBatchingConfig(), entity.getSweepDuration(),
-                // Queues created before the timeout was configurable have no such bin, and read
-                // back as 0.
-                entity.getHandlerTimeout() > 0
-                        ? entity.getHandlerTimeout()
-                        : Constants.DEFAULT_HANDLER_TIMEOUT_IN_MINS * 60 * 1000L);
-    }
-
     private <M> IQueue<M> createMagazine(final String queueName,
                                          final int queueShards,
                                          final int recordTtlInSeconds,
@@ -463,7 +444,7 @@ public final class IgnisMQManager {
 
         @Override
         public void adopt(final String queueName, final QueueEntity entity) {
-            ignisMQMap.put(queueName, createQueueFromEntity(queueName, entity));
+            ignisMQMap.put(queueName, fromEntity(queueName, entity));
             queueDepthMetrics.register(queueName);
             log.info("Queue '{}' successfully created", queueName);
         }
@@ -471,6 +452,25 @@ public final class IgnisMQManager {
         @Override
         public void deactivate(final String queueName) {
             deactivateQueue(queueName);
+        }
+
+        private IQueue<?> fromEntity(final String queueName, final QueueEntity entity) {
+            final ShovelConfig shovelConfig = entity.getShovelConcurrency() > 0
+                    && entity.getShovelTimeIntervalInSecs() > 0
+                    ? ShovelConfig.builder()
+                    .concurrency(entity.getShovelConcurrency())
+                    .timeIntervalInSecs(entity.getShovelTimeIntervalInSecs())
+                    .build()
+                    : null;
+            return createMagazine(queueName, entity.getShards(), entity.getMessageExpiry(),
+                    entity.getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
+                    entity.getConcurrency(), entity.getMessageHandlerType(), shovelConfig,
+                    entity.getBatchingConfig(), entity.getSweepDuration(),
+                    // Queues created before the timeout was configurable have no such bin, and read
+                    // back as 0.
+                    entity.getHandlerTimeout() > 0
+                            ? entity.getHandlerTimeout()
+                            : Constants.DEFAULT_HANDLER_TIMEOUT_IN_MINS * 60 * 1000L);
         }
     }
 }

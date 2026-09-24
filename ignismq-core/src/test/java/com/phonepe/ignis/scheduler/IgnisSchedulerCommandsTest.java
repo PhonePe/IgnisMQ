@@ -131,22 +131,31 @@ class IgnisSchedulerCommandsTest {
     void testStopLeavesNoThreadsRunning() throws Exception {
         scheduler = new IgnisSchedulerCommands();
         final CountDownLatch started = new CountDownLatch(1);
-        scheduler.scheduleRepeating(() -> {
-            started.countDown();
-            try {
-                Thread.sleep(60_000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }, 0, 10);
-        assertTrue(started.await(5, TimeUnit.SECONDS));
+        // The task has to still be running when stop() is called, so that stop() has something to
+        // interrupt. Released in the finally rather than left to that interrupt: this test asserts
+        // the thread count reaches zero, so a task that outlived a failed interrupt must show up as
+        // a failure here and not as a thread leaking into the rest of the suite.
+        final CountDownLatch hold = new CountDownLatch(1);
+        try {
+            scheduler.scheduleRepeating(() -> {
+                started.countDown();
+                try {
+                    hold.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, 0, 10);
+            assertTrue(started.await(5, TimeUnit.SECONDS));
 
-        assertTrue(scheduler.stop(), "stop must complete within its grace period");
-        assertTrue(scheduler.isStopped());
+            assertTrue(scheduler.stop(), "stop must complete within its grace period");
+            assertTrue(scheduler.isStopped());
 
-        Awaitility.await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(50))
-                .untilAsserted(() -> assertEquals(0L, liveSchedulerThreads(),
-                        "scheduler threads must not survive stop()"));
+            Awaitility.await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(50))
+                    .untilAsserted(() -> assertEquals(0L, liveSchedulerThreads(),
+                            "scheduler threads must not survive stop()"));
+        } finally {
+            hold.countDown();
+        }
     }
 
     /**

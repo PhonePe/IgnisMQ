@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 
 import static org.mockito.Mockito.mock;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class IgnisMQBundleTest {
 
@@ -69,19 +70,24 @@ class IgnisMQBundleTest {
         final BaseStorage storage = storage();
         final CuratorFramework curator = mock(CuratorFramework.class);
 
-        Assertions.assertThrows(NullPointerException.class, () -> IgnisMQContext.builder()
+        // Only build() is left inside the lambda, so the assertion can only be satisfied by the
+        // validation under test and not by an incidental failure while assembling the builder.
+        final IgnisMQContext.IgnisMQContextBuilder builder = IgnisMQContext.builder()
                 .farmId("NB6")
                 .storage(storage)
-                .curatorFramework(curator)
-                .build());
+                .curatorFramework(curator);
+
+        Assertions.assertThrows(NullPointerException.class, builder::build);
     }
 
     @Test
     void testInitialize() {
         IgnisMQBundle<AppConfig> bundle = createBundle();
         Bootstrap<?> bootstrap = mock(Bootstrap.class);
-        // Should not throw
-        bundle.initialize(bootstrap);
+
+        assertDoesNotThrow(() -> bundle.initialize(bootstrap));
+        // initialize() is the bootstrap phase only; the manager is not built until run().
+        Assertions.assertNull(bundle.getIgnisMQManager());
     }
 
     @Test

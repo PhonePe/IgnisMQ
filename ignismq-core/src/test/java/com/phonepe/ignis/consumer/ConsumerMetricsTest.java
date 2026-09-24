@@ -65,6 +65,8 @@ class ConsumerMetricsTest {
     private final HandlerExecutor handlerExecutor = new HandlerExecutor(4);
     private Magazine<String> magazine;
     private Magazine<String> sidelineMagazine;
+    /** Holds {@link #hangingHandler()} open; released in tearDown so no handler thread outlives a test. */
+    private final CountDownLatch hold = new CountDownLatch(1);
 
     @BeforeEach
     void setUp() {
@@ -75,6 +77,10 @@ class ConsumerMetricsTest {
 
     @AfterEach
     void tearDown() {
+        // Before stop(), so a hung handler is freed by this test rather than by the interrupt that
+        // stop() issues. If interruption ever stopped working, that is a failing assertion
+        // elsewhere rather than a thread leaking into the rest of the suite.
+        hold.countDown();
         handlerExecutor.stop();
     }
 
@@ -113,7 +119,7 @@ class ConsumerMetricsTest {
         firesThen("msg");
         when(sidelineMagazine.load(any())).thenReturn(true);
 
-        task(throwingHandler(null)).run();
+        task(hangingHandler()).run();
 
         assertEquals(1.0, counter(IgnisMetrics.HANDLER_TIMEOUTS, Tags.of(IgnisMetrics.TAG_QUEUE, QUEUE)),
                 "a handler timeout must be counted, or the bound is invisible whether it fires or not");
@@ -513,11 +519,28 @@ class ConsumerMetricsTest {
 
             @Override
             public boolean handle(final List<String> messages) {
-                if (failure != null) {
-                    throw failure;
-                }
+                throw failure;
+            }
+        };
+    }
+
+    /** Blocks past {@link #HANDLER_TIMEOUT_IN_MS} so the executor's bound is the thing that fires. */
+    private MessageHandler<String> hangingHandler() {
+        return new MessageHandler<>() {
+            @Override
+            public Set<Class<?>> getIgnorableExceptions() {
+                return Collections.emptySet();
+            }
+
+            @Override
+            public boolean handle(final String message) {
+                return handle(List.of(message));
+            }
+
+            @Override
+            public boolean handle(final List<String> messages) {
                 try {
-                    Thread.sleep(HANDLER_TIMEOUT_IN_MS * 20);
+                    hold.await();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }

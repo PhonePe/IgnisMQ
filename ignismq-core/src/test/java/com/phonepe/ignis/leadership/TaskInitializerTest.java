@@ -81,12 +81,22 @@ class TaskInitializerTest extends AerospikeTestBase {
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
 
         taskInitializer.start();
+        final Object afterFirstStart = leaderElectorOf(taskInitializer);
+        assertNotNull(afterFirstStart, "start must install a leader elector");
 
-        // Calling start again should be a no-op ("Already initialised")
+        // Calling start again is a no-op: the second call must not replace the running elector.
         taskInitializer.start();
+        assertSame(afterFirstStart, leaderElectorOf(taskInitializer),
+                "a second start must not swap out the elector the first one installed");
 
-        // Stop should call leaderElector.stop()
         taskInitializer.stop();
+        assertNull(leaderElectorOf(taskInitializer), "stop must release the elector");
+    }
+
+    private static Object leaderElectorOf(final TaskInitializer taskInitializer) throws Exception {
+        final Field field = TaskInitializer.class.getDeclaredField("leaderElector");
+        field.setAccessible(true);
+        return field.get(taskInitializer);
     }
 
     @Test

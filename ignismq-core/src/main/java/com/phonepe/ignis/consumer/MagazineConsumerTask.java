@@ -133,7 +133,8 @@ public final class MagazineConsumerTask<M> implements Runnable {
         final long lingerMillis = batchingConfig.getMaxWaitTimeInSecs() * 1000L;
         final long lingerDeadline = startTime + lingerMillis;
         final long runDeadline = startTime + Math.max(lingerMillis, runBudgetMillis);
-        List<MagazineData<String>> batch = new ArrayList<>(batchingConfig.getMaxBatchSize());
+        final int maxBatchSize = batchingConfig.getMaxBatchSize();
+        List<MagazineData<String>> batch = new ArrayList<>(maxBatchSize);
 
         boolean filling = true;
         while (filling && !Thread.currentThread().isInterrupted()) {
@@ -142,35 +143,44 @@ public final class MagazineConsumerTask<M> implements Runnable {
                 batch.add(magazineData);
                 // A full batch goes now. The old code compared depth with <=, so it slept for five
                 // more seconds at exactly the moment a complete batch had become available.
-                if (batch.size() >= batchingConfig.getMaxBatchSize()) {
+                if (batch.size() >= maxBatchSize) {
                     consume(batch);
-                    batch = new ArrayList<>(batchingConfig.getMaxBatchSize());
+                    batch = new ArrayList<>(maxBatchSize);
                     // Checked here and not on every fire: a batch already in hand is finished
                     // rather than abandoned, so the budget bounds the turn without splitting a
-                    // batch the caller asked for.
-                    if (budgetExhausted(runDeadline)) {
-                        return;
-                    }
+                    // batch the caller asked for. The batch was just flushed, so stopping here
+                    // leaves nothing behind for the trailing flush to pick up.
+                    filling = !budgetExhausted(runDeadline);
                 }
             } else {
-                final long remaining = lingerDeadline - System.currentTimeMillis();
-                // Nothing pending means nothing to wait for. Lingering here would hold the thread
-                // for the whole configured wait on an idle queue, which is the opposite of what the
-                // setting is for: it bounds how long a *partial* batch may be held open, not how
-                // long an empty consumer should block.
-                if (batch.isEmpty() || remaining <= 0) {
-                    filling = false;
-                } else {
-                    // Never sleep past the deadline. A fixed five-second sleep could overshoot the
-                    // caller's stated wait by almost its whole length.
-                    Thread.sleep(Math.min(POLL_INTERVAL_IN_MS, remaining));
-                }
+                filling = linger(batch.isEmpty(), lingerDeadline);
             }
         }
 
         if (!batch.isEmpty()) {
             consume(batch);
         }
+    }
+
+    /**
+     * Waits a little for a partial batch to fill.
+     * <p>
+     * Nothing pending means nothing to wait for. Lingering on an empty batch would hold the thread
+     * for the whole configured wait on an idle queue, which is the opposite of what the setting is
+     * for: it bounds how long a <em>partial</em> batch may be held open, not how long an empty
+     * consumer should block.
+     *
+     * @return true when the caller should keep filling, false when this turn is over.
+     */
+    private boolean linger(final boolean batchEmpty, final long lingerDeadline) throws InterruptedException {
+        final long remaining = lingerDeadline - System.currentTimeMillis();
+        if (batchEmpty || remaining <= 0) {
+            return false;
+        }
+        // Never sleep past the deadline. A fixed five-second sleep could overshoot the caller's
+        // stated wait by almost its whole length.
+        Thread.sleep(Math.min(POLL_INTERVAL_IN_MS, remaining));
+        return true;
     }
 
     private boolean budgetExhausted(final long deadline) {

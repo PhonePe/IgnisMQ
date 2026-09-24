@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.*;
 
 class SweeperTest extends AerospikeTestBase {
@@ -81,7 +82,10 @@ class SweeperTest extends AerospikeTestBase {
         sweeper.activate();
         doThrow(new RuntimeException("error")).when(queueService).getQueues(true);
 
-        sweeper.run();
+        // A failing backend must not kill the sweep task: it is scheduled, so an escaping exception
+        // would cancel the schedule and stop sweeping for the life of the process.
+        assertDoesNotThrow(sweeper::run);
+        verify(queueService, times(1)).getQueues(true);
     }
 
     @Test

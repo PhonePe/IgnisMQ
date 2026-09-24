@@ -174,8 +174,9 @@ class IgnisMQManagerTest extends AerospikeTestBase {
 
     @Test
     void deactivateNonExistentQueue() {
-        // Deactivating a queue not in the map - should not throw
-        ignisMQManager.deactivateQueue("NON_EXISTENT");
+        assertDoesNotThrow(() -> ignisMQManager.deactivateQueue("NON_EXISTENT"),
+                "deactivating a queue this instance never had is a no-op, not an error");
+        assertIgnisError(ErrorCode.QUEUE_NOT_FOUND, () -> ignisMQManager.getQueue("NON_EXISTENT"));
     }
 
     @Test
@@ -341,7 +342,7 @@ class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    void invalidQueueExpiryExceptionTest() throws Exception {
+    void invalidQueueExpiryExceptionTest() {
         assertIgnisError(ErrorCode.INVALID_REQUEST, () -> ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_1")
                         .concurrency(5)
@@ -354,7 +355,7 @@ class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    void invalidMessageExpiryExceptionTest() throws Exception {
+    void invalidMessageExpiryExceptionTest() {
         assertIgnisError(ErrorCode.INVALID_REQUEST, () -> ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_1")
                         .concurrency(5)
@@ -367,7 +368,7 @@ class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    void messageExpiryMoreThanQueueExpiryExceptionTest() throws Exception {
+    void messageExpiryMoreThanQueueExpiryExceptionTest() {
         assertIgnisError(ErrorCode.INVALID_REQUEST, () -> ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_1")
                         .concurrency(5)
@@ -391,22 +392,24 @@ class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    void invalidMessageHandlerExceptionTest() throws Exception {
+    void invalidMessageHandlerExceptionTest() {
         assertIgnisError(ErrorCode.INVALID_MESSAGE_HANDLER,
                 () -> ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", "INVALID")));
     }
 
     @Test
     void testSweepQueueNonExistentQueue() {
-        ignisMQManager.sweepQueue("NON_EXISTENT");
-        // Should log "Queue doesn't exist" and return
+        assertDoesNotThrow(() -> ignisMQManager.sweepQueue("NON_EXISTENT"),
+                "sweeping a queue that does not exist logs and returns rather than throwing");
     }
 
     @Test
     void testSweepQueueExistingQueue() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
-        // sweepQueue calls Utils.sweepQueue - it won't throw even if there's nothing to sweep
-        ignisMQManager.sweepQueue("QUEUE_1");
+
+        assertDoesNotThrow(() -> ignisMQManager.sweepQueue("QUEUE_1"),
+                "sweeping a live queue with nothing to sweep must succeed");
+        assertNotNull(ignisMQManager.getQueue("QUEUE_1"), "a sweep must not retire the queue");
     }
 
     @Test
@@ -419,8 +422,10 @@ class IgnisMQManagerTest extends AerospikeTestBase {
                 CLIENT_ID, createBaseStorage(), new ObjectMapper(), new SimpleMeterRegistry(),
                 sc, mock(CuratorFramework.class), FARM_ID, null);
         try {
-            // Don't initialize message handlers
-            manager.refreshQueues(); // Should log "No message handlers registered" and return
+            // No message handlers are registered, so there is nothing to build a queue against.
+            assertDoesNotThrow(manager::refreshQueues,
+                    "a refresh with no handlers registered logs and returns rather than throwing");
+            assertIgnisError(ErrorCode.QUEUE_NOT_FOUND, () -> manager.getQueue("QUEUE_1"));
         } finally {
             manager.stop();
         }
@@ -584,6 +589,12 @@ class IgnisMQManagerTest extends AerospikeTestBase {
         f.set(ignisMQManager, aerospikeQueueService);
 
         ignisMQManager.refreshQueues();
+
+        // A changed shovel config is applied by stopping every shovel and rescheduling at the new
+        // concurrency, so the live shovel count is what proves the refresh took effect.
+        final MagazineQueue<?> refreshed = (MagazineQueue<?>) ignisMQManager.getQueue("QUEUE_1");
+        Assertions.assertEquals(3, refreshed.getNoOfShovelConsumers(),
+                "the queue must be running the shovel concurrency stored in the backend");
     }
 
     @Test
@@ -609,11 +620,6 @@ class IgnisMQManagerTest extends AerospikeTestBase {
         f.set(ignisMQManager, aerospikeQueueService);
 
         ignisMQManager.refreshQueues();
-    }
-
-    @Test
-    void testStopMethod() {
-        ignisMQManager.stop();
     }
 
     /**

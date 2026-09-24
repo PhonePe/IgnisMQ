@@ -56,9 +56,10 @@ class AerospikeStoreClientTest extends AerospikeTestBase {
         AerospikeConfiguration config = getAerospikeConfiguration();
         AerospikeStoreClient client = new AerospikeStoreClient(config);
 
-        client.stop();
-        // Second stop should be safe
-        client.stop();
+        // A lifecycle may stop a client it never started, and may stop it twice.
+        assertDoesNotThrow(client::stop);
+        assertDoesNotThrow(client::stop, "stop must be idempotent");
+        assertNull(client.getClient(), "a stopped client must not hand out a live connection");
     }
 
     @Test
@@ -114,12 +115,9 @@ class AerospikeStoreClientTest extends AerospikeTestBase {
                 .password("testpass")
                 .tlsProtocols(Set.of("TLSv1.2"))
                 .build();
-        try {
-            new AerospikeStoreClient(config);
-            fail("Expected exception due to TLS mismatch with testcontainer");
-        } catch (Exception e) {
-            // Expected - TLS connection to non-TLS server fails
-            // But configureClientPolicy was fully executed
-        }
+        // The policy is fully built before the connection is attempted, so reaching the connection
+        // failure is what proves the user/password/TLS branch was exercised.
+        assertThrows(Exception.class, () -> new AerospikeStoreClient(config),
+                "a TLS client cannot connect to the non-TLS test container");
     }
 }

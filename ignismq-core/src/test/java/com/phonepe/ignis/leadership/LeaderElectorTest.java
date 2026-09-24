@@ -36,6 +36,9 @@ import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -126,24 +129,21 @@ class LeaderElectorTest {
 
     // --- Basic state changed tests ---
 
-    @Test
-    void testStateChangedLostConnection() {
-        createDefaultElector().stateChanged(curatorFramework, ConnectionState.LOST);
-    }
+    /**
+     * None of these four may claim leadership on their own: leadership is granted by the selector,
+     * never inferred from a connection event. A losing transition must also not run the workers.
+     */
+    @ParameterizedTest
+    @EnumSource(value = ConnectionState.class,
+            names = {"LOST", "CONNECTED", "RECONNECTED", "SUSPENDED"})
+    void testAConnectionStateChangeNeverClaimsLeadership(final ConnectionState state) throws Exception {
+        final LeaderElector le = createDefaultElector();
 
-    @Test
-    void testStateChangedConnected() {
-        createDefaultElector().stateChanged(curatorFramework, ConnectionState.CONNECTED);
-    }
+        assertDoesNotThrow(() -> le.stateChanged(curatorFramework, state));
 
-    @Test
-    void testStateChangedReconnected() {
-        createDefaultElector().stateChanged(curatorFramework, ConnectionState.RECONNECTED);
-    }
-
-    @Test
-    void testStateChangedSuspended() {
-        createDefaultElector().stateChanged(curatorFramework, ConnectionState.SUSPENDED);
+        assertFalse(((AtomicBoolean) getField(le, "leader")).get(),
+                "leadership is granted by the selector, never by a connection event");
+        verify(loadBalancer, never()).activate();
     }
 
     @Test
@@ -352,7 +352,11 @@ class LeaderElectorTest {
                 .thenThrow(new KeeperException.NodeExistsException());
 
         invokeUpdateState(le, true);
-        // Graceful handling, no exception
+
+        // The ZK read failed, so there is no membership to act on: the workers must be left exactly
+        // as they were rather than started against a half-read view.
+        verify(loadBalancer, never()).activate();
+        verify(loadBalancer, never()).deactivate();
     }
 
     @Test
@@ -364,6 +368,11 @@ class LeaderElectorTest {
                 .thenThrow(new RuntimeException("ZK error"));
 
         invokeUpdateState(le, true);
+
+        // An unexpected ZK failure is swallowed and retried on the next event, not propagated into
+        // the watcher thread, and it must not move the workers.
+        verify(loadBalancer, never()).activate();
+        verify(loadBalancer, never()).deactivate();
     }
 
     @Test
@@ -380,6 +389,10 @@ class LeaderElectorTest {
                 .thenThrow(new KeeperException.NoNodeException());
 
         invokeUpdateState(le, true);
+
+        // Not the leader, so this instance assigns nothing to itself.
+        assertFalse(((AtomicBoolean) getField(le, "leader")).get());
+        verify(loadBalancer, never()).activate();
     }
 
     @Test
@@ -396,6 +409,11 @@ class LeaderElectorTest {
 
         // force=false, same members => no reassignment
         invokeUpdateState(le, false);
+
+        assertEquals(Set.of("member1"), getField(le, "knownMembers"),
+                "an unchanged membership must leave the known set untouched");
+        verify(loadBalancer, never()).activate();
+        verify(loadBalancer, never()).deactivate();
     }
 
     // --- updatePartitionWorkerState tests ---
@@ -460,6 +478,9 @@ class LeaderElectorTest {
 
         // updateState catches the exception from updatePartitionWorkerState
         invokeUpdateState(le, true);
+
+        // The per-partition read failed, so no partition may be handed to a worker.
+        verify(loadBalancer, never()).activate();
     }
 
     @Test
@@ -478,6 +499,9 @@ class LeaderElectorTest {
                 .thenThrow(new KeeperException.NoNodeException());
 
         invokeUpdateState(le, true);
+
+        // The assignment could not be written, so it must not be acted on locally either.
+        verify(loadBalancer, never()).activate();
     }
 
     @Test
@@ -499,6 +523,10 @@ class LeaderElectorTest {
                 .thenThrow(new KeeperException.NoNodeException());
 
         invokeUpdateState(le, true);
+
+        // A missing communicator path is created rather than treated as an error.
+        verify(curatorFramework.create().creatingParentContainersIfNeeded(), atLeastOnce())
+                .forPath(anyString());
     }
 
     @Test
@@ -515,6 +543,11 @@ class LeaderElectorTest {
         setupZkMocks(List.of(balancerId, "other"), balancerId.getBytes());
 
         invokeUpdateState(le, true);
+
+        // Both partitions resolve to this instance, so both workers must be started - the point of
+        // registering more than one partition in the first place.
+        verify(loadBalancer, atLeastOnce()).activate();
+        verify(lb2, atLeastOnce()).activate();
     }
 
     @Test
@@ -566,5 +599,9 @@ class LeaderElectorTest {
                 .thenThrow(new KeeperException.NoNodeException());
 
         invokeUpdateState(le, true);
+
+        // A null selector means leadership was never contested, so nothing may be activated.
+        assertFalse(((AtomicBoolean) getField(le, "leader")).get());
+        verify(loadBalancer, never()).activate();
     }
 }

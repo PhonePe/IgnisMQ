@@ -242,10 +242,11 @@
     setToken(token());
 
     async function json(url, options) {
-      const request = {credentials: 'same-origin', ...(options || {})};
+      // Spreading undefined is a no-op, so an absent options object needs no guard.
+      const request = {credentials: 'same-origin', ...options};
       const bearer = token();
       if (bearer) {
-        request.headers = {Authorization: `Bearer ${bearer}`, ...(request.headers || {})};
+        request.headers = {Authorization: `Bearer ${bearer}`, ...request.headers};
       }
       const response = await fetch(url, request);
       const body = await response.text();

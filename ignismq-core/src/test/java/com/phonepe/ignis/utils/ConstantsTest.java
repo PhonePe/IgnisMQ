@@ -23,7 +23,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class ConstantsTest {
 
+    /**
+     * Every assertion here is expected-first. S3415 cannot tell which side is which when both are
+     * compile-time constants, and swapping to satisfy it would put the actual value first, which is
+     * the very thing the rule exists to prevent.
+     */
     @Test
+    @SuppressWarnings("java:S3415")
     void testConstants() {
         assertEquals(8, Constants.DEFAULT_SHARDS);
         assertEquals(64, Constants.PARALLEL_FACTOR);

@@ -47,10 +47,18 @@ class HandlerExecutorTest {
     void testAHandlerThatOverrunsItsTimeoutRaisesTimeout() {
         executor = new HandlerExecutor(4);
 
-        assertThrows(TimeoutException.class, () -> executor.call(() -> {
-            Thread.sleep(30_000);
-            return true;
-        }, 200), "a handler that overruns its timeout must raise TimeoutException");
+        // The handler must still be running when the 200ms timeout expires. Released by this test
+        // rather than by the executor's interrupt, so a stop() that stopped interrupting would fail
+        // the assertion rather than leak the thread for the life of the JVM.
+        final CountDownLatch hold = new CountDownLatch(1);
+        try {
+            assertThrows(TimeoutException.class, () -> executor.call(() -> {
+                hold.await();
+                return true;
+            }, 200), "a handler that overruns its timeout must raise TimeoutException");
+        } finally {
+            hold.countDown();
+        }
     }
 
     /**

@@ -29,17 +29,17 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class AerospikeQueueServiceTest extends AerospikeTestBase {
+class AerospikeQueueServiceTest extends AerospikeTestBase {
 
     private AerospikeQueueService service;
 
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         service = createQueueService();
     }
 
     @Test
-    public void testStoreAndExists() {
+    void testStoreAndExists() {
         QueueEntity entity = buildEntity(true);
         service.store("QUEUE_1", entity, 1200);
         assertTrue(service.exists("QUEUE_1"));
@@ -47,7 +47,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStoreAndGet() {
+    void testStoreAndGet() {
         QueueEntity entity = buildEntity(true);
         service.store("QUEUE_1", entity, 1200);
         Optional<QueueEntity> result = service.get("QUEUE_1");
@@ -62,13 +62,13 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testGetNonExistent() {
+    void testGetNonExistent() {
         Optional<QueueEntity> result = service.get("NONEXISTENT");
         assertFalse(result.isPresent());
     }
 
     @Test
-    public void testUpdateState() {
+    void testUpdateState() {
         QueueEntity entity = buildEntity(true);
         service.store("QUEUE_1", entity, 1200);
         service.updateState("QUEUE_1", false);
@@ -79,7 +79,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testUpdateConcurrency() {
+    void testUpdateConcurrency() {
         QueueEntity entity = buildEntity(true);
         service.store("QUEUE_1", entity, 1200);
         service.updateConcurrency("QUEUE_1", 10);
@@ -90,7 +90,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testUpdateShovelConfig() {
+    void testUpdateShovelConfig() {
         QueueEntity entity = buildEntity(true);
         service.store("QUEUE_1", entity, 1200);
         service.updateShovelConfig("QUEUE_1", 8, 300);
@@ -102,7 +102,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStoreWithBatchingConfig() {
+    void testStoreWithBatchingConfig() {
         BatchingConfig batchingConfig = BatchingConfig.builder()
                 .maxBatchSize(50)
                 .maxWaitTimeInSecs(10)
@@ -125,7 +125,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testGetQueuesActive() {
+    void testGetQueuesActive() {
         service.store("QUEUE_1", buildEntity(true), 1200);
         service.store("QUEUE_2", buildEntity(false), 1200);
 
@@ -135,7 +135,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testGetQueuesInactive() {
+    void testGetQueuesInactive() {
         service.store("QUEUE_1", buildEntity(true), 1200);
         service.store("QUEUE_2", buildEntity(false), 1200);
 
@@ -145,7 +145,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStoreWithNullBatchingConfig() {
+    void testStoreWithNullBatchingConfig() {
         QueueEntity entity = QueueEntity.builder()
                 .active(true).shards(32).queueExpiry(600).messageExpiry(300)
                 .concurrency(4).messageHandlerType("handler")
@@ -161,7 +161,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testHandlerTimeoutRoundTripsThroughTheBin() {
+    void testHandlerTimeoutRoundTripsThroughTheBin() {
         QueueEntity entity = QueueEntity.builder()
                 .active(true).shards(32).queueExpiry(600).messageExpiry(300)
                 .concurrency(4).messageHandlerType("handler")
@@ -181,7 +181,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
      * sentinel the caller's fallback keys off.
      */
     @Test
-    public void testAQueueWrittenBeforeTheBinExistedReadsBackZero() {
+    void testAQueueWrittenBeforeTheBinExistedReadsBackZero() {
         service.store("LEGACY_Q", buildEntity(true), 1200);
         removeHandlerTimeoutBin("LEGACY_Q");
 
@@ -211,7 +211,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStoreWithBatchingConfigAndRetrieve() {
+    void testStoreWithBatchingConfigAndRetrieve() {
         QueueEntity entity = QueueEntity.builder()
                 .active(true).shards(1).queueExpiry(600).messageExpiry(300)
                 .concurrency(4).messageHandlerType("handler")
@@ -233,7 +233,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
      * marker did not, and which is what let a repeated sweep run off the end of a shard.
      */
     @Test
-    public void testUpdateSweepProgressStoresAbsolutePointers() {
+    void testUpdateSweepProgressStoresAbsolutePointers() {
         service.store("PROGRESS_Q", buildEntity(true), 1200);
 
         service.updateSweepProgress("PROGRESS_Q", false, Map.of("SHARD_0", 40L, "SHARD_1", 7L), 3L);
@@ -250,7 +250,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
      * position; they share a queue record but not a pointer.
      */
     @Test
-    public void testUpdateSweepProgressKeepsSidelineProgressSeparate() {
+    void testUpdateSweepProgressKeepsSidelineProgressSeparate() {
         service.store("PROGRESS_SIDELINE_Q", buildEntity(true), 1200);
 
         service.updateSweepProgress("PROGRESS_SIDELINE_Q", false, Map.of("SHARD_0", 11L), 1L);
@@ -268,7 +268,7 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
      * pointless round trip on the queue record.
      */
     @Test
-    public void testUpdateSweepProgressWithNoShardsIsANoOp() {
+    void testUpdateSweepProgressWithNoShardsIsANoOp() {
         service.store("PROGRESS_EMPTY_Q", buildEntity(true), 1200);
 
         service.updateSweepProgress("PROGRESS_EMPTY_Q", false, Map.of(), 0L);
@@ -277,12 +277,12 @@ public class AerospikeQueueServiceTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testExistsReturnsFalse() {
+    void testExistsReturnsFalse() {
         assertFalse(service.exists("NON_EXISTENT_Q"));
     }
 
     @Test
-    public void testExistsReturnsTrue() {
+    void testExistsReturnsTrue() {
         service.store("EXISTS_Q", buildEntity(true), 1200);
         assertTrue(service.exists("EXISTS_Q"));
     }

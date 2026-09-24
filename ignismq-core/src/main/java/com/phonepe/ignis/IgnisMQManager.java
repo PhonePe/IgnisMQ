@@ -30,17 +30,15 @@ import com.phonepe.ignis.guage.QueueStatGuage;
 import com.phonepe.ignis.leadership.TaskInitializer;
 import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.metric.QueueDepthMetrics;
+import com.phonepe.ignis.metric.QueueStat;
 import com.phonepe.ignis.refresh.QueueRefresher;
 import com.phonepe.ignis.refresh.RefreshableQueue;
-import com.phonepe.ignis.metric.QueueStat;
 import com.phonepe.ignis.request.CreateQueueRequest;
 import com.phonepe.ignis.request.ShovelConfig;
 import com.phonepe.ignis.scheduler.IgnisSchedulers;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.service.QueueService;
-import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
-import com.phonepe.ignis.storage.StorageVisitor;
 import com.phonepe.ignis.sweep.QueueSweeper;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.ErrorMessage;
@@ -78,7 +76,9 @@ public final class IgnisMQManager {
     private final QueueRefresher queueRefresher;
     private final IgnisSchedulers schedulers;
 
-    /** The manager builds a storage client and closes it on {@link #stop()}. */
+    /**
+     * The manager builds a storage client and closes it on {@link #stop()}.
+     */
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
                           final MeterRegistry meterRegistry, final CuratorFramework curatorFramework,
                           final String farmId, final IgnisMQSettings settings) throws Exception {
@@ -202,7 +202,7 @@ public final class IgnisMQManager {
      * @throws Exception        if magazine creation has failed.
      */
     public void createQueue(final CreateQueueRequest queueRequest) throws Exception {
-        metrics.record(IgnisMetrics.QUEUE_CREATE, Tags.empty(), () -> doCreateQueue(queueRequest));
+        metrics.time(IgnisMetrics.QUEUE_CREATE, Tags.empty(), () -> doCreateQueue(queueRequest));
     }
 
     /**
@@ -296,7 +296,7 @@ public final class IgnisMQManager {
 
     public void refreshQueues() {
         try {
-            metrics.record(IgnisMetrics.QUEUE_REFRESH, Tags.empty(), this::doRefreshQueues);
+            metrics.time(IgnisMetrics.QUEUE_REFRESH, Tags.empty(), this::doRefreshQueues);
         } catch (Exception e) {
             // doRefreshQueues does not throw; the checked signature comes from the timing helper,
             // and refreshQueues has never been a throwing method for its callers.
@@ -364,12 +364,8 @@ public final class IgnisMQManager {
     }
 
     private StorageClient buildStorageClient() {
-        return storage.accept(new StorageVisitor<>() {
-            @Override
-            public StorageClient visit(final AerospikeStorage aerospikeStorage) {
-                return new AerospikeStoreClient(aerospikeStorage.getConfiguration());
-            }
-        });
+        return storage.accept(aerospikeStorage ->
+                new AerospikeStoreClient(aerospikeStorage.getConfiguration()));
     }
 
     private void doRefreshQueues() {
@@ -380,19 +376,13 @@ public final class IgnisMQManager {
         queueRefresher.refresh();
     }
 
-    private void adoptQueue(final String queueName, final QueueEntity entity) throws Exception {
-        ignisMQMap.put(queueName, createQueueFromEntity(queueName, entity));
-        queueDepthMetrics.register(queueName);
-        log.info("Queue '{}' successfully created", queueName);
-    }
-
-    private IQueue<?> createQueueFromEntity(final String queueName, final QueueEntity entity) throws Exception {
+    private IQueue<?> createQueueFromEntity(final String queueName, final QueueEntity entity) {
         final ShovelConfig shovelConfig = entity.getShovelConcurrency() > 0
                 && entity.getShovelTimeIntervalInSecs() > 0
                 ? ShovelConfig.builder()
-                        .concurrency(entity.getShovelConcurrency())
-                        .timeIntervalInSecs(entity.getShovelTimeIntervalInSecs())
-                        .build()
+                .concurrency(entity.getShovelConcurrency())
+                .timeIntervalInSecs(entity.getShovelTimeIntervalInSecs())
+                .build()
                 : null;
         return createMagazine(queueName, entity.getShards(), entity.getMessageExpiry(),
                 entity.getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
@@ -414,7 +404,7 @@ public final class IgnisMQManager {
                                          final ShovelConfig shovelConfig,
                                          final BatchingConfig batchingConfig,
                                          final long sweepDurationInMillis,
-                                         final long handlerTimeoutInMillis) throws Exception {
+                                         final long handlerTimeoutInMillis) {
         if (!messageHandlers.containsKey(messageHandlerType)) {
             throw IgnisMQException.builder()
                     .errorCode(ErrorCode.INVALID_MESSAGE_HANDLER)
@@ -431,20 +421,13 @@ public final class IgnisMQManager {
         );
     }
 
-    private QueueService buildQueueCommands(final BaseStorage storage, final StorageClient storageClient)
-            throws Exception {
-        return storage.accept(new StorageVisitor<>() {
-            @Override
-            public QueueService visit(final AerospikeStorage aerospikeStorage) {
-                return new AerospikeQueueService(
-                        (IAerospikeClient) storageClient.getClient(),
-                        aerospikeStorage.getConfiguration(),
-                        aerospikeStorage.getNamespace(),
-                        clientId,
-                        farmId
-                );
-            }
-        });
+    private QueueService buildQueueCommands(final BaseStorage storage, final StorageClient storageClient) {
+        return storage.accept(aerospikeStorage -> new AerospikeQueueService(
+                (IAerospikeClient) storageClient.getClient(),
+                aerospikeStorage.getConfiguration(),
+                aerospikeStorage.getNamespace(),
+                clientId,
+                farmId));
     }
 
     private void validateRequest(final CreateQueueRequest queueRequest) {
@@ -462,7 +445,9 @@ public final class IgnisMQManager {
         }
     }
 
-    /** The manager owns the live queue set, so a refresh pass goes through this rather than the map. */
+    /**
+     * The manager owns the live queue set, so a refresh pass goes through this rather than the map.
+     */
     private final class ManagedQueues implements QueueRefresher.QueueLifecycle {
 
         @Override
@@ -477,8 +462,10 @@ public final class IgnisMQManager {
         }
 
         @Override
-        public void adopt(final String queueName, final QueueEntity entity) throws Exception {
-            adoptQueue(queueName, entity);
+        public void adopt(final String queueName, final QueueEntity entity) {
+            ignisMQMap.put(queueName, createQueueFromEntity(queueName, entity));
+            queueDepthMetrics.register(queueName);
+            log.info("Queue '{}' successfully created", queueName);
         }
 
         @Override

@@ -21,41 +21,35 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import com.phonepe.aerospike.config.AerospikeHost;
 import com.phonepe.ignis.common.MessageHandler;
-import com.phonepe.ignis.config.ConsoleConfiguration;
-import com.phonepe.ignis.resource.IgnisMQResource;
-import com.phonepe.ignis.exception.IgnisMQExceptionMapper;
 import com.phonepe.ignis.common.TimeToLive;
 import com.phonepe.ignis.common.TimeUnit;
+import com.phonepe.ignis.config.ConsoleConfiguration;
+import com.phonepe.ignis.exception.IgnisMQExceptionMapper;
 import com.phonepe.ignis.request.CreateQueueRequest;
+import com.phonepe.ignis.resource.IgnisMQResource;
 import com.phonepe.ignis.storage.AerospikeStorage;
+import io.appform.testcontainers.aerospike.AerospikeContainerConfiguration;
+import io.appform.testcontainers.aerospike.container.AerospikeContainer;
 import io.dropwizard.Configuration;
 import io.dropwizard.jackson.Jackson;
 import io.dropwizard.jersey.setup.JerseyEnvironment;
 import io.dropwizard.jetty.setup.ServletEnvironment;
 import io.dropwizard.lifecycle.setup.LifecycleEnvironment;
 import io.dropwizard.setup.Environment;
-import org.glassfish.jersey.server.filter.RolesAllowedDynamicFeature;
-import io.appform.testcontainers.aerospike.AerospikeContainerConfiguration;
-import io.appform.testcontainers.aerospike.container.AerospikeContainer;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.curator.framework.CuratorFramework;
+import org.glassfish.jersey.server.filter.RolesAllowedDynamicFeature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import javax.servlet.ServletRegistration;
-import java.util.AbstractMap;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
  * The end-to-end wiring check the metrics rewrite deliberately left owed, and now pays back.
@@ -171,9 +165,9 @@ class IgnisMQBundleMetricsTest {
 
         bundle.run(new AppConfig("SERVICE"), environment);
 
-        Mockito.verify(environment.jersey()).register(Mockito.any(IgnisMQResource.class));
+        verify(environment.jersey()).register(any(IgnisMQResource.class));
         // Without this feature @RolesAllowed is inert and every mutation would be wide open.
-        Mockito.verify(environment.jersey()).register(RolesAllowedDynamicFeature.class);
+        verify(environment.jersey()).register(RolesAllowedDynamicFeature.class);
     }
 
     @Test
@@ -184,9 +178,9 @@ class IgnisMQBundleMetricsTest {
 
         bundle.run(new AppConfig("SERVICE"), environment);
 
-        Mockito.verify(environment.jersey(), Mockito.never()).register(Mockito.any(IgnisMQResource.class));
-        Mockito.verify(environment.servlets(), Mockito.never())
-                .addServlet(Mockito.anyString(), Mockito.any(javax.servlet.Servlet.class));
+        verify(environment.jersey(), never()).register(any(IgnisMQResource.class));
+        verify(environment.servlets(), never())
+                .addServlet(anyString(), any(javax.servlet.Servlet.class));
     }
 
     /**
@@ -201,7 +195,7 @@ class IgnisMQBundleMetricsTest {
 
         bundle.run(new AppConfig("SERVICE"), environment);
 
-        Mockito.verify(environment.jersey()).register(Mockito.any(IgnisMQExceptionMapper.class));
+        verify(environment.jersey()).register(any(IgnisMQExceptionMapper.class));
     }
 
     /**
@@ -215,9 +209,9 @@ class IgnisMQBundleMetricsTest {
 
         bundle.run(new AppConfig("SERVICE"), environment);
 
-        Mockito.verify(environment.jersey()).register(Mockito.any(IgnisMQResource.class));
-        Mockito.verify(environment.servlets(), Mockito.never())
-                .addServlet(Mockito.anyString(), Mockito.any(javax.servlet.Servlet.class));
+        verify(environment.jersey()).register(any(IgnisMQResource.class));
+        verify(environment.servlets(), never())
+                .addServlet(anyString(), any(javax.servlet.Servlet.class));
     }
 
     private void publishThrough(final String queueName) throws Exception {
@@ -240,17 +234,19 @@ class IgnisMQBundleMetricsTest {
     }
 
     private static Environment environment() {
-        final Environment environment = Mockito.mock(Environment.class);
+        final Environment environment = mock(Environment.class);
         final ObjectMapper mapper = Jackson.newObjectMapper();
-        Mockito.when(environment.metrics()).thenReturn(new MetricRegistry());
-        Mockito.when(environment.getObjectMapper()).thenReturn(mapper);
-        Mockito.when(environment.lifecycle())
+        when(environment.metrics()).thenReturn(new MetricRegistry());
+        when(environment.getObjectMapper()).thenReturn(mapper);
+        when(environment.lifecycle())
                 .thenReturn(new LifecycleEnvironment(new MetricRegistry()));
-        Mockito.when(environment.jersey()).thenReturn(Mockito.mock(JerseyEnvironment.class));
-        final ServletEnvironment servlets = Mockito.mock(ServletEnvironment.class);
-        Mockito.when(servlets.addServlet(Mockito.anyString(), Mockito.any(javax.servlet.Servlet.class)))
-                .thenReturn(Mockito.mock(ServletRegistration.Dynamic.class));
-        Mockito.when(environment.servlets()).thenReturn(servlets);
+        final JerseyEnvironment jersey = mock(JerseyEnvironment.class);
+        when(environment.jersey()).thenReturn(jersey);
+        final ServletEnvironment servlets = mock(ServletEnvironment.class);
+        final ServletRegistration.Dynamic registration = mock(ServletRegistration.Dynamic.class);
+        when(servlets.addServlet(anyString(), any(javax.servlet.Servlet.class)))
+                .thenReturn(registration);
+        when(environment.servlets()).thenReturn(servlets);
         return environment;
     }
 
@@ -279,7 +275,7 @@ class IgnisMQBundleMetricsTest {
                                 .maxConnectionsPerNode(100).threadPoolSize(4)
                                 .scanMaxConcurrentNodes(5).batchMaxConcurrentThreads(5)
                                 .build(), NAMESPACE))
-                        .curatorFramework(Mockito.mock(CuratorFramework.class))
+                        .curatorFramework(mock(CuratorFramework.class))
                         .settings(IgnisMQSettings.builder().metricsEnabled(metricsEnabled).build())
                         .console(console)
                         .build();

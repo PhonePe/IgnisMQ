@@ -135,7 +135,8 @@ public final class MagazineConsumerTask<M> implements Runnable {
         final long runDeadline = startTime + Math.max(lingerMillis, runBudgetMillis);
         List<MagazineData<String>> batch = new ArrayList<>(batchingConfig.getMaxBatchSize());
 
-        while (!Thread.currentThread().isInterrupted()) {
+        boolean filling = true;
+        while (filling && !Thread.currentThread().isInterrupted()) {
             final MagazineData<String> magazineData = fireFromMagazine();
             if (Objects.nonNull(magazineData)) {
                 batch.add(magazineData);
@@ -151,23 +152,20 @@ public final class MagazineConsumerTask<M> implements Runnable {
                         return;
                     }
                 }
-                continue;
+            } else {
+                final long remaining = lingerDeadline - System.currentTimeMillis();
+                // Nothing pending means nothing to wait for. Lingering here would hold the thread
+                // for the whole configured wait on an idle queue, which is the opposite of what the
+                // setting is for: it bounds how long a *partial* batch may be held open, not how
+                // long an empty consumer should block.
+                if (batch.isEmpty() || remaining <= 0) {
+                    filling = false;
+                } else {
+                    // Never sleep past the deadline. A fixed five-second sleep could overshoot the
+                    // caller's stated wait by almost its whole length.
+                    Thread.sleep(Math.min(POLL_INTERVAL_IN_MS, remaining));
+                }
             }
-
-            // Nothing pending means nothing to wait for. Lingering here would hold the thread for
-            // the whole configured wait on an idle queue, which is the opposite of what the setting
-            // is for: it bounds how long a *partial* batch may be held open, not how long an empty
-            // consumer should block.
-            if (batch.isEmpty()) {
-                break;
-            }
-            final long remaining = lingerDeadline - System.currentTimeMillis();
-            if (remaining <= 0) {
-                break;
-            }
-            // Never sleep past the deadline. A fixed five-second sleep could overshoot the caller's
-            // stated wait by almost its whole length.
-            Thread.sleep(Math.min(POLL_INTERVAL_IN_MS, remaining));
         }
 
         if (!batch.isEmpty()) {
@@ -246,20 +244,20 @@ public final class MagazineConsumerTask<M> implements Runnable {
         final List<M> messages = new ArrayList<>(batch.size());
         final Iterator<MagazineData<String>> records = batch.iterator();
         while (records.hasNext()) {
-            final MagazineData<String> record = records.next();
-            final String payload = record.getData();
+            final MagazineData<String> item = records.next();
+            final String payload = item.getData();
             if (Objects.isNull(payload)) {
                 continue;
             }
             if (rawPayload) {
                 messages.add((M) payload);
-                continue;
-            }
-            try {
-                messages.add(reader.readValue(payload));
-            } catch (JsonProcessingException e) {
-                records.remove();
-                dispose(record, e, IgnisMetrics.REASON_UNREADABLE);
+            } else {
+                try {
+                    messages.add(reader.readValue(payload));
+                } catch (JsonProcessingException e) {
+                    records.remove();
+                    dispose(item, e, IgnisMetrics.REASON_UNREADABLE);
+                }
             }
         }
         return messages;
@@ -367,7 +365,9 @@ public final class MagazineConsumerTask<M> implements Runnable {
         return Objects.isNull(batchingConfig) && messages.size() == 1;
     }
 
-    /** Why the <b>handler</b> failed. Deserialisation failures never reach here; they name themselves. */
+    /**
+     * Why the <b>handler</b> failed. Deserialisation failures never reach here; they name themselves.
+     */
     private static String handlerFailureReason(final Exception e) {
         if (e instanceof HandlerTimeoutException) {
             return IgnisMetrics.REASON_TIMEOUT;

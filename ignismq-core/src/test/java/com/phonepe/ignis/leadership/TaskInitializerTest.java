@@ -28,7 +28,6 @@ import org.apache.zookeeper.CreateMode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -37,10 +36,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
-public class TaskInitializerTest extends AerospikeTestBase {
+class TaskInitializerTest extends AerospikeTestBase {
 
     private final List<TaskInitializer> taskInitializers = new ArrayList<>();
 
@@ -50,32 +48,32 @@ public class TaskInitializerTest extends AerospikeTestBase {
     private StorageClient storageClient;
 
     @BeforeEach
-    public void setUp() {
-        curatorFramework = Mockito.mock(CuratorFramework.class, RETURNS_DEEP_STUBS);
-        queueService = Mockito.spy(createQueueService());
+    void setUp() {
+        curatorFramework = mock(CuratorFramework.class, RETURNS_DEEP_STUBS);
+        queueService = spy(createQueueService());
         storage = (AerospikeStorage) createBaseStorage();
-        storageClient = Mockito.mock(StorageClient.class);
+        storageClient = mock(StorageClient.class);
     }
 
     @AfterEach
-    public void stopTaskInitializers() {
+    void stopTaskInitializers() {
         taskInitializers.forEach(TaskInitializer::stop);
         taskInitializers.clear();
     }
 
     @Test
-    public void testConstants() {
+    void testConstants() {
         assertEquals(15 * 60 * 1000, TaskInitializer.DELAY_FOR_SWEEPER_TASK);
     }
 
     @Test
-    public void testConstructor() {
+    void testConstructor() {
         TaskInitializer taskInitializer = newTaskInitializer(null);
         assertNotNull(taskInitializer);
     }
 
     @Test
-    public void testStartAndStop() throws Exception {
+    void testStartAndStop() throws Exception {
         TaskInitializer taskInitializer = newTaskInitializer(null);
 
         // Deep stubs on curatorFramework handle the full create chain automatically
@@ -92,7 +90,7 @@ public class TaskInitializerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStartSetsLeaderElector() throws Exception {
+    void testStartSetsLeaderElector() throws Exception {
         TaskInitializer taskInitializer = newTaskInitializer(null);
 
         // Mock create chain
@@ -114,14 +112,15 @@ public class TaskInitializerTest extends AerospikeTestBase {
      * This used to NPE on the null leader elector.
      */
     @Test
-    public void testStopWithoutStartIsSafe() {
+    void testStopWithoutStartIsSafe() {
         TaskInitializer taskInitializer = newTaskInitializer(null);
 
-        taskInitializer.stop();
+        assertDoesNotThrow(taskInitializer::stop,
+                "stop must tolerate a start that never ran; this used to NPE on the null elector");
     }
 
     @Test
-    public void testStopIsIdempotentAndCancelsTheSweeperTask() throws Exception {
+    void testStopIsIdempotentAndCancelsTheSweeperTask() throws Exception {
         TaskInitializer taskInitializer = newTaskInitializer(null);
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
@@ -143,7 +142,7 @@ public class TaskInitializerTest extends AerospikeTestBase {
      * that is handed the manager's must not, or stopping the sweeper would stop every consumer.
      */
     @Test
-    public void testASuppliedSchedulerOutlivesTheTaskInitializer() {
+    void testASuppliedSchedulerOutlivesTheTaskInitializer() {
         final IgnisSchedulerCommands shared = new IgnisSchedulerCommands();
         final TaskInitializer taskInitializer = newTaskInitializer(shared);
 
@@ -155,7 +154,7 @@ public class TaskInitializerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testMetricsAreRequired() {
+    void testMetricsAreRequired() {
         assertThrows(NullPointerException.class,
                 () -> new TaskInitializer(curatorFramework, queueService, CLIENT_ID, storage, storageClient,
                         FARM_ID, null, null, null));

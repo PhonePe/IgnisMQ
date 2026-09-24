@@ -17,24 +17,25 @@
 package com.phonepe.ignis.scheduler;
 
 import com.phonepe.ignis.utils.Constants;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class IgnisSchedulerCommandsTest {
+class IgnisSchedulerCommandsTest {
 
     private IgnisSchedulerCommands scheduler;
 
     @AfterEach
-    public void tearDown() {
+    void tearDown() {
         if (scheduler != null) {
             scheduler.stop();
         }
@@ -47,7 +48,7 @@ public class IgnisSchedulerCommandsTest {
      * would have fixed nothing.
      */
     @Test
-    public void testAThrowingTaskKeepsRunning() throws Exception {
+    void testAThrowingTaskKeepsRunning() throws Exception {
         scheduler = new IgnisSchedulerCommands();
         final CountDownLatch runs = new CountDownLatch(3);
 
@@ -63,17 +64,21 @@ public class IgnisSchedulerCommandsTest {
      * A cancelled task stops running and does not linger in the delay queue.
      */
     @Test
-    public void testACancelledTaskStopsRunning() throws Exception {
+    void testACancelledTaskStopsRunning() {
         scheduler = new IgnisSchedulerCommands();
         final AtomicInteger runs = new AtomicInteger();
-        final ScheduledFuture<?> task = scheduler.scheduleRepeating(runs::incrementAndGet, 0, 20);
+        final ScheduledTask task = scheduler.scheduleRepeating(runs::incrementAndGet, 0, 20);
 
-        Thread.sleep(200);
-        task.cancel(true);
+        Awaitility.await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertTrue(runs.get() > 0, "the task must run before it is cancelled"));
+        scheduler.cancelRepeating(task);
         final int atCancellation = runs.get();
-        Thread.sleep(200);
 
-        assertEquals(atCancellation, runs.get(), "no runs may happen after cancellation");
+        // Holding the assertion true for a stretch is the test: the task repeats every 20ms, so a
+        // cancellation that did not take would show up as a rising count.
+        Awaitility.await().during(Duration.ofMillis(300)).atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertEquals(atCancellation, runs.get(),
+                        "no runs may happen after cancellation"));
     }
 
     /**
@@ -81,7 +86,7 @@ public class IgnisSchedulerCommandsTest {
      * actually gets N able to run at once, rather than time-sharing a fixed handful.
      */
     @Test
-    public void testThePoolGrowsWithRecurringTasks() {
+    void testThePoolGrowsWithRecurringTasks() {
         scheduler = new IgnisSchedulerCommands();
         final int base = scheduler.corePoolSize();
 
@@ -97,7 +102,7 @@ public class IgnisSchedulerCommandsTest {
      * Growth stops at the ceiling; above it, tasks time-share rather than allocating a thread each.
      */
     @Test
-    public void testThePoolIsCapped() {
+    void testThePoolIsCapped() {
         scheduler = new IgnisSchedulerCommands();
 
         for (int i = 0; i < Constants.DEFAULT_WORKER_THREADS + 10; i++) {
@@ -112,7 +117,7 @@ public class IgnisSchedulerCommandsTest {
      * A one-shot must not grow the pool: it is transient by definition.
      */
     @Test
-    public void testAOneShotDoesNotGrowThePool() {
+    void testAOneShotDoesNotGrowThePool() {
         scheduler = new IgnisSchedulerCommands();
         final int base = scheduler.corePoolSize();
 
@@ -123,7 +128,7 @@ public class IgnisSchedulerCommandsTest {
     }
 
     @Test
-    public void testStopLeavesNoThreadsRunning() throws Exception {
+    void testStopLeavesNoThreadsRunning() throws Exception {
         scheduler = new IgnisSchedulerCommands();
         final CountDownLatch started = new CountDownLatch(1);
         scheduler.scheduleRepeating(() -> {
@@ -139,18 +144,16 @@ public class IgnisSchedulerCommandsTest {
         assertTrue(scheduler.stop(), "stop must complete within its grace period");
         assertTrue(scheduler.isStopped());
 
-        final long deadline = System.currentTimeMillis() + 10_000L;
-        while (liveSchedulerThreads() > 0 && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50);
-        }
-        assertEquals(0L, liveSchedulerThreads(), "scheduler threads must not survive stop()");
+        Awaitility.await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(50))
+                .untilAsserted(() -> assertEquals(0L, liveSchedulerThreads(),
+                        "scheduler threads must not survive stop()"));
     }
 
     /**
      * A framework lifecycle stops things it never started, and may stop them twice.
      */
     @Test
-    public void testStopIsIdempotentAndSafeWithoutWork() {
+    void testStopIsIdempotentAndSafeWithoutWork() {
         scheduler = new IgnisSchedulerCommands();
 
         assertFalse(scheduler.isStopped());
@@ -167,10 +170,10 @@ public class IgnisSchedulerCommandsTest {
      * count only ever grew before, so this failed against the previous implementation.
      */
     @Test
-    public void testCancellingRecurringTasksGivesThreadsBack() {
+    void testCancellingRecurringTasksGivesThreadsBack() {
         scheduler = new IgnisSchedulerCommands();
         final int base = scheduler.corePoolSize();
-        final List<ScheduledFuture<?>> tasks = new ArrayList<>();
+        final List<ScheduledTask> tasks = new ArrayList<>();
         for (int i = 0; i < base + 10; i++) {
             tasks.add(scheduler.scheduleRepeating(() -> {
             }, 60_000, 60_000));
@@ -189,7 +192,7 @@ public class IgnisSchedulerCommandsTest {
      * has to be decided by the scheduler rather than trusted from the call site.
      */
     @Test
-    public void testCancellingAOneShotDoesNotShrinkThePool() {
+    void testCancellingAOneShotDoesNotShrinkThePool() {
         scheduler = new IgnisSchedulerCommands();
         for (int i = 0; i < 10; i++) {
             scheduler.scheduleRepeating(() -> {
@@ -197,7 +200,7 @@ public class IgnisSchedulerCommandsTest {
         }
         final int grown = scheduler.corePoolSize();
 
-        final ScheduledFuture<?> oneShot = scheduler.scheduleOnce(() -> {
+        final ScheduledTask oneShot = scheduler.scheduleOnce(() -> {
         }, 60_000);
         scheduler.cancelRepeating(oneShot);
         scheduler.cancelRepeating(oneShot);

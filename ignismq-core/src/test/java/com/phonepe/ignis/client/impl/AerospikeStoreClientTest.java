@@ -27,10 +27,10 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class AerospikeStoreClientTest extends AerospikeTestBase {
+class AerospikeStoreClientTest extends AerospikeTestBase {
 
     @Test
-    public void testStartAndGetClient() {
+    void testStartAndGetClient() {
         AerospikeConfiguration config = getAerospikeConfiguration();
         AerospikeStoreClient client = new AerospikeStoreClient(config);
 
@@ -40,7 +40,7 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStartIdempotent() {
+    void testStartIdempotent() {
         AerospikeConfiguration config = getAerospikeConfiguration();
         AerospikeStoreClient client = new AerospikeStoreClient(config);
 
@@ -52,7 +52,7 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStopMultipleTimes() {
+    void testStopMultipleTimes() {
         AerospikeConfiguration config = getAerospikeConfiguration();
         AerospikeStoreClient client = new AerospikeStoreClient(config);
 
@@ -62,7 +62,7 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testWithTlsConfig() {
+    void testWithTlsConfig() {
         AerospikeConfiguration config = getAerospikeConfiguration();
         // The testcontainer doesn't use TLS, but we verify construction works
         AerospikeStoreClient client = new AerospikeStoreClient(config);
@@ -71,7 +71,7 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testWithZeroThreadPoolSize() {
+    void testWithZeroThreadPoolSize() {
         AerospikeConfiguration config = AerospikeConfiguration.builder()
                 .hosts(List.of(AerospikeHost.builder()
                         .host(getContainerHost())
@@ -92,7 +92,7 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testWithUserPasswordTls() {
+    void testWithUserPasswordTls() {
         // Tests the TLS policy creation branch (user + password non-empty)
         // Can't actually connect with TLS to testcontainer, but we test the config path
         // by using correct host but with user/pass set — the constructor will fail

@@ -24,11 +24,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The metrics switch, and the one meter whose value costs a storage read.
@@ -61,7 +57,7 @@ class IgnisMetricsTest {
         metrics.timer(IgnisMetrics.CONSUME, Tags.empty()).record(java.time.Duration.ofMillis(1));
         metrics.summary(IgnisMetrics.HANDLER_BATCH_SIZE, Tags.empty()).record(5);
         metrics.gauge(IgnisMetrics.QUEUE_DEPTH, Tags.empty(), this, self -> 1.0);
-        assertEquals("ok", metrics.record(IgnisMetrics.QUEUE_CREATE, Tags.empty(), () -> "ok"));
+        assertEquals("ok", metrics.time(IgnisMetrics.QUEUE_CREATE, Tags.empty(), () -> "ok"));
 
         assertTrue(registry.getMeters().isEmpty(),
                 "a disabled registry must leave the application's own registry untouched");
@@ -72,7 +68,7 @@ class IgnisMetricsTest {
     void disabledStillPropagates() {
         final IgnisMetrics metrics = new IgnisMetrics(registry, false);
 
-        assertThrowsIllegalState(() -> metrics.record(IgnisMetrics.QUEUE_CREATE, Tags.empty(),
+        assertThrowsIllegalState(() -> metrics.time(IgnisMetrics.QUEUE_CREATE, Tags.empty(),
                 () -> {
                     throw new IllegalStateException("boom");
                 }));

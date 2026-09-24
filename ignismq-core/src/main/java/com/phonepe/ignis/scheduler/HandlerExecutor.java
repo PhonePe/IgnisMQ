@@ -23,18 +23,9 @@ import io.micrometer.core.instrument.Tags;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Objects;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Runs user message handlers off the worker thread, so one that never returns cannot hold a worker
@@ -50,8 +41,8 @@ public final class HandlerExecutor {
 
     private final ThreadPoolExecutor executor;
     private final AtomicInteger saturationRefusals = new AtomicInteger();
-    private volatile Counter pooled;
-    private volatile Counter refused;
+    private final AtomicReference<Counter> pooled = new AtomicReference<>();
+    private final AtomicReference<Counter> refused = new AtomicReference<>();
 
     public HandlerExecutor(final int maxThreads) {
         this.executor = new ThreadPoolExecutor(0, Math.max(1, maxThreads),
@@ -62,10 +53,10 @@ public final class HandlerExecutor {
     public void bindTo(final IgnisMetrics metrics) {
         metrics.getRegistry().gauge(IgnisMetrics.HANDLER_THREADS_ACTIVE, executor,
                 ThreadPoolExecutor::getActiveCount);
-        this.pooled = metrics.counter(IgnisMetrics.HANDLER_EXECUTIONS,
-                Tags.of(IgnisMetrics.TAG_MODE, IgnisMetrics.POOLED));
-        this.refused = metrics.counter(IgnisMetrics.HANDLER_EXECUTIONS,
-                Tags.of(IgnisMetrics.TAG_MODE, IgnisMetrics.REFUSED));
+        this.pooled.set(metrics.counter(IgnisMetrics.HANDLER_EXECUTIONS,
+                Tags.of(IgnisMetrics.TAG_MODE, IgnisMetrics.POOLED)));
+        this.refused.set(metrics.counter(IgnisMetrics.HANDLER_EXECUTIONS,
+                Tags.of(IgnisMetrics.TAG_MODE, IgnisMetrics.REFUSED)));
     }
 
     /**
@@ -76,6 +67,9 @@ public final class HandlerExecutor {
      * @throws Exception                 whatever the handler threw, unwrapped, so existing error
      *                                   handling behaves as it did when the handler ran inline.
      */
+    // S112: the handler is arbitrary caller code. Its exception is rethrown unchanged so that error
+    // handling written against the inline handler keeps working; wrapping it would break that.
+    @SuppressWarnings("java:S112")
     public <T> T call(final Callable<T> task, final long timeoutMillis) throws Exception {
         final Future<T> future;
         try {
@@ -98,7 +92,6 @@ public final class HandlerExecutor {
         }
     }
 
-    /** Batches refused because no handler thread was available. */
     public int saturationRefusals() {
         return saturationRefusals.get();
     }
@@ -148,7 +141,8 @@ public final class HandlerExecutor {
         }
     }
 
-    private static void increment(final Counter counter) {
+    private static void increment(final AtomicReference<Counter> ref) {
+        final Counter counter = ref.get();
         if (Objects.nonNull(counter)) {
             counter.increment();
         }

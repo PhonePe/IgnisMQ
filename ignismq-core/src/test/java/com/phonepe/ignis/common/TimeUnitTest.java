@@ -21,28 +21,28 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-public class TimeUnitTest {
+class TimeUnitTest {
 
     @Test
-    public void testMinuteToSeconds() {
+    void testMinuteToSeconds() {
         assertEquals(60, TimeUnit.MINUTE.toSeconds(1));
         assertEquals(300, TimeUnit.MINUTE.toSeconds(5));
     }
 
     @Test
-    public void testHourToSeconds() {
+    void testHourToSeconds() {
         assertEquals(3600, TimeUnit.HOUR.toSeconds(1));
         assertEquals(7200, TimeUnit.HOUR.toSeconds(2));
     }
 
     @Test
-    public void testDayToSeconds() {
+    void testDayToSeconds() {
         assertEquals(86400, TimeUnit.DAY.toSeconds(1));
         assertEquals(172800, TimeUnit.DAY.toSeconds(2));
     }
 
     @Test
-    public void testAllValues() {
+    void testAllValues() {
         assertEquals(3, TimeUnit.values().length);
         assertNotNull(TimeUnit.valueOf("MINUTE"));
         assertNotNull(TimeUnit.valueOf("HOUR"));

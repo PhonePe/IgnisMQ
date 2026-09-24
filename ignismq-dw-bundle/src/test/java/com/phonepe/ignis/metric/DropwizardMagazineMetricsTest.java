@@ -26,13 +26,13 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class DropwizardMagazineMetricsTest {
+class DropwizardMagazineMetricsTest {
 
     private final MetricRegistry metrics = new MetricRegistry();
     private final MeterRegistry bridge = DropwizardMagazineMetrics.bridgedTo(metrics);
 
     @Test
-    public void publishesMagazineMetricsToDropwizard() {
+    void publishesMagazineMetricsToDropwizard() {
         new MagazineMetrics(bridge).aerospikeCall("queue", StorageOperation.BATCH_READ_METADATA);
 
         assertEquals(1, metrics.meter(
@@ -45,7 +45,7 @@ public class DropwizardMagazineMetricsTest {
      * silently on upgrade.
      */
     @Test
-    public void untaggedMeterNamesArePreservedVerbatim() {
+    void untaggedMeterNamesArePreservedVerbatim() {
         bridge.timer("commands.order-events_publish.all").record(5, TimeUnit.MILLISECONDS);
 
         final com.codahale.metrics.Timer timer =
@@ -58,7 +58,7 @@ public class DropwizardMagazineMetricsTest {
      * Tag flattening must be deterministic, since the flattened string is what operators alert on.
      */
     @Test
-    public void tagsAreFlattenedIntoTheHierarchicalName() {
+    void tagsAreFlattenedIntoTheHierarchicalName() {
         bridge.counter("magazine.fire.outcomes", "magazine", "orders", "outcome", "delivered")
                 .increment();
 
@@ -72,7 +72,7 @@ public class DropwizardMagazineMetricsTest {
      * is that recording volume does not create new series — only new queue names do.
      */
     @Test
-    public void seriesCountIsIndependentOfRecordingVolume() {
+    void seriesCountIsIndependentOfRecordingVolume() {
         final MagazineMetrics magazineMetrics = new MagazineMetrics(bridge);
         magazineMetrics.aerospikeCall("orders", StorageOperation.BATCH_READ_METADATA);
         final int afterFirstCall = metrics.getMetrics().size();
@@ -89,7 +89,7 @@ public class DropwizardMagazineMetricsTest {
     }
 
     @Test
-    public void writesIntoTheSuppliedRegistryRatherThanTheGlobalOne() {
+    void writesIntoTheSuppliedRegistryRatherThanTheGlobalOne() {
         bridge.counter("ignis.local.only").increment();
 
         assertTrue(metrics.getMeters().containsKey("ignis.local.only"));

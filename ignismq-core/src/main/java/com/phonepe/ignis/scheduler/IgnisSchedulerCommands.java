@@ -24,16 +24,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Delayed;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A named, bounded pool of scheduled tasks, with daemon threads.
@@ -49,12 +43,16 @@ public final class IgnisSchedulerCommands {
     private final ScheduledThreadPoolExecutor executor;
     private final int maxThreads;
     private final AtomicInteger recurringTasks = new AtomicInteger();
-    /** Membership rather than a count, so a double cancel or a cancelled one-shot is a no-op. */
-    private final Set<ScheduledFuture<?>> recurring = ConcurrentHashMap.newKeySet();
+    /**
+     * Membership rather than a count, so a double cancel or a cancelled one-shot is a no-op.
+     */
+    private final Set<ScheduledTask> recurring = ConcurrentHashMap.newKeySet();
     private volatile String poolTag;
-    /** Null until {@link #bindTo}; unit tests and the standalone TaskInitializer stay unbound. */
-    private volatile Timer taskWait;
-    private volatile IgnisMetrics metrics;
+    /**
+     * Null until {@link #bindTo}; unit tests and the standalone TaskInitializer stay unbound.
+     */
+    private final AtomicReference<Timer> taskWait = new AtomicReference<>();
+    private final AtomicReference<IgnisMetrics> metrics = new AtomicReference<>();
 
     public IgnisSchedulerCommands() {
         this("ignismq-scheduler", Constants.SCHEDULER_BASE_THREADS, Constants.DEFAULT_WORKER_THREADS);
@@ -78,7 +76,7 @@ public final class IgnisSchedulerCommands {
      */
     public void bindTo(final IgnisMetrics metrics, final String pool) {
         this.poolTag = pool;
-        this.metrics = metrics;
+        this.metrics.set(metrics);
         final Tags tags = Tags.of(IgnisMetrics.TAG_POOL, pool);
         metrics.getRegistry().gauge(IgnisMetrics.POOL_THREADS, tags, executor,
                 ScheduledThreadPoolExecutor::getPoolSize);
@@ -87,28 +85,28 @@ public final class IgnisSchedulerCommands {
                 ScheduledThreadPoolExecutor::getActiveCount);
         metrics.getRegistry().gauge(IgnisMetrics.POOL_TASKS_DUE, tags, executor,
                 IgnisSchedulerCommands::overdueTasks);
-        this.taskWait = metrics.timer(IgnisMetrics.POOL_TASK_WAIT, tags);
+        this.taskWait.set(metrics.timer(IgnisMetrics.POOL_TASK_WAIT, tags));
     }
 
     /**
      * Fixed <em>delay</em>, not fixed rate: a consumer slower than its period must not have runs
      * queued up behind it. Grows the pool towards this scheduler's ceiling.
      */
-    public ScheduledFuture<?> scheduleRepeating(final Runnable task, final long initialDelayMillis,
-                                                final long delayMillis) {
+    public ScheduledTask scheduleRepeating(final Runnable task, final long initialDelayMillis,
+                                           final long delayMillis) {
         growFor(recurringTasks.incrementAndGet());
-        final ScheduledFuture<?> future = executor.scheduleWithFixedDelay(
+        final ScheduledTask scheduled = new ScheduledTask(executor.scheduleWithFixedDelay(
                 guard(timed(task, initialDelayMillis, delayMillis)),
-                initialDelayMillis, delayMillis, TimeUnit.MILLISECONDS);
-        recurring.add(future);
-        return future;
+                initialDelayMillis, delayMillis, TimeUnit.MILLISECONDS));
+        recurring.add(scheduled);
+        return scheduled;
     }
 
     /**
-     * Use this rather than {@code future.cancel(...)}: cancelling the future alone leaves the pool
-     * sized for the task, so scaling a queue down and up would ratchet the thread count up.
+     * Cancels a task and releases the pool capacity it was sized for. The only way to cancel:
+     * {@link ScheduledTask} does not expose the underlying future for exactly this reason.
      */
-    public void cancelRepeating(final ScheduledFuture<?> task) {
+    public void cancelRepeating(final ScheduledTask task) {
         // Interrupts a consumer sitting on its poll interval; the task treats that as a stop.
         task.cancel(true);
         if (recurring.remove(task)) {
@@ -116,9 +114,11 @@ public final class IgnisSchedulerCommands {
         }
     }
 
-    /** Schedules a one-shot task. Does not grow the pool: one-shots are transient by definition. */
-    public ScheduledFuture<?> scheduleOnce(final Runnable task, final long delayMillis) {
-        return executor.schedule(guard(task), delayMillis, TimeUnit.MILLISECONDS);
+    /**
+     * Schedules a one-shot task. Does not grow the pool: one-shots are transient by definition.
+     */
+    public ScheduledTask scheduleOnce(final Runnable task, final long delayMillis) {
+        return new ScheduledTask(executor.schedule(guard(task), delayMillis, TimeUnit.MILLISECONDS));
     }
 
     /**
@@ -150,7 +150,9 @@ public final class IgnisSchedulerCommands {
         return executor.isShutdown();
     }
 
-    /** Visible for tests that assert the pool is sized and torn down as intended. */
+    /**
+     * Visible for tests that assert the pool is sized and torn down as intended.
+     */
     public int poolSize() {
         return executor.getPoolSize();
     }
@@ -159,7 +161,9 @@ public final class IgnisSchedulerCommands {
         return executor.getCorePoolSize();
     }
 
-    /** Escape hatch for callers that genuinely need the executor, such as tests. */
+    /**
+     * Escape hatch for callers that genuinely need the executor, such as tests.
+     */
     ScheduledExecutorService executor() {
         return executor;
     }
@@ -179,7 +183,7 @@ public final class IgnisSchedulerCommands {
         final AtomicLong dueAt = new AtomicLong(
                 System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(initialDelayMillis));
         return () -> {
-            final Timer waited = taskWait;
+            final Timer waited = taskWait.get();
             if (Objects.nonNull(waited)) {
                 waited.record(Math.max(0L, System.nanoTime() - dueAt.get()), TimeUnit.NANOSECONDS);
             }
@@ -211,6 +215,7 @@ public final class IgnisSchedulerCommands {
      * {@code OutOfMemoryError} loops on a condition that will not clear, so {@code outcome=fatal}
      * is the signal that a schedule is gone until restart.
      */
+    @SuppressWarnings("java:S1181") // Error is caught to count it, then rethrown unchanged.
     private Runnable guard(final Runnable task) {
         return () -> {
             try {
@@ -229,7 +234,7 @@ public final class IgnisSchedulerCommands {
     }
 
     private void count(final String outcome) {
-        final IgnisMetrics bound = metrics;
+        final IgnisMetrics bound = metrics.get();
         if (Objects.nonNull(bound)) {
             bound.counter(IgnisMetrics.POOL_TASK_FAILURES,
                     Tags.of(IgnisMetrics.TAG_POOL, poolTag, IgnisMetrics.TAG_OUTCOME, outcome)).increment();

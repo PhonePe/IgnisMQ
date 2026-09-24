@@ -19,13 +19,10 @@ package com.phonepe.ignis.metric;
 import io.micrometer.core.instrument.Tags;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
 
@@ -43,7 +40,7 @@ public final class QueueDepthMetrics {
     private final Set<String> registered = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean refreshing = new AtomicBoolean();
 
-    private volatile Map<String, QueueStat> snapshot = Map.of();
+    private final AtomicReference<Map<String, QueueStat>> snapshot = new AtomicReference<>(Map.of());
     private volatile long refreshedAt;
 
     public QueueDepthMetrics(final IgnisMetrics metrics,
@@ -54,7 +51,9 @@ public final class QueueDepthMetrics {
         this.refreshIntervalMillis = refreshIntervalMillis;
     }
 
-    /** Idempotent: the queue watcher calls this on every refresh cycle. */
+    /**
+     * Idempotent: the queue watcher calls this on every refresh cycle.
+     */
     public void register(final String queueName) {
         if (!metrics.isEnabled() || !registered.add(queueName)) {
             return;
@@ -96,16 +95,16 @@ public final class QueueDepthMetrics {
 
     private Map<String, QueueStat> current() {
         if (System.currentTimeMillis() - refreshedAt < refreshIntervalMillis) {
-            return snapshot;
+            return snapshot.get();
         }
         // One refresher at a time; everyone else keeps the previous snapshot.
         if (!refreshing.compareAndSet(false, true)) {
-            return snapshot;
+            return snapshot.get();
         }
         try {
             final Map<String, QueueStat> refreshed = new HashMap<>();
             stats.get().forEach(stat -> refreshed.put(stat.getName(), stat));
-            snapshot = refreshed;
+            snapshot.set(refreshed);
         } catch (Exception e) {
             log.warn("Could not refresh queue depth metrics; serving the previous snapshot", e);
         } finally {
@@ -114,6 +113,6 @@ public final class QueueDepthMetrics {
             refreshedAt = System.currentTimeMillis();
             refreshing.set(false);
         }
-        return snapshot;
+        return snapshot.get();
     }
 }

@@ -24,10 +24,10 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class CreateQueueRequestTest {
+class CreateQueueRequestTest {
 
     @Test
-    public void testDefaults() {
+    void testDefaults() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -45,7 +45,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testCustomValues() {
+    void testCustomValues() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .shards(64)
@@ -66,7 +66,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testIsValidSuccess() {
+    void testIsValidSuccess() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -79,7 +79,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testIsValidFailsWhenMessageExpiryGreaterThanQueueExpiry() {
+    void testIsValidFailsWhenMessageExpiryGreaterThanQueueExpiry() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -92,7 +92,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testIsValidFailsWhenQueueExpiryExceedsMax() {
+    void testIsValidFailsWhenQueueExpiryExceedsMax() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -104,7 +104,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testIsValidFailsWhenMessageExpiryExceedsMax() {
+    void testIsValidFailsWhenMessageExpiryExceedsMax() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -116,7 +116,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testGetDefaultTimeToLive() {
+    void testGetDefaultTimeToLive() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -129,7 +129,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testHandlerTimeoutDefaultsWhenUnset() {
+    void testHandlerTimeoutDefaultsWhenUnset() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -140,7 +140,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testHandlerTimeoutIsOverridable() {
+    void testHandlerTimeoutIsOverridable() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)

@@ -35,12 +35,12 @@ import com.phonepe.magazine.impl.aerospike.AerospikeStorageConfig;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
  * The sweeper's whole job is to re-home messages that were delivered and never acknowledged, without
@@ -53,7 +53,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * sweeper would answer questions about the present, which is exactly the thing the watermark exists
  * to avoid.
  */
-public class QueueSweeperTest extends AerospikeTestBase {
+class QueueSweeperTest extends AerospikeTestBase {
 
     private static final long ONE_HOUR_MS = 60 * 60 * 1000L;
 
@@ -64,10 +64,10 @@ public class QueueSweeperTest extends AerospikeTestBase {
     private BaseStorage baseStorage;
 
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         service = createQueueService();
-        storageClient = Mockito.mock(StorageClient.class);
-        Mockito.when(storageClient.getClient()).thenReturn(aerospikeClient);
+        storageClient = mock(StorageClient.class);
+        when(storageClient.getClient()).thenReturn(aerospikeClient);
         baseStorage = createBaseStorage();
         sweeper = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient, FARM_ID,
                 new IgnisMetrics(new SimpleMeterRegistry()), null);
@@ -97,7 +97,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * unclaimed. Sweeping into that region would delete a message no consumer has ever seen.
      */
     @Test
-    public void testSweepLeavesUndeliveredMessagesAlone() {
+    void testSweepLeavesUndeliveredMessagesAlone() {
         final String queue = "SWEEP_UNDELIVERED";
         final QueueEntity entity = store(queue, 0L);
         final Magazine<String> magazine = magazine(queue);
@@ -123,7 +123,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * sweep duration yet, and an absent watermark must mean "sweep nothing", never "sweep everything".
      */
     @Test
-    public void testSweepLeavesRecentlyDeliveredMessagesAlone() {
+    void testSweepLeavesRecentlyDeliveredMessagesAlone() {
         final String queue = "SWEEP_IN_FLIGHT";
         final QueueEntity entity = store(queue, ONE_HOUR_MS);
         final Magazine<String> magazine = magazine(queue);
@@ -144,19 +144,19 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * demonstrably exists somewhere else.
      */
     @Test
-    public void testSweepKeepsSourceWhenSidelineRefusesTheMessage() {
+    void testSweepKeepsSourceWhenSidelineRefusesTheMessage() {
         final String queue = "SWEEP_SIDELINE_REFUSES";
         final QueueEntity entity = store(queue, 0L);
         final Magazine<String> magazine = magazine(queue);
-        final Magazine<String> sideline = Mockito.spy(magazine(Utils.getSidelineQueueName(queue)));
-        Mockito.doReturn(false).when(sideline).load(Mockito.any());
+        final Magazine<String> sideline = spy(magazine(Utils.getSidelineQueueName(queue)));
+        doReturn(false).when(sideline).load(any());
 
         magazine.load("stale");
         final MagazineData<String> stale = magazine.fire();
 
         sweepTwice(queue, entity, magazine, sideline);
 
-        Mockito.verify(sideline, Mockito.atLeastOnce()).load("stale");
+        verify(sideline, atLeastOnce()).load("stale");
         assertTrue(exists(magazine, stale), "message must not be deleted when the sideline would not take it");
     }
 
@@ -165,12 +165,12 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * the progress marker advanced past it, the retry the sweeper is built around could never happen.
      */
     @Test
-    public void testSweepDoesNotAdvancePastAMessageItCouldNotReHome() {
+    void testSweepDoesNotAdvancePastAMessageItCouldNotReHome() {
         final String queue = "SWEEP_NO_ADVANCE";
         final QueueEntity entity = store(queue, 0L);
         final Magazine<String> magazine = magazine(queue);
-        final Magazine<String> refusing = Mockito.spy(magazine(Utils.getSidelineQueueName(queue)));
-        Mockito.doReturn(false).when(refusing).load(Mockito.any());
+        final Magazine<String> refusing = spy(magazine(Utils.getSidelineQueueName(queue)));
+        doReturn(false).when(refusing).load(any());
 
         magazine.load("stale-1");
         magazine.load("stale-2");
@@ -191,7 +191,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * The sweeper must still do its job.
      */
     @Test
-    public void testSweepMovesAbandonedMessages() {
+    void testSweepMovesAbandonedMessages() {
         final String queue = "SWEEP_STALE";
         final QueueEntity entity = store(queue, 0L);
         final Magazine<String> magazine = magazine(queue);
@@ -215,7 +215,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * swept range costs one batch read and re-homes nothing.
      */
     @Test
-    public void testSweepIsIdempotentOverAnAlreadySweptRange() {
+    void testSweepIsIdempotentOverAnAlreadySweptRange() {
         final String queue = "SWEEP_IDEMPOTENT";
         final QueueEntity entity = store(queue, 0L);
         final Magazine<String> magazine = magazine(queue);
@@ -238,7 +238,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * queue record, which here claims eight.
      */
     @Test
-    public void testSweepFollowsTheMagazinesShardCountNotTheQueueRecords() {
+    void testSweepFollowsTheMagazinesShardCountNotTheQueueRecords() {
         final String queue = "SWEEP_SHARD_COUNT";
         final QueueEntity entity = store(queue, 0L);
         entity.setShards(8);
@@ -264,7 +264,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * shard must still advance - a pass that cannot get past an empty range never progresses at all.
      */
     @Test
-    public void testSweepAdvancesThroughARangeWithNothingLeftInIt() {
+    void testSweepAdvancesThroughARangeWithNothingLeftInIt() {
         final String queue = "SWEEP_EMPTY_RANGE";
         final QueueEntity entity = store(queue, 0L);
         final Magazine<String> magazine = magazine(queue);
@@ -288,11 +288,11 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * fresh checkpoint-claim map, which re-issues a write per shard the consumers already made.
      */
     @Test
-    public void testSweepQueueReusesMagazinesTheProcessAlreadyHolds() {
+    void testSweepQueueReusesMagazinesTheProcessAlreadyHolds() {
         final String queue = "SWEEP_REUSE";
         final QueueEntity entity = store(queue, 0L);
-        final Magazine<String> main = Mockito.spy(magazine(queue));
-        final Magazine<String> sideline = Mockito.spy(magazine(Utils.getSidelineQueueName(queue)));
+        final Magazine<String> main = spy(magazine(queue));
+        final Magazine<String> sideline = spy(magazine(Utils.getSidelineQueueName(queue)));
         final QueueSweeper reusing = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient,
                 FARM_ID, new IgnisMetrics(new SimpleMeterRegistry()),
                 name -> new MagazineRegistry.QueueMagazines(main, sideline));
@@ -305,8 +305,8 @@ public class QueueSweeperTest extends AerospikeTestBase {
         reusing.sweepQueue(queue, reload(queue));
 
         // The registry's magazines were used, not freshly built ones.
-        Mockito.verify(main, Mockito.atLeastOnce()).firePointerBefore(Mockito.any());
-        assertEquals(magazine(Utils.getSidelineQueueName(queue)).fire().getData(), "orphan");
+        verify(main, atLeastOnce()).firePointerBefore(any());
+        assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
     }
 
     /**
@@ -315,7 +315,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * sweeping would be worse than the allocation it saves.
      */
     @Test
-    public void testSweepQueueBuildsItsOwnWhenTheRegistryHasNothing() {
+    void testSweepQueueBuildsItsOwnWhenTheRegistryHasNothing() {
         final String queue = "SWEEP_REGISTRY_MISS";
         final QueueEntity entity = store(queue, 0L);
         final QueueSweeper missing = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient,
@@ -329,7 +329,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         missing.sweepQueue(queue, entity);
         missing.sweepQueue(queue, reload(queue));
 
-        assertEquals(magazine(Utils.getSidelineQueueName(queue)).fire().getData(), "orphan");
+        assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
     }
 
     /**
@@ -337,19 +337,19 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * sweeps are independent pieces of work sharing only a queue record.
      */
     @Test
-    public void testAFailingMainMagazineStillLetsTheSidelineBeSwept() {
+    void testAFailingMainMagazineStillLetsTheSidelineBeSwept() {
         final String queue = "SWEEP_CONTAINED";
         final QueueEntity entity = store(queue, 0L);
 
-        final Magazine<String> failing = Mockito.mock(Magazine.class);
-        Mockito.when(failing.getMagazineIdentifier()).thenReturn(queue);
-        Mockito.when(failing.firePointerBefore(Mockito.any()))
+        final Magazine<String> failing = mock(Magazine.class);
+        when(failing.getMagazineIdentifier()).thenReturn(queue);
+        when(failing.firePointerBefore(any()))
                 .thenThrow(new MagazineException(ErrorCode.INVALID_REQUEST, "history evicted", null));
-        final Magazine<String> sideline = Mockito.spy(magazine(Utils.getSidelineQueueName(queue)));
+        final Magazine<String> sideline = spy(magazine(Utils.getSidelineQueueName(queue)));
 
         sweeper.sweep(queue, entity, failing, sideline);
 
-        Mockito.verify(sideline).firePointerBefore(Mockito.any());
+        verify(sideline).firePointerBefore(any());
     }
 
     /**
@@ -357,7 +357,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * from stored configuration rather than being handed them.
      */
     @Test
-    public void testSweepQueueBuildsItsOwnMagazines() {
+    void testSweepQueueBuildsItsOwnMagazines() {
         final String queue = "SWEEP_SELF_BUILT";
         final QueueEntity entity = store(queue, 0L);
 
@@ -369,7 +369,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
         sweeper.sweepQueue(queue, entity);
         sweeper.sweepQueue(queue, reload(queue));
 
-        assertEquals(magazine(Utils.getSidelineQueueName(queue)).fire().getData(), "orphan");
+        assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
     }
 
     /**
@@ -377,7 +377,7 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * publishing after instrumentation was switched off.
      */
     @Test
-    public void testSweepMetersHonourTheMetricsSwitch() {
+    void testSweepMetersHonourTheMetricsSwitch() {
         final String queue = "SWEEP_METRICS_SWITCH";
         final QueueEntity entity = store(queue, 0L);
 
@@ -399,13 +399,14 @@ public class QueueSweeperTest extends AerospikeTestBase {
      * the next cycle retries this one from the same progress marker.
      */
     @Test
-    public void testSweepQueueSwallowsAFailure() {
-        final StorageClient broken = Mockito.mock(StorageClient.class);
-        Mockito.when(broken.getClient()).thenThrow(new IllegalStateException("broken"));
+    void testSweepQueueSwallowsAFailure() {
+        final StorageClient broken = mock(StorageClient.class);
+        when(broken.getClient()).thenThrow(new IllegalStateException("broken"));
         final QueueSweeper failing = new QueueSweeper(service, CLIENT_ID, baseStorage, broken, FARM_ID,
                 new IgnisMetrics(new SimpleMeterRegistry()), null);
 
-        failing.sweepQueue("NEVER_EXISTED", store("NEVER_EXISTED", 0L));
+        assertDoesNotThrow(() -> failing.sweepQueue("NEVER_EXISTED", store("NEVER_EXISTED", 0L)),
+                "one unsweepable queue must not abort the pass");
     }
 
     /**
@@ -465,11 +466,6 @@ public class QueueSweeperTest extends AerospikeTestBase {
     }
 
     private static void assertNothingToFire(final Magazine<String> magazine) {
-        try {
-            final MagazineData<String> unexpected = magazine.fire();
-            fail("expected an empty magazine but fired: " + unexpected.getData());
-        } catch (MagazineException e) {
-            // expected: the magazine is drained
-        }
+        assertThrows(MagazineException.class, magazine::fire, "expected an empty magazine");
     }
 }

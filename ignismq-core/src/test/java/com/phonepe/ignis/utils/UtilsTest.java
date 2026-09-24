@@ -30,10 +30,10 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class UtilsTest {
+class UtilsTest {
 
     @Test
-    public void testGetSidelineQueueName() {
+    void testGetSidelineQueueName() {
         assertEquals("QUEUE_1_SIDELINE", Utils.getSidelineQueueName("QUEUE_1"));
     }
 
@@ -43,7 +43,7 @@ public class UtilsTest {
      * inside them.
      */
     @Test
-    public void testFireHistoryWindowDividesTheSweepDuration() {
+    void testFireHistoryWindowDividesTheSweepDuration() {
         assertEquals(150, Utils.fireHistoryWindowSeconds(20 * 60 * 1000L));
         assertEquals(450, Utils.fireHistoryWindowSeconds(60 * 60 * 1000L));
     }
@@ -53,7 +53,7 @@ public class UtilsTest {
      * request to sweep everything already delivered.
      */
     @Test
-    public void testFireHistoryWindowNeverCollapsesBelowASecond() {
+    void testFireHistoryWindowNeverCollapsesBelowASecond() {
         assertEquals(1, Utils.fireHistoryWindowSeconds(0L));
         assertEquals(1, Utils.fireHistoryWindowSeconds(-1L));
         assertEquals(1, Utils.fireHistoryWindowSeconds(1000L));
@@ -64,31 +64,31 @@ public class UtilsTest {
      * cannot silently produce a window so wide the history stops being useful.
      */
     @Test
-    public void testFireHistoryWindowIsCappedAtTheMaximumSweepDuration() {
+    void testFireHistoryWindowIsCappedAtTheMaximumSweepDuration() {
         assertEquals(Utils.fireHistoryWindowSeconds(Constants.MAX_SWEEP_DURATION_IN_MS),
                 Utils.fireHistoryWindowSeconds(Constants.MAX_SWEEP_DURATION_IN_MS * 10));
     }
 
     @Test
-    public void testGetMagazineSet() {
+    void testGetMagazineSet() {
         String set = Utils.getMagazineSet("CLIENT_ID", "data_set");
         assertEquals("CLIENT_ID_data_set", set);
     }
 
     @Test
-    public void testGetShardId() {
+    void testGetShardId() {
         String shardId = Utils.getShardId(5);
         assertTrue(shardId.contains("5"));
     }
 
     @Test
-    public void testGetMagazineCountEmpty() {
+    void testGetMagazineCountEmpty() {
         Collection<MetaData> empty = Collections.emptyList();
         assertEquals(0L, Utils.getMagazineCount(empty, MetaData::getLoadPointer));
     }
 
     @Test
-    public void testGetMagazineCountMultiple() {
+    void testGetMagazineCountMultiple() {
         List<MetaData> metaDataList = List.of(
                 MetaData.builder().loadPointer(10).firePointer(5).build(),
                 MetaData.builder().loadPointer(20).firePointer(15).build()
@@ -98,7 +98,7 @@ public class UtilsTest {
     }
 
     @Test
-    public void testWaitForRequestsCompletionSuccess() {
+    void testWaitForRequestsCompletionSuccess() {
         List<Future<Boolean>> futures = new ArrayList<>();
         futures.add(CompletableFuture.completedFuture(true));
         futures.add(CompletableFuture.completedFuture(true));
@@ -108,7 +108,7 @@ public class UtilsTest {
     }
 
     @Test
-    public void testWaitForRequestsCompletionFailure() {
+    void testWaitForRequestsCompletionFailure() {
         List<Future<Boolean>> futures = new ArrayList<>();
         CompletableFuture<Boolean> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(new RuntimeException("test"));
@@ -118,12 +118,12 @@ public class UtilsTest {
     }
 
     @Test
-    public void testExecutorServiceNotNull() {
+    void testExecutorServiceNotNull() {
         assertNotNull(Utils.executorService);
     }
 
     @Test
-    public void testWaitForRequestsCompletionWithInterruptedException() {
+    void testWaitForRequestsCompletionWithInterruptedException() {
         List<Future<Boolean>> futures = new ArrayList<>();
         Future<Boolean> future = new Future<>() {
             @Override
@@ -160,22 +160,24 @@ public class UtilsTest {
      * and once it elapses the sweeper sidelines and deletes that record while the handler runs on.
      */
     @Test
-    public void testHandlerTimeoutIsClampedToHalfTheSweepDuration() {
+    void testHandlerTimeoutIsClampedToHalfTheSweepDuration() {
         final long fiveMinutes = 5 * 60 * 1000L;
         final long tenMinutes = 10 * 60 * 1000L;
         assertEquals(fiveMinutes / 2, Utils.handlerTimeoutMillis(tenMinutes, fiveMinutes));
     }
 
     @Test
-    public void testAConfiguredTimeoutWithinTheBoundIsHonoured() {
+    void testAConfiguredTimeoutWithinTheBoundIsHonoured() {
         final long oneMinute = 60 * 1000L;
         final long thirtyMinutes = 30 * 60 * 1000L;
         assertEquals(oneMinute, Utils.handlerTimeoutMillis(oneMinute, thirtyMinutes));
     }
 
-    /** Degenerate input must not yield a zero or negative timeout, which would fail every batch. */
+    /**
+     * Degenerate input must not yield a zero or negative timeout, which would fail every batch.
+     */
     @Test
-    public void testHandlerTimeoutIsAlwaysPositive() {
+    void testHandlerTimeoutIsAlwaysPositive() {
         assertTrue(Utils.handlerTimeoutMillis(0L, 0L) > 0);
         assertTrue(Utils.handlerTimeoutMillis(-1L, -1L) > 0);
     }

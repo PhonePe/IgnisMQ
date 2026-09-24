@@ -21,10 +21,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-public class ConstantsTest {
+class ConstantsTest {
 
     @Test
-    public void testConstants() {
+    void testConstants() {
         assertEquals(8, Constants.DEFAULT_SHARDS);
         assertEquals(64, Constants.PARALLEL_FACTOR);
         assertEquals(100, Constants.MAX_CONSUMERS_ALLOWED);

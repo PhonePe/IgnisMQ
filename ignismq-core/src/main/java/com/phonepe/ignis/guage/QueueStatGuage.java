@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 /**
  * @author shantanu.tiwari
@@ -59,7 +58,7 @@ public class QueueStatGuage implements Supplier<List<QueueStat>> {
                         return queue == null ? null : toStat(name, queue);
                     })
                     .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
+                    .toList();
         } catch (Exception e) {
             log.info("Error calculating metrics", e);
             return Collections.emptyList();

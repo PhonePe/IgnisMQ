@@ -23,25 +23,24 @@ import com.phonepe.magazine.exception.ErrorCode;
 import com.phonepe.magazine.exception.MagazineException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-public class ShovelTaskTest {
+class ShovelTaskTest {
 
     private Magazine<String> magazine;
     private Magazine<String> sidelineMagazine;
 
     @BeforeEach
-    public void setUp() {
-        magazine = Mockito.mock(Magazine.class);
-        sidelineMagazine = Mockito.mock(Magazine.class);
+    void setUp() {
+        magazine = mock(Magazine.class);
+        sidelineMagazine = mock(Magazine.class);
         when(magazine.getMagazineIdentifier()).thenReturn("TEST_QUEUE");
     }
 
     @Test
-    public void testShovelSuccessfullyMovesMessages() {
+    void testShovelSuccessfullyMovesMessages() {
         MagazineData<String> data1 = buildMagazineData("msg1");
         MagazineData<String> data2 = buildMagazineData("msg2");
 
@@ -57,7 +56,7 @@ public class ShovelTaskTest {
     }
 
     @Test
-    public void testShovelReloadsOnFailedLoad() {
+    void testShovelReloadsOnFailedLoad() {
         MagazineData<String> data1 = buildMagazineData("msg1");
 
         when(sidelineMagazine.fire()).thenReturn(data1)
@@ -74,7 +73,7 @@ public class ShovelTaskTest {
     }
 
     @Test
-    public void testShovelReloadsOnException() {
+    void testShovelReloadsOnException() {
         MagazineData<String> data1 = buildMagazineData("msg1");
 
         when(sidelineMagazine.fire()).thenReturn(data1)
@@ -95,7 +94,7 @@ public class ShovelTaskTest {
      * sideline either, deleting it destroys the message.
      */
     @Test
-    public void testShovelKeepsSourceRecordWhenLoadAndReloadBothFail() {
+    void testShovelKeepsSourceRecordWhenLoadAndReloadBothFail() {
         MagazineData<String> data1 = buildMagazineData("msg1");
 
         when(sidelineMagazine.fire()).thenReturn(data1)
@@ -114,7 +113,7 @@ public class ShovelTaskTest {
      * Magazine 2's Aerospike storage this is the reachable failure mode; the boolean rarely is.
      */
     @Test
-    public void testShovelKeepsSourceRecordWhenReloadThrows() {
+    void testShovelKeepsSourceRecordWhenReloadThrows() {
         MagazineData<String> data1 = buildMagazineData("msg1");
 
         when(sidelineMagazine.fire()).thenReturn(data1)
@@ -131,7 +130,7 @@ public class ShovelTaskTest {
      * A failure on one message must not abandon the rest of the drain.
      */
     @Test
-    public void testShovelContinuesAfterAFailedMessage() {
+    void testShovelContinuesAfterAFailedMessage() {
         MagazineData<String> data1 = buildMagazineData("msg1");
         MagazineData<String> data2 = buildMagazineData("msg2");
 
@@ -148,7 +147,7 @@ public class ShovelTaskTest {
     }
 
     @Test
-    public void testShovelNothingToFire() {
+    void testShovelNothingToFire() {
         when(sidelineMagazine.fire())
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
 
@@ -159,7 +158,7 @@ public class ShovelTaskTest {
     }
 
     @Test
-    public void testShovelWithNullDataSkipsLoad() {
+    void testShovelWithNullDataSkipsLoad() {
         MagazineData<String> nullData = buildMagazineData(null);
 
         when(sidelineMagazine.fire()).thenReturn(nullData)
@@ -173,7 +172,7 @@ public class ShovelTaskTest {
     }
 
     @Test
-    public void testShovelWithAutoDeleteOnFatalException() {
+    void testShovelWithAutoDeleteOnFatalException() {
         when(sidelineMagazine.fire()).thenThrow(new RuntimeException("fatal"));
 
         ShovelTask task = shovel(true);
@@ -183,7 +182,7 @@ public class ShovelTaskTest {
     }
 
     @Test
-    public void testShovelWithAutoDeleteFalseOnFatalException() {
+    void testShovelWithAutoDeleteFalseOnFatalException() {
         when(sidelineMagazine.fire()).thenThrow(new RuntimeException("fatal"));
 
         ShovelTask task = shovel(false);
@@ -193,7 +192,7 @@ public class ShovelTaskTest {
     }
 
     @Test
-    public void testShovelFireNonNothingToFireException() {
+    void testShovelFireNonNothingToFireException() {
         when(sidelineMagazine.fire())
                 .thenThrow(new MagazineException(ErrorCode.INTERNAL_ERROR, "some error", null));
 
@@ -204,7 +203,7 @@ public class ShovelTaskTest {
     }
 
     @Test
-    public void testShovelRetriesExhaustedDoesNotDeleteData() {
+    void testShovelRetriesExhaustedDoesNotDeleteData() {
         when(sidelineMagazine.fire())
                 .thenThrow(new MagazineException(ErrorCode.RETRIES_EXHAUSTED, "data may remain", null));
 

@@ -17,21 +17,20 @@
 package com.phonepe.ignis.sweep;
 
 import com.phonepe.ignis.client.StorageClient;
-import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.entity.QueueEntity;
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.util.AerospikeTestBase;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.Collections;
 
 import static org.mockito.Mockito.*;
 
-public class SweeperTest extends AerospikeTestBase {
+class SweeperTest extends AerospikeTestBase {
 
     private AerospikeQueueService queueService;
     private StorageClient storageClient;
@@ -40,9 +39,9 @@ public class SweeperTest extends AerospikeTestBase {
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @BeforeEach
-    public void setUp() {
-        queueService = Mockito.spy(createQueueService());
-        storageClient = Mockito.mock(StorageClient.class);
+    void setUp() {
+        queueService = spy(createQueueService());
+        storageClient = mock(StorageClient.class);
         when(storageClient.getClient()).thenReturn(aerospikeClient);
         storage = (AerospikeStorage) createBaseStorage();
         sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID,
@@ -50,13 +49,13 @@ public class SweeperTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testRunWhenInactive() {
+    void testRunWhenInactive() {
         sweeper.run();
         verify(queueService, never()).getQueues(anyBoolean());
     }
 
     @Test
-    public void testRunWhenActiveNoQueues() {
+    void testRunWhenActiveNoQueues() {
         sweeper.activate();
         doReturn(Collections.emptyMap()).when(queueService).getQueues(true);
 
@@ -66,7 +65,7 @@ public class SweeperTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testActivateAndDeactivate() {
+    void testActivateAndDeactivate() {
         sweeper.activate();
         doReturn(Collections.emptyMap()).when(queueService).getQueues(true);
         sweeper.run();
@@ -78,7 +77,7 @@ public class SweeperTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testRunWhenActiveWithException() {
+    void testRunWhenActiveWithException() {
         sweeper.activate();
         doThrow(new RuntimeException("error")).when(queueService).getQueues(true);
 
@@ -86,7 +85,7 @@ public class SweeperTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testRunWithRealQueues() {
+    void testRunWithRealQueues() {
         sweeper.activate();
 
         // Store a queue in aerospike
@@ -100,9 +99,9 @@ public class SweeperTest extends AerospikeTestBase {
         queueService.store("SWEEP_TEST_Q", entity, 1200);
 
         // Reset spy for clean verification
-        Mockito.reset(queueService);
+        reset(queueService);
         // Re-spy the service
-        queueService = Mockito.spy(createQueueService());
+        queueService = spy(createQueueService());
         sweeper = new Sweeper(queueService, CLIENT_ID, storage, storageClient, FARM_ID,
                 new IgnisMetrics(meterRegistry), null);
         sweeper.activate();
@@ -113,7 +112,7 @@ public class SweeperTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testActivateIdempotent() {
+    void testActivateIdempotent() {
         sweeper.activate();
         sweeper.activate(); // Should be fine, just sets true again
         doReturn(Collections.emptyMap()).when(queueService).getQueues(true);
@@ -122,7 +121,7 @@ public class SweeperTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testDeactivateIdempotent() {
+    void testDeactivateIdempotent() {
         sweeper.deactivate();
         sweeper.deactivate(); // Should be fine
         sweeper.run();

@@ -21,40 +21,40 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class TimeToLiveTest {
+class TimeToLiveTest {
 
     @Test
-    public void testToSecondsMinute() {
+    void testToSecondsMinute() {
         TimeToLive ttl = TimeToLive.builder().timeUnit(TimeUnit.MINUTE).duration(5).build();
         assertEquals(300, ttl.toSeconds());
     }
 
     @Test
-    public void testToSecondsHour() {
+    void testToSecondsHour() {
         TimeToLive ttl = TimeToLive.builder().timeUnit(TimeUnit.HOUR).duration(2).build();
         assertEquals(7200, ttl.toSeconds());
     }
 
     @Test
-    public void testToSecondsDay() {
+    void testToSecondsDay() {
         TimeToLive ttl = TimeToLive.builder().timeUnit(TimeUnit.DAY).duration(1).build();
         assertEquals(86400, ttl.toSeconds());
     }
 
     @Test
-    public void testIsValidTrue() {
+    void testIsValidTrue() {
         TimeToLive ttl = TimeToLive.builder().timeUnit(TimeUnit.DAY).duration(365).build();
         assertTrue(ttl.isValid());
     }
 
     @Test
-    public void testIsValidFalse() {
+    void testIsValidFalse() {
         TimeToLive ttl = TimeToLive.builder().timeUnit(TimeUnit.DAY).duration(366).build();
         assertFalse(ttl.isValid());
     }
 
     @Test
-    public void testIsValidExactly1Year() {
+    void testIsValidExactly1Year() {
         // 365 days * 86400 = 31536000 which equals MAX_DURATION_ALLOWED_IN_SECONDS
         TimeToLive ttl = TimeToLive.builder().timeUnit(TimeUnit.DAY).duration(365).build();
         assertEquals(Constants.MAX_DURATION_ALLOWED_IN_SECONDS, ttl.toSeconds());

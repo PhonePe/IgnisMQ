@@ -20,17 +20,17 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class BatchingConfigTest {
+class BatchingConfigTest {
 
     @Test
-    public void testDefaults() {
+    void testDefaults() {
         BatchingConfig config = BatchingConfig.builder().build();
         assertEquals(2, config.getMaxBatchSize());
         assertEquals(1, config.getMaxWaitTimeInSecs());
     }
 
     @Test
-    public void testCustomValues() {
+    void testCustomValues() {
         BatchingConfig config = BatchingConfig.builder()
                 .maxBatchSize(100)
                 .maxWaitTimeInSecs(30)

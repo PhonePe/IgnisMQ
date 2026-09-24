@@ -32,13 +32,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,7 +45,7 @@ import static org.mockito.Mockito.*;
  * Covers the transfer-then-delete contract of the consumer: a message may only leave the main
  * magazine once the handler has accepted it or the sideline magazine has taken responsibility for it.
  */
-public class MagazineConsumerTaskTest {
+class MagazineConsumerTaskTest {
 
     private Magazine<String> magazine;
     private Magazine<String> sidelineMagazine;
@@ -60,9 +55,9 @@ public class MagazineConsumerTaskTest {
     private QueueMeters meters;
 
     @BeforeEach
-    public void setUp() {
-        magazine = Mockito.mock(Magazine.class);
-        sidelineMagazine = Mockito.mock(Magazine.class);
+    void setUp() {
+        magazine = mock(Magazine.class);
+        sidelineMagazine = mock(Magazine.class);
         meters = QueueMeters.unmetered("TEST_QUEUE");
         when(magazine.getMagazineIdentifier()).thenReturn("TEST_QUEUE");
     }
@@ -79,7 +74,7 @@ public class MagazineConsumerTaskTest {
     }
 
     @Test
-    public void testSuccessfulHandlingDeletesWithoutSidelining() {
+    void testSuccessfulHandlingDeletesWithoutSidelining() {
         firesThen("msg1");
 
         task(handler(true)).run();
@@ -89,7 +84,7 @@ public class MagazineConsumerTaskTest {
     }
 
     @Test
-    public void testRejectedMessageIsSidelinedThenDeleted() {
+    void testRejectedMessageIsSidelinedThenDeleted() {
         firesThen("msg1");
         when(sidelineMagazine.load("msg1")).thenReturn(true);
 
@@ -105,7 +100,7 @@ public class MagazineConsumerTaskTest {
      * retry.
      */
     @Test
-    public void testRejectedMessageIsNotDeletedWhenSidelineLoadReturnsFalse() {
+    void testRejectedMessageIsNotDeletedWhenSidelineLoadReturnsFalse() {
         firesThen("msg1");
         when(sidelineMagazine.load("msg1")).thenReturn(false);
 
@@ -120,7 +115,7 @@ public class MagazineConsumerTaskTest {
      * Magazine 2's Aerospike storage.
      */
     @Test
-    public void testRejectedMessageIsNotDeletedWhenSidelineLoadThrows() {
+    void testRejectedMessageIsNotDeletedWhenSidelineLoadThrows() {
         firesThen("msg1");
         when(sidelineMagazine.load("msg1")).thenThrow(new RuntimeException("sideline down"));
 
@@ -134,7 +129,7 @@ public class MagazineConsumerTaskTest {
      * whether the sideline had accepted the message.
      */
     @Test
-    public void testThrowingHandlerDoesNotDeleteWhenSidelineRefuses() {
+    void testThrowingHandlerDoesNotDeleteWhenSidelineRefuses() {
         firesThen("msg1");
         when(sidelineMagazine.load("msg1")).thenReturn(false);
 
@@ -148,7 +143,7 @@ public class MagazineConsumerTaskTest {
      * attempted and the delete must still happen.
      */
     @Test
-    public void testIgnorableExceptionDeletesWithoutSidelining() {
+    void testIgnorableExceptionDeletesWithoutSidelining() {
         firesThen("msg1");
 
         task(throwingHandler(Set.of(IllegalStateException.class))).run();
@@ -161,7 +156,7 @@ public class MagazineConsumerTaskTest {
      * One undeliverable message must not prevent the rest of the batch from being retired.
      */
     @Test
-    public void testOneFailedSidelineDoesNotBlockTheRestOfTheBatch() {
+    void testOneFailedSidelineDoesNotBlockTheRestOfTheBatch() {
         when(magazine.fire())
                 .thenReturn(data("msg1"), data("msg2"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -181,7 +176,7 @@ public class MagazineConsumerTaskTest {
      * A full batch must go straight to the handler.
      */
     @Test
-    public void testAFullBatchIsHandedOverWithoutWaiting() {
+    void testAFullBatchIsHandedOverWithoutWaiting() {
         when(magazine.fire())
                 .thenReturn(data("msg1"), data("msg2"), data("msg3"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -201,7 +196,7 @@ public class MagazineConsumerTaskTest {
      * deadline by almost its whole length.
      */
     @Test
-    public void testAPartialBatchIsHandedOverAtTheDeadlineWithoutOvershooting() {
+    void testAPartialBatchIsHandedOverAtTheDeadlineWithoutOvershooting() {
         when(magazine.fire())
                 .thenReturn(data("msg1"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -221,7 +216,7 @@ public class MagazineConsumerTaskTest {
      * everything and flushing once.
      */
     @Test
-    public void testABacklogIsEmittedAsSuccessiveFullBatches() {
+    void testABacklogIsEmittedAsSuccessiveFullBatches() {
         when(magazine.fire())
                 .thenReturn(data("m1"), data("m2"), data("m3"), data("m4"), data("m5"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -237,7 +232,7 @@ public class MagazineConsumerTaskTest {
      * read per consumer per five-second wait even with nothing to do.
      */
     @Test
-    public void testAnEmptyMagazineIsNeverAskedForItsDepth() {
+    void testAnEmptyMagazineIsNeverAskedForItsDepth() {
         when(magazine.fire())
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
 
@@ -260,7 +255,7 @@ public class MagazineConsumerTaskTest {
      */
     @Test
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
-    public void testABackloggedBatchingConsumerReturnsAtItsDeadline() {
+    void testABackloggedBatchingConsumerReturnsAtItsDeadline() {
         when(magazine.fire()).thenAnswer(invocation -> data("endless"));
         final CapturingHandler handler = new CapturingHandler(true);
 
@@ -278,7 +273,7 @@ public class MagazineConsumerTaskTest {
      */
     @Test
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
-    public void testABackloggedSingleMessageConsumerReturnsAtItsBudget() {
+    void testABackloggedSingleMessageConsumerReturnsAtItsBudget() {
         when(magazine.fire()).thenAnswer(invocation -> data("endless"));
 
         final long started = System.currentTimeMillis();
@@ -297,7 +292,7 @@ public class MagazineConsumerTaskTest {
      * The production default is what an unconfigured consumer actually gets.
      */
     @Test
-    public void testTheDefaultRunBudgetIsTheProductionConstant() {
+    void testTheDefaultRunBudgetIsTheProductionConstant() {
         assertEquals(30_000L, Constants.CONSUMER_RUN_BUDGET_IN_MS);
     }
 
@@ -308,7 +303,7 @@ public class MagazineConsumerTaskTest {
      */
     @Test
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
-    public void testEveryClaimedMessageIsConsumedEvenWhenTheBudgetExpires() {
+    void testEveryClaimedMessageIsConsumedEvenWhenTheBudgetExpires() {
         when(magazine.fire()).thenAnswer(invocation -> data("endless"));
         final CapturingHandler handler = new CapturingHandler(true);
 
@@ -321,7 +316,7 @@ public class MagazineConsumerTaskTest {
 
     @Test
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
-    public void testSuccessiveBatchesArriveWholeAndInOrder() {
+    void testSuccessiveBatchesArriveWholeAndInOrder() {
         when(magazine.fire())
                 .thenReturn(data("msg1"), data("msg2"), data("msg3"), data("msg4"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -336,7 +331,7 @@ public class MagazineConsumerTaskTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void testAnAcceptedBatchIsRetiredInOneCall() {
+    void testAnAcceptedBatchIsRetiredInOneCall() {
         when(magazine.fire()).thenReturn(data("a"), data("b"), data("c"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
 
@@ -363,7 +358,7 @@ public class MagazineConsumerTaskTest {
      */
     @Test
     @Timeout(value = 60000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
-    public void testATimedOutHandlerSidelinesTheBatchAndReleasesTheThread() throws Exception {
+    void testATimedOutHandlerSidelinesTheBatchAndReleasesTheThread() {
         firesThen("msg1");
         when(sidelineMagazine.load(any())).thenReturn(true);
         final HandlerExecutor executor = new HandlerExecutor(4);
@@ -408,7 +403,7 @@ public class MagazineConsumerTaskTest {
      */
     @Test
     @Timeout(value = 60000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
-    public void testATimeoutIsNeverIgnorableEvenWhenTheHandlerSaysSo() throws Exception {
+    void testATimeoutIsNeverIgnorableEvenWhenTheHandlerSaysSo() {
         firesThen("msg1");
         when(sidelineMagazine.load(any())).thenReturn(true);
         final HandlerExecutor executor = new HandlerExecutor(4);
@@ -459,7 +454,7 @@ public class MagazineConsumerTaskTest {
      */
     @Test
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
-    public void testTheRunBudgetNeverCutsTheBatchingWaitShort() {
+    void testTheRunBudgetNeverCutsTheBatchingWaitShort() {
         when(magazine.fire())
                 .thenReturn(data("msg1"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -482,8 +477,8 @@ public class MagazineConsumerTaskTest {
      * main and the sideline magazine, so a load and a delete land on the same counter.
      */
     @Test
-    public void testAMixedDrainDeletesAcceptedAndSidelinesRejectedMessages() {
-        final Magazine<String> selfSidelining = Mockito.mock(Magazine.class);
+    void testAMixedDrainDeletesAcceptedAndSidelinesRejectedMessages() {
+        final Magazine<String> selfSidelining = mock(Magazine.class);
         when(selfSidelining.load(any())).thenReturn(true);
         when(selfSidelining.fire())
                 .thenReturn(data("true"), data("false"), data(null), null);
@@ -500,8 +495,8 @@ public class MagazineConsumerTaskTest {
      * entirely.
      */
     @Test
-    public void testANonStringMessageIsDeserialisedBeforeReachingTheHandler() {
-        final Magazine<String> selfSidelining = Mockito.mock(Magazine.class);
+    void testANonStringMessageIsDeserialisedBeforeReachingTheHandler() {
+        final Magazine<String> selfSidelining = mock(Magazine.class);
         when(selfSidelining.load(any())).thenReturn(true);
         when(selfSidelining.fire())
                 .thenReturn(data("1"), data("1"), data("0"), data(null), null);
@@ -539,8 +534,8 @@ public class MagazineConsumerTaskTest {
      * interval and not something worth pinning. What the messages did is.
      */
     @Test
-    public void testABatchedDrainSidelinesOnlyTheRejectedBatch() {
-        final Magazine<String> selfSidelining = Mockito.mock(Magazine.class);
+    void testABatchedDrainSidelinesOnlyTheRejectedBatch() {
+        final Magazine<String> selfSidelining = mock(Magazine.class);
         when(selfSidelining.load(any())).thenReturn(true);
         when(selfSidelining.fire()).thenReturn(data("true"), data("false"), data("true"),
                 data("true"), data("true"), data("true"), data(null), null);
@@ -563,7 +558,7 @@ public class MagazineConsumerTaskTest {
      * and the next scheduled run retries rather than spinning on a failing backend.
      */
     @Test
-    public void testAFiringFailureStopsTheDrain() {
+    void testAFiringFailureStopsTheDrain() {
         when(magazine.fire())
                 .thenThrow(new MagazineException(ErrorCode.INTERNAL_ERROR, "some error", null))
                 .thenReturn(null);
@@ -573,9 +568,11 @@ public class MagazineConsumerTaskTest {
         verify(magazine, times(1)).fire();
     }
 
-    /** The same stop, for a failure that is not a MagazineException at all. */
+    /**
+     * The same stop, for a failure that is not a MagazineException at all.
+     */
     @Test
-    public void testAnUnexpectedFiringFailureAlsoStopsTheDrain() {
+    void testAnUnexpectedFiringFailureAlsoStopsTheDrain() {
         when(magazine.fire())
                 .thenThrow(new RuntimeException("generic error"))
                 .thenReturn(null);
@@ -590,7 +587,7 @@ public class MagazineConsumerTaskTest {
      * in hand to retire - deleting anything here would destroy a record nobody has seen.
      */
     @Test
-    public void testRetriesExhaustedStopsTheDrainWithoutDeletingData() {
+    void testRetriesExhaustedStopsTheDrainWithoutDeletingData() {
         when(magazine.fire()).thenThrow(new MagazineException(ErrorCode.RETRIES_EXHAUSTED,
                 "data may remain", null));
 
@@ -600,9 +597,11 @@ public class MagazineConsumerTaskTest {
         verify(magazine, never()).delete(any());
     }
 
-    /** The accepting counterpart of testThrowingHandlerDoesNotDeleteWhenSidelineRefuses. */
+    /**
+     * The accepting counterpart of testThrowingHandlerDoesNotDeleteWhenSidelineRefuses.
+     */
     @Test
-    public void testThrowingHandlerDeletesOnceTheSidelineHasAccepted() {
+    void testThrowingHandlerDeletesOnceTheSidelineHasAccepted() {
         firesThen("msg1");
         when(sidelineMagazine.load("msg1")).thenReturn(true);
 
@@ -619,8 +618,8 @@ public class MagazineConsumerTaskTest {
      * ends there rather than handing it an empty list and retiring the same record a second time.
      */
     @Test
-    public void testAnUndeserialisableMessageIsDroppedBeforeTheHandlerSeesIt() {
-        final Magazine<String> selfSidelining = Mockito.mock(Magazine.class);
+    void testAnUndeserialisableMessageIsDroppedBeforeTheHandlerSeesIt() {
+        final Magazine<String> selfSidelining = mock(Magazine.class);
         when(selfSidelining.fire()).thenReturn(data("not-valid-json{{{"), (MagazineData<String>) null);
 
         final MessageHandler<Integer> handler = new MessageHandler<>() {
@@ -652,7 +651,7 @@ public class MagazineConsumerTaskTest {
      * payload a second time, leaving two copies of it in the sideline for one delivery.
      */
     @Test
-    public void testAPoisonMessageIsNotSidelinedTwiceWhenTheRestOfTheBatchIsRejected() {
+    void testAPoisonMessageIsNotSidelinedTwiceWhenTheRestOfTheBatchIsRejected() {
         when(magazine.fire())
                 .thenReturn(data("not-valid-json{{{"), data("5"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -670,7 +669,7 @@ public class MagazineConsumerTaskTest {
      * handler written against {@code handle(M)} cannot even see.
      */
     @Test
-    public void testAnUnreadableSingleMessageNeverReachesTheHandler() {
+    void testAnUnreadableSingleMessageNeverReachesTheHandler() {
         when(magazine.fire())
                 .thenReturn(data("not-valid-json{{{"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -692,7 +691,7 @@ public class MagazineConsumerTaskTest {
      * anywhere.
      */
     @Test
-    public void testASidelineRefusalSurvivesTheRestOfTheBatchSucceeding() {
+    void testASidelineRefusalSurvivesTheRestOfTheBatchSucceeding() {
         when(magazine.fire())
                 .thenReturn(data("not-valid-json{{{"), data("5"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -736,7 +735,9 @@ public class MagazineConsumerTaskTest {
         };
     }
 
-    /** {@link DispatchRecordingHandler} for a type that has to go through the mapper. */
+    /**
+     * {@link DispatchRecordingHandler} for a type that has to go through the mapper.
+     */
     private static final class IntegerDispatchRecordingHandler implements MessageHandler<Integer> {
         private final List<Integer> single = Collections.synchronizedList(new ArrayList<>());
         private final List<List<Integer>> batched = Collections.synchronizedList(new ArrayList<>());
@@ -795,7 +796,9 @@ public class MagazineConsumerTaskTest {
         }
     }
 
-    /** Keeps the contents of every batch, which {@code CapturingHandler} reduces to a size. */
+    /**
+     * Keeps the contents of every batch, which {@code CapturingHandler} reduces to a size.
+     */
     private static final class RetainingHandler implements MessageHandler<String> {
         private final List<List<String>> batches = Collections.synchronizedList(new ArrayList<>());
 
@@ -823,7 +826,7 @@ public class MagazineConsumerTaskTest {
     }
 
     @Test
-    public void testAQueueWithoutBatchingCallsTheSingleMessageOverload() {
+    void testAQueueWithoutBatchingCallsTheSingleMessageOverload() {
         firesThen("msg1");
         final DispatchRecordingHandler handler = new DispatchRecordingHandler();
 
@@ -835,9 +838,11 @@ public class MagazineConsumerTaskTest {
                 "a non-batching queue must not wrap a single message in a list");
     }
 
-    /** The converse: configuring batching must not start routing through the single overload. */
+    /**
+     * The converse: configuring batching must not start routing through the single overload.
+     */
     @Test
-    public void testABatchingQueueCallsTheListOverload() {
+    void testABatchingQueueCallsTheListOverload() {
         when(magazine.fire())
                 .thenReturn(data("msg1"), data("msg2"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
@@ -849,7 +854,9 @@ public class MagazineConsumerTaskTest {
         assertTrue(handler.single.isEmpty());
     }
 
-    /** Records which overload was called, and delegates neither way. */
+    /**
+     * Records which overload was called, and delegates neither way.
+     */
     private static final class DispatchRecordingHandler implements MessageHandler<String> {
         private final List<String> single = Collections.synchronizedList(new ArrayList<>());
         private final List<List<String>> batched = Collections.synchronizedList(new ArrayList<>());

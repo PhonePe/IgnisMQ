@@ -23,15 +23,16 @@ import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.common.QueueMetaData;
 import com.phonepe.ignis.common.ShardDepth;
 import com.phonepe.ignis.config.BatchingConfig;
-import com.phonepe.ignis.metric.IgnisMetrics;
-import com.phonepe.ignis.metric.QueueMeters;
 import com.phonepe.ignis.consumer.MagazineConsumerTask;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
+import com.phonepe.ignis.metric.IgnisMetrics;
+import com.phonepe.ignis.metric.QueueMeters;
 import com.phonepe.ignis.refresh.RefreshableQueue;
 import com.phonepe.ignis.request.ShovelConfig;
 import com.phonepe.ignis.scheduler.HandlerExecutor;
 import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
+import com.phonepe.ignis.scheduler.ScheduledTask;
 import com.phonepe.ignis.shovel.ShovelTask;
 import com.phonepe.ignis.storage.BaseStorage;
 import com.phonepe.ignis.storage.MagazineStorageVisitor;
@@ -49,7 +50,6 @@ import lombok.val;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ScheduledFuture;
 import java.util.stream.IntStream;
 
 /**
@@ -60,8 +60,8 @@ public final class MagazineQueue<M> implements IQueue<M>, RefreshableQueue {
     private final Magazine<String> magazine;
     private final Magazine<String> sidelineMagazine;
     private final MessageHandler<M> messageHandler;
-    private final List<ScheduledFuture<?>> consumers = new ArrayList<>();
-    private final List<ScheduledFuture<?>> sidelineConsumers = new ArrayList<>();
+    private final List<ScheduledTask> consumers = new ArrayList<>();
+    private final List<ScheduledTask> sidelineConsumers = new ArrayList<>();
     private final IgnisSchedulerCommands scheduler;
     private final HandlerExecutor handlerExecutor;
     @Getter(AccessLevel.PACKAGE)
@@ -226,6 +226,7 @@ public final class MagazineQueue<M> implements IQueue<M>, RefreshableQueue {
         log.info("Stopped {} consumers of sideline queue '{}', Total consumers = {}",
                 consumerToStopCount, magazine.getMagazineIdentifier(), sidelineConsumers.size());
     }
+
     @Override
     public int getNoOfShovelConsumers() {
         releaseFinishedShovels();
@@ -239,7 +240,7 @@ public final class MagazineQueue<M> implements IQueue<M>, RefreshableQueue {
      * Repeating shovels are only done once cancelled, so this cannot drop a live one.
      */
     private void releaseFinishedShovels() {
-        sidelineConsumers.removeIf(ScheduledFuture::isDone);
+        sidelineConsumers.removeIf(ScheduledTask::isDone);
     }
 
     /**
@@ -274,13 +275,24 @@ public final class MagazineQueue<M> implements IQueue<M>, RefreshableQueue {
                 .forEach(i -> {
                     final ShovelTask shovelTask =
                             new ShovelTask(magazine, sidelineMagazine, autoDelete, scheduler, meters);
-                    sidelineConsumers.add(autoDelete
-                            ? scheduler.scheduleOnce(shovelTask, Constants.INITIAL_DELAY_IN_MS)
-                            : scheduler.scheduleRepeating(shovelTask, Constants.INITIAL_DELAY_IN_MS,
-                            timeIntervalInSecs == 0
-                                    ? Constants.DELAY_PERIOD_IN_MS : timeIntervalInSecs * 1000L));
+                    sidelineConsumers.add(scheduleShovel(shovelTask, autoDelete, timeIntervalInSecs));
                 });
         log.info("All shovels tasks scheduled.");
+    }
+
+    /**
+     * An auto-deleting shovel drains once and stops; a configured one repeats on its interval, or
+     * on the default poll period when no interval was given.
+     */
+    private ScheduledTask scheduleShovel(final ShovelTask shovelTask, final boolean autoDelete,
+                                         final int timeIntervalInSecs) {
+        if (autoDelete) {
+            return scheduler.scheduleOnce(shovelTask, Constants.INITIAL_DELAY_IN_MS);
+        }
+        final long periodMillis = timeIntervalInSecs == 0
+                ? Constants.DELAY_PERIOD_IN_MS
+                : timeIntervalInSecs * 1000L;
+        return scheduler.scheduleRepeating(shovelTask, Constants.INITIAL_DELAY_IN_MS, periodMillis);
     }
 
 }

@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.ToDoubleFunction;
 
 /**
@@ -65,7 +66,7 @@ public final class QueueMeters {
      * The one meter not resolved at construction: a queue that does not batch must not publish it at
      * all, and only the first recording proves the queue batches. Resolved once, on that first call.
      */
-    private volatile DistributionSummary handlerBatchSize;
+    private final AtomicReference<DistributionSummary> handlerBatchSize = new AtomicReference<>();
     private final Map<String, Counter> sidelineReasons = new ConcurrentHashMap<>();
     private final Map<String, Timer> handlerOutcomes = new ConcurrentHashMap<>();
     private final Map<String, Timer> shovelOutcomes = new ConcurrentHashMap<>();
@@ -102,7 +103,9 @@ public final class QueueMeters {
         }
     }
 
-    /** For collaborators built outside a manager, which in practice means tests. */
+    /**
+     * For collaborators built outside a manager, which in practice means tests.
+     */
     public static QueueMeters unmetered(final String queueName) {
         return new QueueMeters(new IgnisMetrics(new CompositeMeterRegistry(), false), queueName);
     }
@@ -132,7 +135,9 @@ public final class QueueMeters {
         sidelinedMessages.increment();
     }
 
-    /** The payload is still in the main magazine, so this is not a completed sideline. */
+    /**
+     * The payload is still in the main magazine, so this is not a completed sideline.
+     */
     public void sidelineRefused(final String reason) {
         sidelineReasons.computeIfAbsent(reason, this::sidelineCounter).increment();
     }
@@ -142,11 +147,11 @@ public final class QueueMeters {
     }
 
     public void handlerBatch(final int size) {
-        DistributionSummary summary = handlerBatchSize;
+        DistributionSummary summary = handlerBatchSize.get();
         if (Objects.isNull(summary)) {
             // Registration is idempotent, so a race costs a duplicate lookup and nothing else.
             summary = metrics.summary(IgnisMetrics.HANDLER_BATCH_SIZE, queue);
-            handlerBatchSize = summary;
+            handlerBatchSize.set(summary);
         }
         summary.record(size);
     }
@@ -167,7 +172,9 @@ public final class QueueMeters {
         shovelOutcomes.computeIfAbsent(outcome, this::shovelTimer).record(nanos, TimeUnit.NANOSECONDS);
     }
 
-    /** The gauge is pulled, so the source must be the live object rather than a snapshot. */
+    /**
+     * The gauge is pulled, so the source must be the live object rather than a snapshot.
+     */
     public <T> void gaugeConsumers(final T source, final ToDoubleFunction<T> count) {
         metrics.gauge(IgnisMetrics.QUEUE_CONSUMERS, queue, source, count);
     }

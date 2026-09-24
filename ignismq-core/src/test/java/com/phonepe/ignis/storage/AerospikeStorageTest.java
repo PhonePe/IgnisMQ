@@ -24,10 +24,10 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class AerospikeStorageTest {
+class AerospikeStorageTest {
 
     @Test
-    public void testGetters() {
+    void testGetters() {
         AerospikeConfiguration config = AerospikeConfiguration.builder()
                 .hosts(Collections.emptyList())
                 .build();
@@ -39,7 +39,7 @@ public class AerospikeStorageTest {
     }
 
     @Test
-    public void testAcceptVisitor() {
+    void testAcceptVisitor() {
         AerospikeConfiguration config = AerospikeConfiguration.builder()
                 .hosts(Collections.emptyList())
                 .build();

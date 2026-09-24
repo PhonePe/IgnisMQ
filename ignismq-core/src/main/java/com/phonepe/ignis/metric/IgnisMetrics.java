@@ -16,12 +16,7 @@
 
 package com.phonepe.ignis.metric;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.Meter;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.*;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import lombok.Getter;
 
@@ -40,9 +35,13 @@ public final class IgnisMetrics {
     // --- message path ---------------------------------------------------------------------
     public static final String PUBLISH = "ignismq.publish";
     public static final String CONSUME = "ignismq.consume";
-    /** Terminal disposition of a delivered message: acked, sidelined or ignored. */
+    /**
+     * Terminal disposition of a delivered message: acked, sidelined or ignored.
+     */
     public static final String MESSAGES = "ignismq.messages";
-    /** Whether a poll returned work. A high empty rate means consumers are over-provisioned. */
+    /**
+     * Whether a poll returned work. A high empty rate means consumers are over-provisioned.
+     */
     public static final String POLL = "ignismq.poll";
 
     // --- handler --------------------------------------------------------------------------
@@ -160,8 +159,10 @@ public final class IgnisMetrics {
         }
     }
 
-    /** Times an operation and tags the result {@code outcome=success|failure}. */
-    public <T> T record(final String name, final Tags tags, final ThrowingSupplier<T> operation) throws Exception {
+    /**
+     * Times an operation and tags the result {@code outcome=success|failure}.
+     */
+    public <T> T time(final String name, final Tags tags, final ThrowingSupplier<T> operation) throws Exception {
         if (!enabled) {
             return operation.get();
         }
@@ -178,19 +179,21 @@ public final class IgnisMetrics {
         }
     }
 
-    public void record(final String name, final Tags tags, final ThrowingRunnable operation) throws Exception {
-        record(name, tags, () -> {
+    public void time(final String name, final Tags tags, final ThrowingRunnable operation) throws Exception {
+        time(name, tags, () -> {
             operation.run();
             return null;
         });
     }
 
     @FunctionalInterface
+    @SuppressWarnings("java:S112")
     public interface ThrowingSupplier<T> {
         T get() throws Exception;
     }
 
     @FunctionalInterface
+    @SuppressWarnings("java:S112")
     public interface ThrowingRunnable {
         void run() throws Exception;
     }

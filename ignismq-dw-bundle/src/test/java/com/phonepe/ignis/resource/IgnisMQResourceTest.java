@@ -22,22 +22,17 @@ import com.phonepe.ignis.IgnisMQSettings;
 import com.phonepe.ignis.MagazineQueue;
 import com.phonepe.ignis.common.QueueMetaData;
 import com.phonepe.ignis.common.ShardDepth;
-import com.phonepe.ignis.response.ActionResult;
-import com.phonepe.ignis.response.InstanceMetrics;
-import com.phonepe.ignis.response.InstanceView;
-import com.phonepe.ignis.response.Permissions;
-import com.phonepe.ignis.response.QueueDetail;
-import com.phonepe.ignis.response.QueueSummary;
-import com.phonepe.ignis.service.IgnisMQService;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.exception.IgnisMQExceptionMapper;
 import com.phonepe.ignis.request.ShovelConfig;
+import com.phonepe.ignis.response.*;
+import com.phonepe.ignis.service.IgnisMQService;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
+import io.dropwizard.testing.junit5.ResourceExtension;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.dropwizard.testing.junit5.ResourceExtension;
 import org.glassfish.jersey.server.filter.RolesAllowedDynamicFeature;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,19 +45,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
  * The console's contract is that the two views never borrow each other's authority: a queue this
@@ -247,7 +233,7 @@ class IgnisMQResourceTest {
         assertEquals("billing", view.clientId());
         assertEquals("farm-1", view.farmId());
         assertEquals(IgnisMQSettings.defaults().getWorkerThreads(), view.workerThreads());
-        assertEquals(List.of(ORDERS), view.queues().stream().map(queue -> queue.name()).toList());
+        assertEquals(List.of(ORDERS), view.queues().stream().map(InstanceQueue::name).toList());
         assertEquals(4, view.queues().get(0).consumers());
     }
 
@@ -308,9 +294,9 @@ class IgnisMQResourceTest {
      */
     @Test
     void exceedingTheConsumerCapIsReportedAsAConflictRatherThanAServerError() {
-        org.mockito.Mockito.doThrow(IgnisMQException.builder()
-                        .errorCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED)
-                        .message("100 consumers already").build())
+        doThrow(IgnisMQException.builder()
+                .errorCode(ErrorCode.MAX_ALLOWED_CONSUMERS_EXCEEDED)
+                .message("100 consumers already").build())
                 .when(manager).increaseConsumers(anyString(), anyInt());
 
         final Response response = asOperator.target("/ignismq/v1/queues/" + ORDERS + "/consumers")
@@ -322,11 +308,13 @@ class IgnisMQResourceTest {
                 "the code is what lets the console say which limit was hit");
     }
 
-    /** The counterpart: storage being down is not something the caller can fix by changing anything. */
+    /**
+     * The counterpart: storage being down is not something the caller can fix by changing anything.
+     */
     @Test
     void aStorageFailureIsStillReportedAsAServerError() {
-        org.mockito.Mockito.doThrow(IgnisMQException.builder()
-                        .errorCode(ErrorCode.AEROSPIKE_ERROR).message("node unreachable").build())
+        doThrow(IgnisMQException.builder()
+                .errorCode(ErrorCode.AEROSPIKE_ERROR).message("node unreachable").build())
                 .when(manager).sweepQueue(anyString());
 
         assertEquals(503, asOperator.target("/ignismq/v1/queues/" + ORDERS + "/sweep")
@@ -350,7 +338,9 @@ class IgnisMQResourceTest {
         verify(manager, never()).deactivateQueue(anyString());
     }
 
-    /** The read side must not have been closed along with the write side. */
+    /**
+     * The read side must not have been closed along with the write side.
+     */
     @Test
     void theReadViewsStayOpenWithoutAnyRole() {
         assertEquals(200, readOnly.target("/ignismq/v1/queues").request().get().getStatus());
@@ -464,7 +454,7 @@ class IgnisMQResourceTest {
                 .request().get(InstanceMetrics.class);
 
         assertEquals(List.of("ignismq.messages", "magazine.aerospike.calls"),
-                metrics.meters().stream().map(meter -> meter.name()).toList());
+                metrics.meters().stream().map(MeterSample::name).toList());
         assertEquals(2, metrics.meterCount());
         assertEquals("billing", metrics.clientId());
         assertEquals(Map.of("queue", ORDERS, "outcome", "acked"), metrics.meters().get(0).tags());

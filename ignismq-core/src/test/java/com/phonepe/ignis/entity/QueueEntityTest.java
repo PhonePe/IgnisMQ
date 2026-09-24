@@ -21,10 +21,10 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class QueueEntityTest {
+class QueueEntityTest {
 
     @Test
-    public void testBuilder() {
+    void testBuilder() {
         QueueEntity entity = QueueEntity.builder()
                 .messageHandlerType("handler")
                 .shards(32)
@@ -57,7 +57,7 @@ public class QueueEntityTest {
     }
 
     @Test
-    public void testSetters() {
+    void testSetters() {
         QueueEntity entity = QueueEntity.builder().build();
         entity.setActive(true);
         assertTrue(entity.isActive());

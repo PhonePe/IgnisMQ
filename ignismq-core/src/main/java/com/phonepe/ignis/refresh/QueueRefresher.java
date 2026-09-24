@@ -54,7 +54,9 @@ public final class QueueRefresher {
         resize(active, liveBefore);
     }
 
-    /** Expiry is evaluated here rather than by the store, which has no clock of its own. */
+    /**
+     * Expiry is evaluated here rather than by the store, which has no clock of its own.
+     */
     private void retireExpired(final Map<String, QueueEntity> active,
                                final Map<String, QueueEntity> inactive) {
         final Map<String, QueueEntity> all = new HashMap<>(inactive);
@@ -68,7 +70,9 @@ public final class QueueRefresher {
                 });
     }
 
-    /** A queue created on another instance is adopted here; one that fails is retried next pass. */
+    /**
+     * A queue created on another instance is adopted here; one that fails is retried next pass.
+     */
     private void adopt(final Map<String, QueueEntity> active, final Set<String> liveBefore) {
         active.entrySet().stream()
                 .filter(entry -> !liveBefore.contains(entry.getKey()))
@@ -87,7 +91,9 @@ public final class QueueRefresher {
                 .forEach(lifecycle::deactivate);
     }
 
-    /** Concurrency and shovel configuration are the two things editable on a running queue. */
+    /**
+     * Concurrency and shovel configuration are the two things editable on a running queue.
+     */
     private void resize(final Map<String, QueueEntity> active, final Set<String> liveBefore) {
         liveBefore.stream()
                 .filter(active::containsKey)
@@ -138,11 +144,15 @@ public final class QueueRefresher {
 
         Set<String> liveQueueNames();
 
-        /** Null when the queue is not live here, which a concurrent deactivation can cause. */
+        /**
+         * Null when the queue is not live here, which a concurrent deactivation can cause.
+         */
         RefreshableQueue queue(String queueName);
 
-        /** Builds the queue, starts it and adds it to the live set. */
-        void adopt(String queueName, QueueEntity entity) throws Exception;
+        /**
+         * Builds the queue, starts it and adds it to the live set.
+         */
+        void adopt(String queueName, QueueEntity entity);
 
         void deactivate(String queueName);
     }

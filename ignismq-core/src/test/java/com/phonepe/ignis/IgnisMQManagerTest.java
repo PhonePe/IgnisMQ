@@ -16,15 +16,16 @@
 
 package com.phonepe.ignis;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableSet;
 import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableSet;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.common.MessageHandler;
+import com.phonepe.ignis.common.ShardDepth;
 import com.phonepe.ignis.common.TimeToLive;
-import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.common.TimeUnit;
+import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.entity.QueueEntity;
 import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
@@ -32,27 +33,28 @@ import com.phonepe.ignis.request.CreateQueueRequest;
 import com.phonepe.ignis.request.ShovelConfig;
 import com.phonepe.ignis.scheduler.IgnisSchedulers;
 import com.phonepe.ignis.service.AerospikeQueueService;
+import com.phonepe.ignis.storage.BaseStorage;
 import com.phonepe.ignis.util.AerospikeTestBase;
-import com.phonepe.ignis.common.ShardDepth;
 import com.phonepe.ignis.util.RequestFactory;
 import com.phonepe.ignis.util.TestMessageHandler;
 import com.phonepe.ignis.utils.Constants;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.curator.framework.CuratorFramework;
-import org.junit.jupiter.api.Assertions;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
-import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
+import java.time.Duration;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.*;
 
-public class IgnisMQManagerTest extends AerospikeTestBase {
+class IgnisMQManagerTest extends AerospikeTestBase {
     private static final String MESSAGE_HANDLER_TYPE = "messageHandler";
 
     private static void assertIgnisError(ErrorCode expected, Executable executable) {
@@ -66,20 +68,20 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     private SimpleMeterRegistry metricRegistry;
 
     @BeforeEach
-    public void setUp() throws Exception {
-        storageClient = Mockito.mock(StorageClient.class);
-        Mockito.when(storageClient.getClient()).thenReturn(aerospikeClient);
+    void setUp() throws Exception {
+        storageClient = mock(StorageClient.class);
+        when(storageClient.getClient()).thenReturn(aerospikeClient);
 
         metricRegistry = new SimpleMeterRegistry();
         ignisMQManager = new IgnisMQManager(
                 CLIENT_ID, createBaseStorage(), new ObjectMapper(), metricRegistry,
-                storageClient, Mockito.mock(CuratorFramework.class), FARM_ID, null);
-        aerospikeQueueService = Mockito.spy(createQueueService());
+                storageClient, mock(CuratorFramework.class), FARM_ID, null);
+        aerospikeQueueService = spy(createQueueService());
 
         Field f = IgnisMQManager.class.getDeclaredField("queueService");
         f.setAccessible(true);
         f.set(ignisMQManager, aerospikeQueueService);
-        Mockito.doReturn(Collections.emptyMap()).when(aerospikeQueueService).getQueues(Mockito.anyBoolean());
+        doReturn(Collections.emptyMap()).when(aerospikeQueueService).getQueues(anyBoolean());
         Assertions.assertEquals(Collections.emptySet(), ignisMQManager.getAllQueuesFromDB());
 
         // Initialise Message handler
@@ -90,7 +92,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @AfterEach
-    public void stopManager() {
+    void stopManager() {
         if (ignisMQManager != null) {
             ignisMQManager.stop();
             ignisMQManager = null;
@@ -98,7 +100,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void createQueueAndPublishSuccessfully() throws Exception {
+    void createQueueAndPublishSuccessfully() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         boolean success = ignisMQManager.getQueue("QUEUE_1").publish("true");
         Assertions.assertTrue(success);
@@ -112,7 +114,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
      * or it is worse than not having it.
      */
     @Test
-    public void testPerShardDepthsAgreeWithTheQueueTotals() throws Exception {
+    void testPerShardDepthsAgreeWithTheQueueTotals() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         final IQueue<String> queue = ignisMQManager.getQueue("QUEUE_1");
         for (int message = 0; message < 5; message++) {
@@ -133,10 +135,10 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
      * rather than throwing it away.
      */
     @Test
-    public void testStoredQueuesCarryTheirConfigurationAndSurviveDeactivation() throws Exception {
+    void testStoredQueuesCarryTheirConfigurationAndSurviveDeactivation() throws Exception {
         // setUp stubs the inventory query out for every other test in this class; this one is about
         // that query, so it goes back to the real one.
-        Mockito.doCallRealMethod().when(aerospikeQueueService).getQueues(Mockito.anyBoolean());
+        doCallRealMethod().when(aerospikeQueueService).getQueues(anyBoolean());
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
 
         Assertions.assertEquals(4, ignisMQManager.getStoredQueues(true).get("QUEUE_1").getConcurrency());
@@ -151,7 +153,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void getAllQueuesTest() throws Exception {
+    void getAllQueuesTest() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_2", MESSAGE_HANDLER_TYPE));
 
@@ -160,7 +162,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void deactivateQueueTest() throws Exception {
+    void deactivateQueueTest() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         Assertions.assertTrue(aerospikeQueueService.get("QUEUE_1").get().isActive());
 
@@ -171,18 +173,18 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void deactivateNonExistentQueue() {
+    void deactivateNonExistentQueue() {
         // Deactivating a queue not in the map - should not throw
         ignisMQManager.deactivateQueue("NON_EXISTENT");
     }
 
     @Test
-    public void queueNotFoundInGetQueueTest() {
+    void queueNotFoundInGetQueueTest() {
         assertIgnisError(ErrorCode.QUEUE_NOT_FOUND, () -> ignisMQManager.getQueue("QUEUE_1"));
     }
 
     @Test
-    public void increaseQueueConsumers() throws Exception {
+    void increaseQueueConsumers() throws Exception {
         CreateQueueRequest queueRequest = RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE);
         ignisMQManager.createQueue(queueRequest);
 
@@ -198,7 +200,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
      * pinned here because it is documented as supported rather than as an accident of validation.
      */
     @Test
-    public void aQueueWithNoConcurrencyPublishesWithoutConsumingUntilConsumersAreAdded() throws Exception {
+    void aQueueWithNoConcurrencyPublishesWithoutConsumingUntilConsumersAreAdded() throws Exception {
         final CreateQueueRequest request = CreateQueueRequest.builder()
                 .concurrency(0)
                 .name("QUEUE_1")
@@ -221,7 +223,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void decreaseQueueConsumers() throws Exception {
+    void decreaseQueueConsumers() throws Exception {
         CreateQueueRequest queueRequest = RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE);
         ignisMQManager.createQueue(queueRequest);
 
@@ -232,7 +234,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void increaseShovelConsumers() throws Exception {
+    void increaseShovelConsumers() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         ShovelConfig shovelConfig = ShovelConfig.builder().concurrency(5).build();
         ignisMQManager.scheduleShoveling("QUEUE_1", shovelConfig);
@@ -250,7 +252,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void metaDataTest() throws Exception {
+    void metaDataTest() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
@@ -268,7 +270,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void maxAllowedConsumerExceededExceptionInMainMagazineTest() throws Exception {
+    void maxAllowedConsumerExceededExceptionInMainMagazineTest() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
@@ -281,7 +283,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
      * rather than on passing it.
      */
     @Test
-    public void testTheConsumerCapIsReachableRatherThanOneShortOfIt() throws Exception {
+    void testTheConsumerCapIsReachableRatherThanOneShortOfIt() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
         final int room = Constants.MAX_CONSUMERS_ALLOWED - magazineQueue.getNoOfConsumers();
@@ -302,23 +304,20 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
      * process would eventually be unable to shovel at all.
      */
     @Test
-    public void testAFinishedOneShotShovelReleasesItsSlot() throws Exception {
+    void testAFinishedOneShotShovelReleasesItsSlot() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
         final int scheduled = magazineQueue.getNoOfShovelConsumers();
 
         magazineQueue.shovel(1);
 
-        final long deadline = System.currentTimeMillis() + 30_000L;
-        while (magazineQueue.getNoOfShovelConsumers() > scheduled && System.currentTimeMillis() < deadline) {
-            Thread.sleep(200L);
-        }
-        Assertions.assertEquals(scheduled, magazineQueue.getNoOfShovelConsumers(),
-                "a completed one-shot shovel must not keep holding a slot");
+        Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                .untilAsserted(() -> Assertions.assertEquals(scheduled, magazineQueue.getNoOfShovelConsumers(),
+                        "a completed one-shot shovel must not keep holding a slot"));
     }
 
     @Test
-    public void invalidShovelTimeInternalExceptionTest() throws Exception {
+    void invalidShovelTimeInternalExceptionTest() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
@@ -326,7 +325,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void negativeShovelTimeInternalExceptionTest() throws Exception {
+    void negativeShovelTimeInternalExceptionTest() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
@@ -334,7 +333,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void maxAllowedConsumerExceededExceptionInSidelineMagazineTest() throws Exception {
+    void maxAllowedConsumerExceededExceptionInSidelineMagazineTest() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue magazineQueue = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
 
@@ -342,7 +341,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void invalidQueueExpiryExceptionTest() throws Exception {
+    void invalidQueueExpiryExceptionTest() throws Exception {
         assertIgnisError(ErrorCode.INVALID_REQUEST, () -> ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_1")
                         .concurrency(5)
@@ -355,7 +354,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void invalidMessageExpiryExceptionTest() throws Exception {
+    void invalidMessageExpiryExceptionTest() throws Exception {
         assertIgnisError(ErrorCode.INVALID_REQUEST, () -> ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_1")
                         .concurrency(5)
@@ -368,7 +367,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void messageExpiryMoreThanQueueExpiryExceptionTest() throws Exception {
+    void messageExpiryMoreThanQueueExpiryExceptionTest() throws Exception {
         assertIgnisError(ErrorCode.INVALID_REQUEST, () -> ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_1")
                         .concurrency(5)
@@ -385,40 +384,40 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void createExistingQueueExceptionTest() throws Exception {
+    void createExistingQueueExceptionTest() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         assertIgnisError(ErrorCode.QUEUE_ALREADY_EXISTS,
                 () -> ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE)));
     }
 
     @Test
-    public void invalidMessageHandlerExceptionTest() throws Exception {
+    void invalidMessageHandlerExceptionTest() throws Exception {
         assertIgnisError(ErrorCode.INVALID_MESSAGE_HANDLER,
                 () -> ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", "INVALID")));
     }
 
     @Test
-    public void testSweepQueueNonExistentQueue() {
+    void testSweepQueueNonExistentQueue() {
         ignisMQManager.sweepQueue("NON_EXISTENT");
         // Should log "Queue doesn't exist" and return
     }
 
     @Test
-    public void testSweepQueueExistingQueue() throws Exception {
+    void testSweepQueueExistingQueue() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         // sweepQueue calls Utils.sweepQueue - it won't throw even if there's nothing to sweep
         ignisMQManager.sweepQueue("QUEUE_1");
     }
 
     @Test
-    public void testRefreshQueuesWithNoHandlers() throws Exception {
+    void testRefreshQueuesWithNoHandlers() throws Exception {
         // Create a fresh manager without handlers
-        StorageClient<com.aerospike.client.IAerospikeClient> sc = Mockito.mock(StorageClient.class);
-        Mockito.when(sc.getClient()).thenReturn(aerospikeClient);
+        StorageClient<com.aerospike.client.IAerospikeClient> sc = mock(StorageClient.class);
+        when(sc.getClient()).thenReturn(aerospikeClient);
 
         IgnisMQManager manager = new IgnisMQManager(
                 CLIENT_ID, createBaseStorage(), new ObjectMapper(), new SimpleMeterRegistry(),
-                sc, Mockito.mock(CuratorFramework.class), FARM_ID, null);
+                sc, mock(CuratorFramework.class), FARM_ID, null);
         try {
             // Don't initialize message handlers
             manager.refreshQueues(); // Should log "No message handlers registered" and return
@@ -428,7 +427,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testRefreshQueuesCreatesNewActiveQueues() throws Exception {
+    void testRefreshQueuesCreatesNewActiveQueues() throws Exception {
         // Create a queue in the real aerospike but NOT in ignisMQManager's map
         // Then refreshQueues should pick it up
         QueueEntity entity = QueueEntity.builder()
@@ -440,12 +439,12 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                 .build();
 
         // Reset the spy to return actual data
-        Mockito.reset(aerospikeQueueService);
+        reset(aerospikeQueueService);
         AerospikeQueueService realService = createQueueService();
         realService.store("REFRESH_QUEUE", entity, 1200);
 
         // Re-spy
-        aerospikeQueueService = Mockito.spy(realService);
+        aerospikeQueueService = spy(realService);
         Field f = IgnisMQManager.class.getDeclaredField("queueService");
         f.setAccessible(true);
         f.set(ignisMQManager, aerospikeQueueService);
@@ -463,7 +462,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
      * batch on the queue. The fallback is what stands between an upgrade and total data diversion.
      */
     @Test
-    public void testAQueueCreatedBeforeTheHandlerTimeoutBinFallsBackToTheDefault() throws Exception {
+    void testAQueueCreatedBeforeTheHandlerTimeoutBinFallsBackToTheDefault() throws Exception {
         final long sweepDuration = 60 * 60 * 1000L;
         QueueEntity entity = QueueEntity.builder()
                 .active(true).shards(1).queueExpiry(300).messageExpiry(60)
@@ -473,7 +472,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                 .sweepDuration(sweepDuration)
                 .build();
 
-        Mockito.reset(aerospikeQueueService);
+        reset(aerospikeQueueService);
         AerospikeQueueService realService = createQueueService();
         realService.store("LEGACY_TIMEOUT_QUEUE", entity, 1200);
         // Written, then stripped, so the record is shaped exactly as one from a version that had
@@ -486,7 +485,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
                 realService.get("LEGACY_TIMEOUT_QUEUE").orElseThrow().getHandlerTimeout(),
                 "precondition: the bin is absent and reads back as the sentinel");
 
-        aerospikeQueueService = Mockito.spy(realService);
+        aerospikeQueueService = spy(realService);
         Field f = IgnisMQManager.class.getDeclaredField("queueService");
         f.setAccessible(true);
         f.set(ignisMQManager, aerospikeQueueService);
@@ -504,18 +503,18 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testRefreshQueuesDeactivatesInactiveQueues() throws Exception {
+    void testRefreshQueuesDeactivatesInactiveQueues() throws Exception {
         // First create a queue
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         Assertions.assertNotNull(ignisMQManager.getAllQueues().get("QUEUE_1"));
 
         // Now deactivate in DB
-        Mockito.reset(aerospikeQueueService);
+        reset(aerospikeQueueService);
         AerospikeQueueService realService = createQueueService();
         // The queue already exists in aerospike from createQueue. Mark it inactive.
         realService.updateState("QUEUE_1", false);
 
-        aerospikeQueueService = Mockito.spy(realService);
+        aerospikeQueueService = spy(realService);
         Field f = IgnisMQManager.class.getDeclaredField("queueService");
         f.setAccessible(true);
         f.set(ignisMQManager, aerospikeQueueService);
@@ -527,17 +526,17 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testRefreshQueuesUpdatesConcurrency() throws Exception {
+    void testRefreshQueuesUpdatesConcurrency() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue q = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
         int originalConsumers = q.getNoOfConsumers();
 
         // Reset spy and update concurrency in DB
-        Mockito.reset(aerospikeQueueService);
+        reset(aerospikeQueueService);
         AerospikeQueueService realService = createQueueService();
         realService.updateConcurrency("QUEUE_1", originalConsumers + 2);
 
-        aerospikeQueueService = Mockito.spy(realService);
+        aerospikeQueueService = spy(realService);
         Field f = IgnisMQManager.class.getDeclaredField("queueService");
         f.setAccessible(true);
         f.set(ignisMQManager, aerospikeQueueService);
@@ -549,18 +548,18 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testRefreshQueuesDecreaseConcurrency() throws Exception {
+    void testRefreshQueuesDecreaseConcurrency() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         MagazineQueue q = (MagazineQueue) ignisMQManager.getQueue("QUEUE_1");
         int originalConsumers = q.getNoOfConsumers();
         Assertions.assertTrue(originalConsumers > 1);
 
         // Reset spy and update concurrency in DB to lower value
-        Mockito.reset(aerospikeQueueService);
+        reset(aerospikeQueueService);
         AerospikeQueueService realService = createQueueService();
         realService.updateConcurrency("QUEUE_1", 1);
 
-        aerospikeQueueService = Mockito.spy(realService);
+        aerospikeQueueService = spy(realService);
         Field f = IgnisMQManager.class.getDeclaredField("queueService");
         f.setAccessible(true);
         f.set(ignisMQManager, aerospikeQueueService);
@@ -571,15 +570,15 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testRefreshQueuesUpdatesShovelConfig() throws Exception {
+    void testRefreshQueuesUpdatesShovelConfig() throws Exception {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
 
         // Queue was created with shovel config. Update the shovel config in DB
-        Mockito.reset(aerospikeQueueService);
+        reset(aerospikeQueueService);
         AerospikeQueueService realService = createQueueService();
         realService.updateShovelConfig("QUEUE_1", 3, 10);
 
-        aerospikeQueueService = Mockito.spy(realService);
+        aerospikeQueueService = spy(realService);
         Field f = IgnisMQManager.class.getDeclaredField("queueService");
         f.setAccessible(true);
         f.set(ignisMQManager, aerospikeQueueService);
@@ -588,7 +587,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testRefreshQueuesAddsShovelConfigWhenNone() throws Exception {
+    void testRefreshQueuesAddsShovelConfigWhenNone() throws Exception {
         // Create queue without shovel config
         ignisMQManager.createQueue(
                 CreateQueueRequest.builder().name("QUEUE_NS")
@@ -600,11 +599,11 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         Assertions.assertNull(q.getShovelConfig());
 
         // Now set shovel config in DB
-        Mockito.reset(aerospikeQueueService);
+        reset(aerospikeQueueService);
         AerospikeQueueService realService = createQueueService();
         realService.updateShovelConfig("QUEUE_NS", 2, 5);
 
-        aerospikeQueueService = Mockito.spy(realService);
+        aerospikeQueueService = spy(realService);
         Field f = IgnisMQManager.class.getDeclaredField("queueService");
         f.setAccessible(true);
         f.set(ignisMQManager, aerospikeQueueService);
@@ -613,7 +612,7 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStopMethod() {
+    void testStopMethod() {
         ignisMQManager.stop();
     }
 
@@ -622,20 +621,20 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
      * supplied it may still be using it.
      */
     @Test
-    public void testStopDoesNotCloseAnExternallyOwnedStorageClient() {
+    void testStopDoesNotCloseAnExternallyOwnedStorageClient() {
         ignisMQManager.stop();
-        Mockito.verify(storageClient, never()).stop();
+        verify(storageClient, never()).stop();
     }
 
     @Test
-    public void testStopIsIdempotent() {
+    void testStopIsIdempotent() {
         ignisMQManager.stop();
         ignisMQManager.stop();
-        Mockito.verify(storageClient, never()).stop();
+        verify(storageClient, never()).stop();
     }
 
     @Test
-    public void testStopLeavesNoSchedulerThreadsBehind() throws Exception {
+    void testStopLeavesNoSchedulerThreadsBehind() throws Exception {
         final Field schedulersField = IgnisMQManager.class.getDeclaredField("schedulers");
         schedulersField.setAccessible(true);
         final IgnisSchedulers schedulers = (IgnisSchedulers) schedulersField.get(ignisMQManager);
@@ -644,24 +643,26 @@ public class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.stop();
 
         assertTrue(schedulers.isStopped(), "both pools must be shut down");
-        final long deadline = System.currentTimeMillis() + 15_000L;
-        while (schedulers.getWorker().poolSize() + schedulers.getControl().poolSize() > 0
-                && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50);
-        }
-        assertEquals(0, schedulers.getWorker().poolSize(), "no worker thread may survive stop()");
-        assertEquals(0, schedulers.getControl().poolSize(), "no control thread may survive stop()");
+        Awaitility.await().atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(50))
+                .untilAsserted(() -> {
+                    assertEquals(0, schedulers.getWorker().poolSize(), "no worker thread may survive stop()");
+                    assertEquals(0, schedulers.getControl().poolSize(), "no control thread may survive stop()");
+                });
     }
 
     @Test
-    public void testMeterRegistryIsRequired() {
+    void testMeterRegistryIsRequired() {
+        final BaseStorage storage = createBaseStorage();
+        final ObjectMapper objectMapper = new ObjectMapper();
+        final CuratorFramework curator = mock(CuratorFramework.class);
+
         Assertions.assertThrows(NullPointerException.class,
-                () -> new IgnisMQManager(CLIENT_ID, createBaseStorage(), new ObjectMapper(), null,
-                        storageClient, Mockito.mock(CuratorFramework.class), FARM_ID, null));
+                () -> new IgnisMQManager(CLIENT_ID, storage, objectMapper, null,
+                        storageClient, curator, FARM_ID, null));
     }
 
     @Test
-    public void testGetTaskInitializer() {
+    void testGetTaskInitializer() {
         Assertions.assertNotNull(ignisMQManager.getTaskInitializer());
     }
 }

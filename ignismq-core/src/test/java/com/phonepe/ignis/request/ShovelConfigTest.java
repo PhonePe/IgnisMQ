@@ -20,17 +20,17 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class ShovelConfigTest {
+class ShovelConfigTest {
 
     @Test
-    public void testDefaults() {
+    void testDefaults() {
         ShovelConfig config = ShovelConfig.builder().build();
         assertEquals(600, config.getTimeIntervalInSecs());
         assertEquals(4, config.getConcurrency());
     }
 
     @Test
-    public void testCustomValues() {
+    void testCustomValues() {
         ShovelConfig config = ShovelConfig.builder()
                 .concurrency(10)
                 .timeIntervalInSecs(300)

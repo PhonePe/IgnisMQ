@@ -17,20 +17,22 @@
 package com.phonepe.ignis.scheduler;
 
 import com.phonepe.ignis.utils.Constants;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class IgnisSchedulersTest {
+class IgnisSchedulersTest {
 
     private IgnisSchedulers schedulers;
 
     @AfterEach
-    public void tearDown() {
+    void tearDown() {
         if (schedulers != null) {
             schedulers.stop();
         }
@@ -46,7 +48,7 @@ public class IgnisSchedulersTest {
      * while looking perfectly healthy.
      */
     @Test
-    public void testSaturatedWorkersCannotStarveTheControlPool() throws Exception {
+    void testSaturatedWorkersCannotStarveTheControlPool() throws Exception {
         schedulers = new IgnisSchedulers();
 
         // One task per worker thread, each of which never returns - the shape of a consumer
@@ -78,7 +80,7 @@ public class IgnisSchedulersTest {
      * The control pool is fixed: it must not grow, so it can never become the thing that is starved.
      */
     @Test
-    public void testTheControlPoolDoesNotGrow() {
+    void testTheControlPoolDoesNotGrow() {
         schedulers = new IgnisSchedulers();
 
         for (int i = 0; i < 20; i++) {
@@ -93,7 +95,7 @@ public class IgnisSchedulersTest {
      * The worker pool grows, and only up to its own ceiling.
      */
     @Test
-    public void testTheWorkerPoolGrowsToItsCeiling() {
+    void testTheWorkerPoolGrowsToItsCeiling() {
         schedulers = new IgnisSchedulers();
 
         for (int i = 0; i < Constants.DEFAULT_WORKER_THREADS + 10; i++) {
@@ -109,7 +111,7 @@ public class IgnisSchedulersTest {
      * thread is only occupied while its worker is blocked on it.
      */
     @Test
-    public void testAConfiguredCeilingBindsInsteadOfTheDefault() {
+    void testAConfiguredCeilingBindsInsteadOfTheDefault() {
         schedulers = new IgnisSchedulers(3);
 
         for (int i = 0; i < 10; i++) {
@@ -124,7 +126,7 @@ public class IgnisSchedulersTest {
      * Threads are named per pool, so a saturated pool is identifiable from a stack dump alone.
      */
     @Test
-    public void testPoolsAreNamedDistinctly() throws Exception {
+    void testPoolsAreNamedDistinctly() throws Exception {
         schedulers = new IgnisSchedulers();
         final CountDownLatch ran = new CountDownLatch(2);
         schedulers.getControl().scheduleRepeating(ran::countDown, 0, 20);
@@ -139,7 +141,7 @@ public class IgnisSchedulersTest {
      * Both pools stop, and nothing survives. A framework lifecycle may also stop them twice.
      */
     @Test
-    public void testStopHaltsBothPoolsAndIsIdempotent() throws Exception {
+    void testStopHaltsBothPoolsAndIsIdempotent() throws Exception {
         schedulers = new IgnisSchedulers();
         final CountDownLatch ran = new CountDownLatch(2);
         schedulers.getControl().scheduleRepeating(ran::countDown, 0, 20);
@@ -151,12 +153,10 @@ public class IgnisSchedulersTest {
         assertTrue(schedulers.stop());
         assertTrue(schedulers.isStopped());
 
-        final long deadline = System.currentTimeMillis() + 10_000L;
-        while ((liveThreads("ignismq-control-") + liveThreads("ignismq-worker-")) > 0
-                && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50);
-        }
-        assertEquals(0L, liveThreads("ignismq-control-") + liveThreads("ignismq-worker-"), "no pool thread may survive stop()");
+        Awaitility.await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(50))
+                .untilAsserted(() -> assertEquals(0L,
+                        liveThreads("ignismq-control-") + liveThreads("ignismq-worker-"),
+                        "no pool thread may survive stop()"));
     }
 
     private static long liveThreads(final String prefix) {

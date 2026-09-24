@@ -18,6 +18,7 @@ package com.phonepe.ignis;
 
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import com.phonepe.ignis.storage.AerospikeStorage;
+import com.phonepe.ignis.storage.BaseStorage;
 import io.dropwizard.Configuration;
 import io.dropwizard.setup.Bootstrap;
 import lombok.AllArgsConstructor;
@@ -26,14 +27,15 @@ import lombok.NoArgsConstructor;
 import org.apache.curator.framework.CuratorFramework;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.Collections;
 
-public class IgnisMQBundleTest {
+import static org.mockito.Mockito.mock;
+
+class IgnisMQBundleTest {
 
     @Test
-    public void testTheContextCarriesEveryValueTheManagerNeeds() {
+    void testTheContextCarriesEveryValueTheManagerNeeds() {
         IgnisMQBundle<AppConfig> bundle = createBundle();
         AppConfig appConfig = new AppConfig("SERVICE");
 
@@ -47,12 +49,12 @@ public class IgnisMQBundleTest {
 
     /** Settings are the one optional input, so omitting them must not mean null. */
     @Test
-    public void testAContextWithoutSettingsDefaultsThemRatherThanLeavingThemNull() {
+    void testAContextWithoutSettingsDefaultsThemRatherThanLeavingThemNull() {
         IgnisMQContext context = IgnisMQContext.builder()
                 .clientId("SERVICE")
                 .farmId("NB6")
                 .storage(storage())
-                .curatorFramework(Mockito.mock(CuratorFramework.class))
+                .curatorFramework(mock(CuratorFramework.class))
                 .build();
 
         Assertions.assertEquals(IgnisMQSettings.defaults(), context.getSettings());
@@ -63,24 +65,27 @@ public class IgnisMQBundleTest {
      * into one context, so the builder has to reject them at startup instead.
      */
     @Test
-    public void testAContextMissingARequiredValueIsRejected() {
+    void testAContextMissingARequiredValueIsRejected() {
+        final BaseStorage storage = storage();
+        final CuratorFramework curator = mock(CuratorFramework.class);
+
         Assertions.assertThrows(NullPointerException.class, () -> IgnisMQContext.builder()
                 .farmId("NB6")
-                .storage(storage())
-                .curatorFramework(Mockito.mock(CuratorFramework.class))
+                .storage(storage)
+                .curatorFramework(curator)
                 .build());
     }
 
     @Test
-    public void testInitialize() {
+    void testInitialize() {
         IgnisMQBundle<AppConfig> bundle = createBundle();
-        Bootstrap<?> bootstrap = Mockito.mock(Bootstrap.class);
+        Bootstrap<?> bootstrap = mock(Bootstrap.class);
         // Should not throw
         bundle.initialize(bootstrap);
     }
 
     @Test
-    public void testGetIgnisMQManagerBeforeRun() {
+    void testGetIgnisMQManagerBeforeRun() {
         IgnisMQBundle<AppConfig> bundle = createBundle();
         Assertions.assertNull(bundle.getIgnisMQManager());
     }
@@ -104,7 +109,7 @@ public class IgnisMQBundleTest {
                         .clientId(config.getServiceName())
                         .farmId("NB6")
                         .storage(storage())
-                        .curatorFramework(Mockito.mock(CuratorFramework.class))
+                        .curatorFramework(mock(CuratorFramework.class))
                         .build();
             }
         };

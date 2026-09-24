@@ -1,684 +1,716 @@
 <!doctype html>
 <html lang="en" data-theme="light">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ignisMQ Console</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ignisMQ Console</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <div class="bar">
-    <div class="brand"><span class="spark"></span>IgnisMQ</div>
-    <div class="scope-chip" id="scope" title="Everything here is scoped to this client and farm">
-      <b>&ndash;</b></div>
-    <div class="grow"></div>
-    <div id="last-updated" class="meta live" aria-live="polite">Connecting</div>
-    <button id="token-button" class="icon-button" type="button" aria-expanded="false"
-            title="Credentials sent with every request">
-      <span id="token-dot" class="dot-off">&#9679;</span> Token
-    </button>
-    <button id="theme" class="switch" type="button" role="switch" aria-checked="false"
-            aria-label="Switch between light and dark">
-      <span id="theme-light">&#9788;</span><span id="theme-dark">&#9790;</span>
-    </button>
-  </div>
-  <div id="token-panel" class="hidden">
-    <p><strong>How your role is decided.</strong> IgnisMQ ships no authentication of its own; the application
-      it is embedded in populates the Jersey <code>SecurityContext</code>, and the console's actions are closed
-      unless it grants <code>ignismq_operate</code> (or <code>ignismq_deactivate</code>).</p>
-    <p>If your application authenticates with <strong>cookies</strong>, leave this empty &mdash; the browser
-      already sends them. If it expects a <strong>bearer token</strong>, paste one here and every request will
-      carry <code>Authorization: Bearer &lt;token&gt;</code>.</p>
-    <p>Held in <code>sessionStorage</code>, so it is gone when this tab closes. It is readable by any script on
-      this origin, so use a short-lived token and serve the console over HTTPS.</p>
-    <div class="row">
-      <input id="token-input" type="password" placeholder="Paste a bearer token" autocomplete="off"
-             aria-label="Bearer token">
-      <button id="token-save" class="go" type="button">Save</button>
-      <button id="token-clear" class="go" type="button">Clear</button>
+    <div class="bar">
+        <div class="brand"><span class="spark"></span>IgnisMQ</div>
+        <div class="scope-chip" id="scope" title="Everything here is scoped to this client and farm">
+            <b>&ndash;</b></div>
+        <div class="grow"></div>
+        <div id="last-updated" class="meta live" aria-live="polite">Connecting</div>
+        <button id="token-button" class="icon-button" type="button" aria-expanded="false"
+                title="Credentials sent with every request">
+            <span id="token-dot" class="dot-off">&#9679;</span> Token
+        </button>
+        <button id="theme" class="switch" type="button" role="switch" aria-checked="false"
+                aria-label="Switch between light and dark">
+            <span id="theme-light">&#9788;</span><span id="theme-dark">&#9790;</span>
+        </button>
     </div>
-  </div>
-  <div class="tabs" role="tablist">
-    <button id="tab-queues" role="tab" aria-selected="true" aria-controls="view-queues">Queues</button>
-    <button id="tab-instance" role="tab" aria-selected="false" aria-controls="view-instance">This instance</button>
-  </div>
+    <div id="token-panel" class="hidden">
+        <p><strong>How your role is decided.</strong> IgnisMQ ships no authentication of its own; the application
+            it is embedded in populates the Jersey <code>SecurityContext</code>, and the console's actions are closed
+            unless it grants <code>ignismq_operate</code> (or <code>ignismq_deactivate</code>).</p>
+        <p>If your application authenticates with <strong>cookies</strong>, leave this empty &mdash; the browser
+            already sends them. If it expects a <strong>bearer token</strong>, paste one here and every request will
+            carry <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+        <p>Held in <code>sessionStorage</code>, so it is gone when this tab closes. It is readable by any script on
+            this origin, so use a short-lived token and serve the console over HTTPS.</p>
+        <div class="row">
+            <input id="token-input" type="password" placeholder="Paste a bearer token" autocomplete="off"
+                   aria-label="Bearer token">
+            <button id="token-save" class="go" type="button">Save</button>
+            <button id="token-clear" class="go" type="button">Clear</button>
+        </div>
+    </div>
+    <div class="tabs" role="tablist">
+        <button id="tab-queues" role="tab" aria-selected="true" aria-controls="view-queues">Queues</button>
+        <button id="tab-instance" role="tab" aria-selected="false" aria-controls="view-instance">This instance</button>
+    </div>
 </header>
 
-<div id="toasts" role="status" aria-live="polite"></div>
+<output id="toasts" aria-live="polite"></output>
 <main>
-  <section id="view-queues" role="tabpanel">
-    <div class="split">
-      <aside>
-        <div class="card">
-          <h2>Queues <span class="tag cluster">cluster</span></h2>
-          <div class="body"><input id="queue-filter" class="filter" type="search" placeholder="Filter"
-                                   aria-label="Filter queues" autocomplete="off"></div>
-          <nav id="queues"><div class="empty">Loading...</div></nav>
-        </div>
-      </aside>
-      <div>
-        <div class="card" id="overview"><div class="empty">Select a queue.</div></div>
-        <div class="card" id="shards"></div>
-        <div class="card">
-          <h2>Actions</h2>
-          <div class="action">
-            <div class="what"><b>Add consumers</b>
-              <span class="tag instance">this instance</span>
-              <span>Starts more consumer tasks here. Other instances are unchanged.</span></div>
-            <input id="add-count" type="number" min="1" max="100" value="1" aria-label="Consumers to add">
-            <button id="add-consumers" class="go" type="button" disabled>Add</button>
-          </div>
-          <div class="action">
-            <div class="what"><b>Stop consumers</b>
-              <span class="tag instance">this instance</span>
-              <span>Stops consumer tasks here. Messages are not lost; the remaining consumers take them.</span></div>
-            <input id="stop-count" type="number" min="1" max="100" value="1" aria-label="Consumers to stop">
-            <button id="stop-consumers" class="go" type="button" disabled>Stop</button>
-          </div>
-          <div class="action">
-            <div class="what"><b>Drain the sideline now</b>
-              <span class="tag instance">this instance</span>
-              <span>One-shot shovel of sidelined messages back into the main queue. Nothing is stored.</span></div>
-            <input id="shovel-now" type="number" min="1" max="50" value="4" aria-label="Shovel concurrency">
-            <button id="shovel" class="go" type="button" disabled>Drain</button>
-          </div>
-          <div class="action">
-            <div class="what"><b>Schedule a repeating shovel</b>
-              <span class="tag cluster">cluster</span>
-              <span>Stored on the queue. Every instance adopts it on its next refresh.</span></div>
-            <input id="shovel-interval" type="number" min="1" max="86400" value="600"
-                   aria-label="Shovel interval in seconds">
-            <button id="schedule-shovel" class="go" type="button" disabled>Schedule</button>
-          </div>
-          <div class="action">
-            <div class="what"><b>Sweep now</b>
-              <span class="tag cluster">cluster</span>
-              <span>Re-homes messages a consumer claimed and never finished. Runs synchronously and can take
+    <section id="view-queues" role="tabpanel">
+        <div class="split">
+            <aside>
+                <div class="card">
+                    <h2>Queues <span class="tag cluster">cluster</span></h2>
+                    <div class="body"><input id="queue-filter" class="filter" type="search" placeholder="Filter"
+                                             aria-label="Filter queues" autocomplete="off"></div>
+                    <nav id="queues">
+                        <div class="empty">Loading...</div>
+                    </nav>
+                </div>
+            </aside>
+            <div>
+                <div class="card" id="overview">
+                    <div class="empty">Select a queue.</div>
+                </div>
+                <div class="card" id="shards"></div>
+                <div class="card">
+                    <h2>Actions</h2>
+                    <div class="action">
+                        <div class="what"><b>Add consumers</b>
+                            <span class="tag instance">this instance</span>
+                            <span>Starts more consumer tasks here. Other instances are unchanged.</span></div>
+                        <input id="add-count" type="number" min="1" max="100" value="1" aria-label="Consumers to add">
+                        <button id="add-consumers" class="go" type="button" disabled>Add</button>
+                    </div>
+                    <div class="action">
+                        <div class="what"><b>Stop consumers</b>
+                            <span class="tag instance">this instance</span>
+                            <span>Stops consumer tasks here. Messages are not lost; the remaining consumers take them.</span>
+                        </div>
+                        <input id="stop-count" type="number" min="1" max="100" value="1" aria-label="Consumers to stop">
+                        <button id="stop-consumers" class="go" type="button" disabled>Stop</button>
+                    </div>
+                    <div class="action">
+                        <div class="what"><b>Drain the sideline now</b>
+                            <span class="tag instance">this instance</span>
+                            <span>One-shot shovel of sidelined messages back into the main queue. Nothing is stored.</span>
+                        </div>
+                        <input id="shovel-now" type="number" min="1" max="50" value="4" aria-label="Shovel concurrency">
+                        <button id="shovel" class="go" type="button" disabled>Drain</button>
+                    </div>
+                    <div class="action">
+                        <div class="what"><b>Schedule a repeating shovel</b>
+                            <span class="tag cluster">cluster</span>
+                            <span>Stored on the queue. Every instance adopts it on its next refresh.</span></div>
+                        <input id="shovel-interval" type="number" min="1" max="86400" value="600"
+                               aria-label="Shovel interval in seconds">
+                        <button id="schedule-shovel" class="go" type="button" disabled>Schedule</button>
+                    </div>
+                    <div class="action">
+                        <div class="what"><b>Sweep now</b>
+                            <span class="tag cluster">cluster</span>
+                            <span>Re-homes messages a consumer claimed and never finished. Runs synchronously and can take
                 a while on a large queue.</span></div>
-            <button id="sweep" class="go" type="button" disabled>Sweep</button>
-          </div>
-          <div class="action">
-            <div class="what"><b>Deactivate</b>
-              <span class="tag cluster">cluster</span>
-              <span><strong>Irreversible.</strong> No API activates a queue again. Consumers stop everywhere and
+                        <button id="sweep" class="go" type="button" disabled>Sweep</button>
+                    </div>
+                    <div class="action">
+                        <div class="what"><b>Deactivate</b>
+                            <span class="tag cluster">cluster</span>
+                            <span><strong>Irreversible.</strong> No API activates a queue again. Consumers stop everywhere and
                 messages still in the queue are left where they are. Needs the separate
                 <code>ignismq_deactivate</code> role; type the queue name to confirm.</span></div>
-            <input id="confirm-name" type="text" placeholder="queue name" aria-label="Type the queue name">
-            <button id="deactivate" class="go danger" type="button" disabled>Deactivate</button>
-          </div>
+                        <input id="confirm-name" type="text" placeholder="queue name" aria-label="Type the queue name">
+                        <button id="deactivate" class="go danger" type="button" disabled>Deactivate</button>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section id="view-instance" role="tabpanel" class="hidden">
-    <div class="card">
-      <h2>Process <span class="tag instance">this instance only</span></h2>
-      <div class="body">
-        <p class="note" id="instance-banner"></p>
-        <div class="stats" id="instance-stats"></div>
-      </div>
-    </div>
-    <div class="card">
-      <h2>Queues running here <span class="tag instance">this instance only</span></h2>
-      <div class="body flush" id="instance-queues"></div>
-    </div>
-    <div class="card">
-      <h2>Meters <span class="tag instance">this instance only</span></h2>
-      <div class="body">
-        <div class="banner info"><strong>These are one process's numbers</strong>, read live from its meter
-          registry. IgnisMQ has no broker and no register of instances, so there is no cluster total here and
-          there cannot be one &mdash; scrape <code>ignismq.*</code> and <code>magazine.*</code> and aggregate
-          in your metrics backend.</div>
-        <input id="meter-filter" class="filter" type="search"
-               placeholder="Filter by queue, meter name or tag (e.g. sidelined, pool, orders)"
-               aria-label="Filter meters" autocomplete="off">
-      </div>
-      <div class="body" id="meters"></div>
-    </div>
-  </section>
+    <section id="view-instance" role="tabpanel" class="hidden">
+        <div class="card">
+            <h2>Process <span class="tag instance">this instance only</span></h2>
+            <div class="body">
+                <p class="note" id="instance-banner"></p>
+                <div class="stats" id="instance-stats"></div>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Queues running here <span class="tag instance">this instance only</span></h2>
+            <div class="body flush" id="instance-queues"></div>
+        </div>
+        <div class="card">
+            <h2>Meters <span class="tag instance">this instance only</span></h2>
+            <div class="body">
+                <div class="banner info"><strong>These are one process's numbers</strong>, read live from its meter
+                    registry. IgnisMQ has no broker and no register of instances, so there is no cluster total here and
+                    there cannot be one &mdash; scrape <code>ignismq.*</code> and <code>magazine.*</code> and aggregate
+                    in your metrics backend.
+                </div>
+                <input id="meter-filter" class="filter" type="search"
+                       placeholder="Filter by queue, meter name or tag (e.g. sidelined, pool, orders)"
+                       aria-label="Filter meters" autocomplete="off">
+            </div>
+            <div class="body" id="meters"></div>
+        </div>
+    </section>
 </main>
 
 <script>
-  const base = window.location.pathname.replace(/\/ignisConsole\/?$/, '');
-  const api = `${base}/ignismq/v1`;
-  const el = id => document.getElementById(id);
-  const esc = v => String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-  const num = v => v === null || v === undefined ? '-' : Number(v).toLocaleString();
-  let selected = null;
-  let version = 0;
-  let inventory = [];
+    const base = window.location.pathname.replace(/\/ignisConsole\/?$/, '');
+    const api = `${base}/ignismq/v1`;
+    const el = id => document.getElementById(id);
+    const esc = v => String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const num = v => v === null || v === undefined ? '-' : Number(v).toLocaleString();
 
-  const THEME_KEY = 'ignismq-console-theme';
-  function applyTheme(theme) {
-    const dark = theme === 'dark';
-    document.documentElement.dataset.theme = theme;
-    el('theme').setAttribute('aria-checked', String(dark));
-    el('theme-light').classList.toggle('on', !dark);
-    el('theme-dark').classList.toggle('on', dark);
-    try { localStorage.setItem(THEME_KEY, theme); } catch (ignored) { /* private mode */ }
-  }
-  (function initTheme() {
-    let stored = null;
-    try { stored = localStorage.getItem(THEME_KEY); } catch (ignored) { /* private mode */ }
-    applyTheme(stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
-  })();
-  el('theme').addEventListener('click',
-    () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
-
-  el('tab-queues').addEventListener('click', () => showTab('queues'));
-  el('tab-instance').addEventListener('click', () => showTab('instance'));
-  function showTab(name) {
-    ['queues', 'instance'].forEach(tab => {
-      el('tab-' + tab).setAttribute('aria-selected', String(tab === name));
-      el('view-' + tab).classList.toggle('hidden', tab !== name);
-    });
-    if (name === 'instance') {
-      refreshInstance();
-    }
-  }
-
-  const TOKEN_KEY = 'ignismq-console-token';
-  function token() {
-    try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (ignored) { return ''; }
-  }
-  function setToken(value) {
-    try {
-      if (value) { sessionStorage.setItem(TOKEN_KEY, value); } else { sessionStorage.removeItem(TOKEN_KEY); }
-    } catch (ignored) { /* private mode: the token simply is not remembered */ }
-    const dot = el('token-dot');
-    dot.className = value ? 'dot-on' : 'dot-off';
-    el('token-button').title = value
-      ? 'Sending Authorization: Bearer <token> with every request'
-      : 'No token set - relying on cookies your browser already sends';
-  }
-  el('token-button').addEventListener('click', () => {
-    const panel = el('token-panel');
-    const opening = panel.classList.contains('hidden');
-    panel.classList.toggle('hidden', !opening);
-    el('token-button').setAttribute('aria-expanded', String(opening));
-    if (opening) {
-      el('token-input').value = token();
-      el('token-input').focus();
-    }
-  });
-  el('token-save').addEventListener('click', () => {
-    setToken(el('token-input').value.trim());
-    el('token-panel').classList.add('hidden');
-    toast('ok', 'Token saved', 'Sent with every request from this tab.');
-    refreshPermissions();
-  });
-  el('token-clear').addEventListener('click', () => {
-    el('token-input').value = '';
-    setToken('');
-    toast('ok', 'Token cleared', 'Requests now rely on cookies alone.');
-    refreshPermissions();
-  });
-  setToken(token());
-
-  async function json(url, options) {
-    const request = Object.assign({credentials: 'same-origin'}, options || {});
-    const bearer = token();
-    if (bearer) {
-      request.headers = Object.assign({Authorization: `Bearer ${bearer}`}, request.headers || {});
-    }
-    const response = await fetch(url, request);
-    const body = await response.text();
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(bearer
-          ? `${response.status} - the token was accepted by the browser but does not carry the role this `
-            + `action needs`
-          : `${response.status} - no credentials were sent. If this application authenticates with a bearer `
-            + `token, set one with the Token button.`);
+    /** How many shards sit well above an even split, phrased so the count reads as a sentence. */
+    function driftNote(drifting) {
+      if (drifting <= 0) {
+        return 'Nothing is far from it.';
       }
-      let detail = body;
-      try { detail = JSON.parse(body).message || body; } catch (ignored) { /* not json */ }
-      throw new Error(`${response.status} - ${detail}`);
+      const verb = drifting === 1 ? ' is' : 's are';
+      return `<strong>${num(drifting)} shard${verb} well above that.</strong>`;
     }
-    return body ? JSON.parse(body) : null;
-  }
 
-  /**
-   * A pending toast stays until the action resolves, because sweep runs synchronously and can take
-   * minutes - and a button with no feedback is a button that gets clicked again.
-   */
-  function toast(kind, title, detail, existing) {
-    const node = existing || document.createElement('div');
-    node.className = `toast ${kind}`;
-    node.innerHTML = `<span class="mark">${kind === 'ok' ? '&#10003;' : kind === 'error' ? '!' : ''}</span>
-      <span class="text"><b>${esc(title)}</b>${esc(detail)}</span>
-      <button class="close" type="button" aria-label="Dismiss">&times;</button>`;
-    node.querySelector('.close').addEventListener('click', () => node.remove());
-    if (!existing) {
-      el('toasts').appendChild(node);
+    /** Stored shovel settings read as "concurrency / interval", or "-" when none is configured. */
+    function shovelCell(queue) {
+      if (queue.shovelConcurrency === null) {
+        return '-';
+      }
+      return `${num(queue.shovelConcurrency)} / ${num(queue.shovelIntervalSeconds)}s`;
     }
-    if (kind !== 'pending') {
-      setTimeout(() => node.remove(), kind === 'error' ? 12000 : 6000);
-    }
-    return node;
-  }
+    let selected = null;
+    let version = 0;
+    let inventory = [];
 
-  const duration = ms => ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60000)} min`;
-  const stamp = () => el('last-updated').textContent = `Live \u00b7 ${new Date().toLocaleTimeString()}`;
-
-  async function refreshInventory() {
-    try {
-      inventory = await json(`${api}/queues`);
-      renderQueueList();
-      stamp();
-    } catch (error) {
-      el('queues').innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+    const THEME_KEY = 'ignismq-console-theme';
+    function applyTheme(theme) {
+      const dark = theme === 'dark';
+      document.documentElement.dataset.theme = theme;
+      el('theme').setAttribute('aria-checked', String(dark));
+      el('theme-light').classList.toggle('on', !dark);
+      el('theme-dark').classList.toggle('on', dark);
+      try { localStorage.setItem(THEME_KEY, theme); } catch (error_) { /* private mode */ }
     }
-  }
+    (function initTheme() {
+      let stored = null;
+      try { stored = localStorage.getItem(THEME_KEY); } catch (error_) { /* private mode */ }
+      applyTheme(stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    })();
+    el('theme').addEventListener('click',
+      () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 
-  function renderQueueList() {
-    const nav = el('queues');
-    if (!inventory.length) {
-      nav.innerHTML = '<div class="empty">No queues exist.</div>';
-      return;
+    el('tab-queues').addEventListener('click', () => showTab('queues'));
+    el('tab-instance').addEventListener('click', () => showTab('instance'));
+    function showTab(name) {
+      ['queues', 'instance'].forEach(tab => {
+        el('tab-' + tab).setAttribute('aria-selected', String(tab === name));
+        el('view-' + tab).classList.toggle('hidden', tab !== name);
+      });
+      if (name === 'instance') {
+        refreshInstance();
+      }
     }
-    nav.innerHTML = '';
-    inventory.forEach(queue => {
-      const button = document.createElement('button');
-      button.dataset.name = queue.name;
-      button.innerHTML = `<span class="state${queue.active ? '' : ' off'}"></span>`
-        + `<span class="name">${esc(queue.name)}</span>`
-        + `<span class="tag ${queue.active ? 'active' : 'inactive'}">${queue.active ? 'active' : 'inactive'}</span>`;
-      button.addEventListener('click', () => select(queue.name));
-      nav.appendChild(button);
+
+    const TOKEN_KEY = 'ignismq-console-token';
+    function token() {
+      try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (error_) { return ''; }
+    }
+    function setToken(value) {
+      try {
+        if (value) { sessionStorage.setItem(TOKEN_KEY, value); } else { sessionStorage.removeItem(TOKEN_KEY); }
+      } catch (error_) { /* private mode: the token simply is not remembered */ }
+      const dot = el('token-dot');
+      dot.className = value ? 'dot-on' : 'dot-off';
+      el('token-button').title = value
+        ? 'Sending Authorization: Bearer <token> with every request'
+        : 'No token set - relying on cookies your browser already sends';
+    }
+    el('token-button').addEventListener('click', () => {
+      const panel = el('token-panel');
+      const opening = panel.classList.contains('hidden');
+      panel.classList.toggle('hidden', !opening);
+      el('token-button').setAttribute('aria-expanded', String(opening));
+      if (opening) {
+        el('token-input').value = token();
+        el('token-input').focus();
+      }
     });
-    select(inventory.some(queue => queue.name === selected) ? selected : inventory[0].name);
-    applyQueueFilter();
-  }
+    el('token-save').addEventListener('click', () => {
+      setToken(el('token-input').value.trim());
+      el('token-panel').classList.add('hidden');
+      toast('ok', 'Token saved', 'Sent with every request from this tab.');
+      refreshPermissions();
+    });
+    el('token-clear').addEventListener('click', () => {
+      el('token-input').value = '';
+      setToken('');
+      toast('ok', 'Token cleared', 'Requests now rely on cookies alone.');
+      refreshPermissions();
+    });
+    setToken(token());
 
-  function select(name) {
-    selected = name;
-    document.querySelectorAll('#queues button')
-      .forEach(button => button.classList.toggle('active', button.dataset.name === name));
-    el('confirm-name').value = '';
-    loadQueue(++version);
-  }
+    async function json(url, options) {
+      const request = {credentials: 'same-origin', ...(options || {})};
+      const bearer = token();
+      if (bearer) {
+        request.headers = {Authorization: `Bearer ${bearer}`, ...(request.headers || {})};
+      }
+      const response = await fetch(url, request);
+      const body = await response.text();
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(bearer
+            ? `${response.status} - the token was accepted by the browser but does not carry the role this `
+              + `action needs`
+            : `${response.status} - no credentials were sent. If this application authenticates with a bearer `
+              + `token, set one with the Token button.`);
+        }
+        let detail = body;
+        try { detail = JSON.parse(body).message || body; } catch (error_) { /* not json */ }
+        throw new Error(`${response.status} - ${detail}`);
+      }
+      return body ? JSON.parse(body) : null;
+    }
 
-  async function loadQueue(current) {
-    try {
-      const detail = await json(`${api}/queues/${encodeURIComponent(selected)}`);
-      if (current !== version) {
+    /**
+     * A pending toast stays until the action resolves, because sweep runs synchronously and can take
+     * minutes - and a button with no feedback is a button that gets clicked again.
+     */
+    function toast(kind, title, detail, existing) {
+      const node = existing || document.createElement('div');
+      node.className = `toast ${kind}`;
+      let mark = '';
+      if (kind === 'ok') {
+        mark = '&#10003;';
+      } else if (kind === 'error') {
+        mark = '!';
+      }
+      node.innerHTML = `<span class="mark">${mark}</span>
+        <span class="text"><b>${esc(title)}</b>${esc(detail)}</span>
+        <button class="close" type="button" aria-label="Dismiss">&times;</button>`;
+      node.querySelector('.close').addEventListener('click', () => node.remove());
+      if (!existing) {
+        el('toasts').appendChild(node);
+      }
+      if (kind !== 'pending') {
+        setTimeout(() => node.remove(), kind === 'error' ? 12000 : 6000);
+      }
+      return node;
+    }
+
+    const duration = ms => ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60000)} min`;
+    const stamp = () => el('last-updated').textContent = `Live \u00b7 ${new Date().toLocaleTimeString()}`;
+
+    async function refreshInventory() {
+      try {
+        inventory = await json(`${api}/queues`);
+        renderQueueList();
+        stamp();
+      } catch (error) {
+        el('queues').innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+      }
+    }
+
+    function renderQueueList() {
+      const nav = el('queues');
+      if (!inventory.length) {
+        nav.innerHTML = '<div class="empty">No queues exist.</div>';
         return;
       }
-      renderOverview(detail);
-      renderShards(detail);
-      setActionState(detail);
-      stamp();
-    } catch (error) {
-      if (current === version) {
-        el('overview').innerHTML = `<h2>${esc(selected)}</h2><div class="empty">${esc(error.message)}</div>`;
+      nav.innerHTML = '';
+      inventory.forEach(queue => {
+        const button = document.createElement('button');
+        button.dataset.name = queue.name;
+        button.innerHTML = `<span class="state${queue.active ? '' : ' off'}"></span>`
+          + `<span class="name">${esc(queue.name)}</span>`
+          + `<span class="tag ${queue.active ? 'active' : 'inactive'}">${queue.active ? 'active' : 'inactive'}</span>`;
+        button.addEventListener('click', () => select(queue.name));
+        nav.appendChild(button);
+      });
+      select(inventory.some(queue => queue.name === selected) ? selected : inventory[0].name);
+      applyQueueFilter();
+    }
+
+    function select(name) {
+      selected = name;
+      document.querySelectorAll('#queues button')
+        .forEach(button => button.classList.toggle('active', button.dataset.name === name));
+      el('confirm-name').value = '';
+      loadQueue(++version);
+    }
+
+    async function loadQueue(current) {
+      try {
+        const detail = await json(`${api}/queues/${encodeURIComponent(selected)}`);
+        if (current !== version) {
+          return;
+        }
+        renderOverview(detail);
+        renderShards(detail);
+        setActionState(detail);
+        stamp();
+      } catch (error) {
+        if (current === version) {
+          el('overview').innerHTML = `<h2>${esc(selected)}</h2><div class="empty">${esc(error.message)}</div>`;
+        }
       }
     }
-  }
 
-  function renderOverview(detail) {
-    const queue = detail.queue;
-    const stats = detail.depth ? `<div class="stats">${[
-      ['unconsumed', detail.depth.unconsumed],
-      ['published', detail.depth.published],
-      ['consumed', detail.depth.consumed],
-      ['sidelined', detail.depth.sidelined],
-      ['shovelled', detail.depth.shovelled],
-      ['consumers here', detail.instance ? detail.instance.consumers : null]
-    ].map(([label, value]) => `<div class="stat"><b class="num">${num(value)}</b><span>${label}</span></div>`)
-      .join('')}</div>` : '';
-    const pending = detail.depth ? '' : `<div class="banner warn">This instance has not adopted
-      <strong>${esc(queue.name)}</strong> yet, so its depth cannot be read here. Queues are adopted by every
-      instance on its refresh pass; if this persists, this instance has no handler registered for
-      <code>${esc(queue.messageHandlerType)}</code>. The configuration below is cluster state and is correct
-      regardless.</div>`;
-    const config = [
-      ['state', queue.active ? 'active' : 'deactivated'],
-      ['configured shards', queue.shards],
-      ['concurrency', queue.concurrency],
-      ['handler', queue.messageHandlerType],
-      ['handler timeout', duration(queue.handlerTimeoutMillis)],
-      ['sweep window', duration(queue.sweepDurationMillis)],
-      ['message expiry', duration(queue.messageExpirySeconds * 1000)],
-      ['queue expiry', duration(queue.queueExpirySeconds * 1000)],
-      ['batching', queue.maxBatchSize === null ? 'off'
-        : `${num(queue.maxBatchSize)} msgs / ${num(queue.maxWaitTimeSeconds)}s`],
-      ['stored shovel', queue.shovelConcurrency === null ? 'none'
-        : `${num(queue.shovelConcurrency)} every ${num(queue.shovelIntervalSeconds)}s`],
-      ['created', new Date(queue.createdAt).toLocaleString()]
-    ].map(([label, value]) => `<div><span>${label}</span><strong>${esc(value)}</strong></div>`).join('');
-    el('overview').innerHTML = `<h2>${esc(queue.name)}
-        <span class="tag ${queue.active ? 'active' : 'inactive'}">${queue.active ? 'active' : 'inactive'}</span>
-        <span class="tag cluster">cluster</span></h2>
-      <div class="body">${pending}${stats}</div>
-      <div class="kv">${config}</div>
-      <div class="cta"><button class="link" type="button" id="to-meters">View this queue's meters on this
-        instance &rarr;</button></div>`;
-    el('to-meters').addEventListener('click', () => showMetersFor(queue.name));
-  }
-
-  function showMetersFor(name) {
-    showTab('instance');
-    el('meter-filter').value = name;
-    renderMeters();
-    el('meters').scrollIntoView({behavior: 'smooth', block: 'start'});
-  }
-
-  function renderShards(detail) {
-    const card = el('shards');
-    const heading = '<h2>Shard balance <span class="tag cluster">cluster</span></h2>';
-    if (!detail.shards) {
-      card.innerHTML = `${heading}<div class="empty">Readable once this instance has adopted the queue.</div>`;
-      return;
+    function renderOverview(detail) {
+      const queue = detail.queue;
+      const stats = detail.depth ? `<div class="stats">${[
+        ['unconsumed', detail.depth.unconsumed],
+        ['published', detail.depth.published],
+        ['consumed', detail.depth.consumed],
+        ['sidelined', detail.depth.sidelined],
+        ['shovelled', detail.depth.shovelled],
+        ['consumers here', detail.instance ? detail.instance.consumers : null]
+      ].map(([label, value]) => `<div class="stat"><b class="num">${num(value)}</b><span>${label}</span></div>`)
+        .join('')}</div>` : '';
+      const pending = detail.depth ? '' : `<div class="banner warn">This instance has not adopted
+        <strong>${esc(queue.name)}</strong> yet, so its depth cannot be read here. Queues are adopted by every
+        instance on its refresh pass; if this persists, this instance has no handler registered for
+        <code>${esc(queue.messageHandlerType)}</code>. The configuration below is cluster state and is correct
+        regardless.</div>`;
+      const config = [
+        ['state', queue.active ? 'active' : 'deactivated'],
+        ['configured shards', queue.shards],
+        ['concurrency', queue.concurrency],
+        ['handler', queue.messageHandlerType],
+        ['handler timeout', duration(queue.handlerTimeoutMillis)],
+        ['sweep window', duration(queue.sweepDurationMillis)],
+        ['message expiry', duration(queue.messageExpirySeconds * 1000)],
+        ['queue expiry', duration(queue.queueExpirySeconds * 1000)],
+        ['batching', queue.maxBatchSize === null ? 'off'
+          : `${num(queue.maxBatchSize)} msgs / ${num(queue.maxWaitTimeSeconds)}s`],
+        ['stored shovel', queue.shovelConcurrency === null ? 'none'
+          : `${num(queue.shovelConcurrency)} every ${num(queue.shovelIntervalSeconds)}s`],
+        ['created', new Date(queue.createdAt).toLocaleString()]
+      ].map(([label, value]) => `<div><span>${label}</span><strong>${esc(value)}</strong></div>`).join('');
+      el('overview').innerHTML = `<h2>${esc(queue.name)}
+          <span class="tag ${queue.active ? 'active' : 'inactive'}">${queue.active ? 'active' : 'inactive'}</span>
+          <span class="tag cluster">cluster</span></h2>
+        <div class="body">${pending}${stats}</div>
+        <div class="kv">${config}</div>
+        <div class="cta"><button class="link" type="button" id="to-meters">View this queue's meters on this
+          instance &rarr;</button></div>`;
+      el('to-meters').addEventListener('click', () => showMetersFor(queue.name));
     }
-    if (!detail.shards.length) {
-      card.innerHTML = `${heading}<div class="empty">No shard metadata yet, which is normal before the
-        first publish.</div>`;
-      return;
-    }
-    const pendings = detail.shards.map(shard => shard.pending);
-    const total = pendings.reduce((sum, value) => sum + value, 0);
-    const peak = Math.max(...pendings, 1);
-    const even = total / detail.shards.length;
-    // Publishing picks a shard at random, so the interesting question is not "which shard is busiest"
-    // but "is any shard far from where random assignment would put it".
-    const outlier = value => total > 0 && value > Math.max(even * 3, even + 50);
-    const rows = detail.shards.map(shard => `<tr${outlier(shard.pending) ? ' class="outlier"' : ''}>
-        <td>${esc(shard.shard)}</td><td class="num">${num(shard.published)}</td>
-        <td class="num">${num(shard.consumed)}</td><td class="num">${num(shard.pending)}</td>
-        <td class="spread"><span class="track"><i style="width:${Math.round(shard.pending * 100 / peak)}%"></i></span></td>
-      </tr>`).join('');
-    const drifting = pendings.filter(outlier).length;
-    card.innerHTML = `${heading}<div class="body"><p class="note">
-        Messages are assigned to a shard <strong>at random</strong> on publish, so an even spread is the
-        expected shape and there is no such thing as a hot key here — there is no key. What this view is for
-        is the opposite: a shard sitting far from the others is one whose consumers are not keeping up, and
-        the number to compare against is ${num(Math.round(even))} pending per shard.
-        ${drifting > 0
-          ? `<strong>${num(drifting)} shard${drifting === 1 ? ' is' : 's are'} well above that.</strong>`
-          : 'Nothing is far from it.'}</p></div>
-      <table><thead><tr><th>Shard</th><th>Published</th><th>Consumed</th><th>Pending</th><th>Spread</th></tr></thead>
-      <tbody>${rows}</tbody></table>`;
-  }
 
-  let permissions = {authenticated: false, operate: false, deactivate: false};
-  let lastDetail = null;
-
-  /**
-   * Asks the server what this caller may do, so an action they cannot perform is disabled with a
-   * stated reason rather than offered and then refused. A failure here grants nothing: the buttons
-   * stay closed and the server remains the only thing that actually decides.
-   */
-  async function refreshPermissions() {
-    try {
-      permissions = await json(`${api}/whoami`);
-    } catch (ignored) {
-      permissions = {authenticated: false, operate: false, deactivate: false};
-    }
-    if (lastDetail) {
-      setActionState(lastDetail);
-    }
-  }
-
-  function missingRoleReason(role) {
-    return permissions.authenticated
-      ? `Your credentials do not carry the ${role} role.`
-      : `No credentials were sent. If this application uses a bearer token, set one with the Token button.`;
-  }
-
-  /**
-   * Two independent reasons an action is unavailable, and the button says which: the queue's state,
-   * and the caller's roles. Disabling on the role is a courtesy - every endpoint is still enforced
-   * server-side.
-   */
-  function setActionState(detail) {
-    lastDetail = detail;
-    const adopted = Boolean(detail.instance);
-    const active = detail.queue.active;
-    const gate = (id, allowedByState, stateReason, granted, role) => {
-      const node = el(id);
-      node.disabled = !allowedByState || !granted;
-      node.title = !allowedByState ? stateReason : (granted ? '' : missingRoleReason(role));
-    };
-    const notHere = 'This instance does not serve this queue.';
-    const inactive = 'This queue is not active.';
-    gate('add-consumers', adopted, notHere, permissions.operate, 'ignismq_operate');
-    gate('stop-consumers', adopted, notHere, permissions.operate, 'ignismq_operate');
-    gate('shovel', adopted, notHere, permissions.operate, 'ignismq_operate');
-    gate('schedule-shovel', active, inactive, permissions.operate, 'ignismq_operate');
-    gate('sweep', active, inactive, permissions.operate, 'ignismq_operate');
-    gate('deactivate', active, inactive, permissions.deactivate, 'ignismq_deactivate');
-  }
-
-  const ACTION_BUTTONS = ['add-consumers', 'stop-consumers', 'shovel', 'schedule-shovel', 'sweep', 'deactivate'];
-  let running = false;
-
-  /**
-   * Every action button is locked while one is in flight, not just the one clicked. They act on the
-   * same queue, and a sweep running for minutes must not be joined by a deactivate.
-   */
-  function lockActions(button, label) {
-    running = true;
-    ACTION_BUTTONS.forEach(id => {
-      const node = el(id);
-      node.dataset.wasDisabled = String(node.disabled);
-      node.disabled = true;
-    });
-    button.dataset.label = button.textContent;
-    button.textContent = label;
-  }
-
-  function unlockActions(button) {
-    running = false;
-    ACTION_BUTTONS.forEach(id => {
-      const node = el(id);
-      node.disabled = node.dataset.wasDisabled === 'true';
-    });
-    if (button.dataset.label) {
-      button.textContent = button.dataset.label;
-    }
-  }
-
-  async function act(buttonId, path, query, pending) {
-    if (running) {
-      return;
-    }
-    const button = el(buttonId);
-    const queue = selected;
-    lockActions(button, pending.working);
-    const notice = toast('pending', pending.title, pending.detail);
-    try {
-      const outcome = await json(`${api}/queues/${encodeURIComponent(queue)}/${path}${query}`, {method: 'POST'});
-      toast('ok', `${outcome.action} on ${queue}`, `${outcome.detail} (${outcome.scope})`, notice);
-      await refreshInventory();
-      await loadQueue(version);
-    } catch (error) {
-      toast('error', `${path} on ${queue} failed`, error.message, notice);
-    } finally {
-      unlockActions(button);
-    }
-  }
-
-  const count = id => Math.max(1, Number(el(id).value) || 1);
-  el('add-consumers').addEventListener('click', () => {
-    const many = count('add-count');
-    act('add-consumers', 'consumers', `?delta=${many}`, {working: 'Adding...',
-      title: `Adding ${many} consumer${many === 1 ? '' : 's'}`, detail: `on this instance of ${selected}.`});
-  });
-  el('stop-consumers').addEventListener('click', () => {
-    const many = count('stop-count');
-    act('stop-consumers', 'consumers', `?delta=-${many}`, {working: 'Stopping...',
-      title: `Stopping ${many} consumer${many === 1 ? '' : 's'}`, detail: `on this instance of ${selected}.`});
-  });
-  el('shovel').addEventListener('click', () => act('shovel', 'shovel', `?concurrency=${count('shovel-now')}`,
-    {working: 'Draining...', title: `Draining the sideline of ${selected}`,
-     detail: `Starting ${count('shovel-now')} shovel consumers here. They run until the sideline is empty.`}));
-  el('schedule-shovel').addEventListener('click', () => act('schedule-shovel', 'shovel',
-    `?concurrency=${count('shovel-now')}&intervalSeconds=${count('shovel-interval')}`,
-    {working: 'Storing...', title: `Storing a repeating shovel on ${selected}`,
-     detail: 'Every instance adopts it on its next refresh.'}));
-  el('sweep').addEventListener('click', () => act('sweep', 'sweep', '',
-    {working: 'Sweeping...', title: `Sweeping ${selected}`,
-     detail: 'This runs synchronously on the server and can take a while on a large queue. Leave it to finish.'}));
-  el('deactivate').addEventListener('click', () => {
-    const typed = el('confirm-name').value.trim();
-    if (typed !== selected) {
-      toast('error', 'Confirmation does not match',
-        `Type the queue name exactly - "${selected}" - to deactivate it.`);
-      return;
-    }
-    if (window.confirm(`Deactivate ${selected}?\n\nThis cannot be undone by any API. Consumers stop on every `
-        + `instance and anything still in the queue stays there.`)) {
-      act('deactivate', 'deactivate', `?confirm=${encodeURIComponent(typed)}`,
-        {working: 'Deactivating...', title: `Deactivating ${selected}`, detail: 'This cannot be undone.'});
-    }
-  });
-
-  function applyQueueFilter() {
-    const term = el('queue-filter').value.trim().toLowerCase();
-    document.querySelectorAll('#queues button').forEach(button => {
-      button.hidden = term.length > 0 && !button.dataset.name.toLowerCase().includes(term);
-    });
-  }
-  el('queue-filter').addEventListener('input', applyQueueFilter);
-
-  let meters = [];
-  async function refreshInstance() {
-    try {
-      const [view, metrics] = await Promise.all([json(`${api}/instance`), json(`${api}/instance/metrics`)]);
-      setScope(view.clientId, view.farmId);
-      el('instance-banner').innerHTML = `Everything on this tab describes <strong>one process</strong>.
-        A deployment runs many, and IgnisMQ has no register of them, so nothing here is a deployment
-        total. The queue tab, by contrast, is cluster state and is the same read from any instance.`;
-      el('instance-stats').innerHTML = [
-        ['queues running here', view.queues.length],
-        ['consumers here', view.queues.reduce((sum, queue) => sum + queue.consumers, 0)],
-        ['shovels here', view.queues.reduce((sum, queue) => sum + queue.shovels, 0)],
-        ['worker threads', view.workerThreads],
-        ['meters', metrics.meterCount],
-        ['metrics', metrics.metricsEnabled ? 'on' : 'off']
-      ].map(([label, value]) => `<div class="stat"><b class="num">${typeof value === 'number' ? num(value)
-        : esc(value)}</b><span>${label}</span></div>`).join('');
-      el('instance-queues').innerHTML = view.queues.length
-        ? `<table><thead><tr><th>Queue</th><th>Consumers</th><th>Shovels</th><th>Stored shovel</th></tr></thead>
-           <tbody>${view.queues.map(queue => `<tr><td>${esc(queue.name)}</td>
-             <td class="num">${num(queue.consumers)}</td><td class="num">${num(queue.shovels)}</td>
-             <td class="num">${queue.shovelConcurrency === null ? '-'
-               : `${num(queue.shovelConcurrency)} / ${num(queue.shovelIntervalSeconds)}s`}</td></tr>`).join('')}
-           </tbody></table>`
-        : '<div class="empty">This instance is running no queues.</div>';
-      meters = metrics.meters;
+    function showMetersFor(name) {
+      showTab('instance');
+      el('meter-filter').value = name;
       renderMeters();
-      stamp();
-    } catch (error) {
-      el('instance-queues').innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+      el('meters').scrollIntoView({behavior: 'smooth', block: 'start'});
     }
-  }
 
-  // A gauge whose source has been collected reports NaN. Printing "NaN" in a console is worse than
-  // saying nothing, because it reads as a value the queue actually has.
-  const finite = value => typeof value === 'number' && isFinite(value);
-  const round = value => finite(value) ? num(Math.round(value * 1000) / 1000) : '\u2014';
-  const millis = seconds => finite(seconds) ? `${num(Math.round(seconds * 100000) / 100)} ms` : '\u2014';
-
-  /**
-   * Micrometer reports raw statistics; an operator wants the three numbers that mean something.
-   * Timer totals are seconds, so they are shown as a mean and a max in milliseconds.
-   */
-  function readValue(meter) {
-    const value = meter.measurements;
-    const figure = (label, text) => `<span class="figure"><em>${label}</em>${text}</span>`;
-    if (meter.type === 'TIMER' && value.COUNT > 0) {
-      return figure('count', num(value.COUNT)) + figure('mean', millis(value.TOTAL_TIME / value.COUNT))
-        + figure('max', millis(value.MAX));
-    }
-    if (meter.type === 'DISTRIBUTION_SUMMARY' && value.COUNT > 0) {
-      return figure('count', num(value.COUNT)) + figure('mean', round(value.TOTAL / value.COUNT))
-        + figure('max', round(value.MAX));
-    }
-    return Object.entries(value)
-      .map(([statistic, amount]) => figure(statistic.toLowerCase(), round(amount))).join('');
-  }
-
-  /**
-   * Meters are grouped by what they are about, because a flat list of forty rows answers no question.
-   * A queue's own meters and the Magazine meters underneath it sit together; anything with neither
-   * tag belongs to the process.
-   */
-  function groupMeters(list) {
-    const groups = new Map();
-    list.forEach(meter => {
-      const subject = meter.tags.queue || meter.tags.magazine || null;
-      const queue = subject === null ? null : subject.replace(/_SIDELINE$/, '');
-      const key = queue === null ? '\u0000process' : queue;
-      if (!groups.has(key)) {
-        groups.set(key, {queue, meters: []});
+    function renderShards(detail) {
+      const card = el('shards');
+      const heading = '<h2>Shard balance <span class="tag cluster">cluster</span></h2>';
+      if (!detail.shards) {
+        card.innerHTML = `${heading}<div class="empty">Readable once this instance has adopted the queue.</div>`;
+        return;
       }
-      groups.get(key).meters.push(meter);
-    });
-    return [...groups.values()].sort((left, right) =>
-      (left.queue === null ? '' : left.queue).localeCompare(right.queue === null ? '' : right.queue));
-  }
-
-  function renderMeters() {
-    const term = el('meter-filter').value.trim().toLowerCase();
-    const matches = meter => term.length === 0
-      || meter.name.toLowerCase().includes(term)
-      || Object.entries(meter.tags).some(([key, value]) => `${key}=${value}`.toLowerCase().includes(term));
-    const groups = groupMeters(meters.filter(matches));
-    if (!groups.length) {
-      el('meters').innerHTML = meters.length
-        ? '<div class="empty">No meter matches that filter.</div>'
-        : `<div class="empty">This process has recorded no meters yet. Nothing has been published or
-           consumed here, or metrics are switched off.</div>`;
-      return;
+      if (!detail.shards.length) {
+        card.innerHTML = `${heading}<div class="empty">No shard metadata yet, which is normal before the
+          first publish.</div>`;
+        return;
+      }
+      const pendings = detail.shards.map(shard => shard.pending);
+      const total = pendings.reduce((sum, value) => sum + value, 0);
+      const peak = Math.max(...pendings, 1);
+      const even = total / detail.shards.length;
+      // Publishing picks a shard at random, so the interesting question is not "which shard is busiest"
+      // but "is any shard far from where random assignment would put it".
+      const outlier = value => total > 0 && value > Math.max(even * 3, even + 50);
+      const rows = detail.shards.map(shard => `<tr${outlier(shard.pending) ? ' class="outlier"' : ''}>
+          <td>${esc(shard.shard)}</td><td class="num">${num(shard.published)}</td>
+          <td class="num">${num(shard.consumed)}</td><td class="num">${num(shard.pending)}</td>
+          <td class="spread"><span class="track"><i style="width:${Math.round(shard.pending * 100 / peak)}%"></i></span></td>
+        </tr>`).join('');
+      const drifting = pendings.filter(outlier).length;
+      card.innerHTML = `${heading}<div class="body"><p class="note">
+          Messages are assigned to a shard <strong>at random</strong> on publish, so an even spread is the
+          expected shape and there is no such thing as a hot key here — there is no key. What this view is for
+          is the opposite: a shard sitting far from the others is one whose consumers are not keeping up, and
+          the number to compare against is ${num(Math.round(even))} pending per shard.
+          ${driftNote(drifting)}</p></div>
+        <table><thead><tr><th>Shard</th><th>Published</th><th>Consumed</th><th>Pending</th><th>Spread</th></tr></thead>
+        <tbody>${rows}</tbody></table>`;
     }
-    el('meters').innerHTML = groups.map((group, index) => {
-      const title = group.queue === null
-        ? 'Process &mdash; pools, schedulers and anything not tied to one queue'
-        : `Queue <strong>${esc(group.queue)}</strong>`;
-      const rows = group.meters.map(meter => {
-        const subject = meter.tags.queue || meter.tags.magazine;
-        const rest = Object.entries(meter.tags).filter(([key]) => key !== 'queue' && key !== 'magazine');
-        const sideline = meter.tags.magazine && meter.tags.magazine.endsWith('_SIDELINE');
-        return `<tr><td>${esc(meter.name)}${sideline ? ' <span class="chip">sideline</span>' : ''}</td>
-          <td>${rest.map(([key, value]) => `<span class="chip">${esc(key)}=${esc(value)}</span>`).join('')
-            || '<span class="meta">&mdash;</span>'}</td>
-          <td>${readValue(meter)}</td></tr>`;
+
+    let permissions = {authenticated: false, operate: false, deactivate: false};
+    let lastDetail = null;
+
+    /**
+     * Asks the server what this caller may do, so an action they cannot perform is disabled with a
+     * stated reason rather than offered and then refused. A failure here grants nothing: the buttons
+     * stay closed and the server remains the only thing that actually decides.
+     */
+    async function refreshPermissions() {
+      try {
+        permissions = await json(`${api}/whoami`);
+      } catch (error_) {
+        permissions = {authenticated: false, operate: false, deactivate: false};
+      }
+      if (lastDetail) {
+        setActionState(lastDetail);
+      }
+    }
+
+    function missingRoleReason(role) {
+      return permissions.authenticated
+        ? `Your credentials do not carry the ${role} role.`
+        : `No credentials were sent. If this application uses a bearer token, set one with the Token button.`;
+    }
+
+    /**
+     * Two independent reasons an action is unavailable, and the button says which: the queue's state,
+     * and the caller's roles. Disabling on the role is a courtesy - every endpoint is still enforced
+     * server-side.
+     */
+    function setActionState(detail) {
+      lastDetail = detail;
+      const adopted = Boolean(detail.instance);
+      const active = detail.queue.active;
+      const gate = (id, allowedByState, stateReason, granted, role) => {
+        const node = el(id);
+        node.disabled = !allowedByState || !granted;
+        let reason = '';
+        if (!allowedByState) {
+          reason = stateReason;
+        } else if (!granted) {
+          reason = missingRoleReason(role);
+        }
+        node.title = reason;
+      };
+      const notHere = 'This instance does not serve this queue.';
+      const inactive = 'This queue is not active.';
+      gate('add-consumers', adopted, notHere, permissions.operate, 'ignismq_operate');
+      gate('stop-consumers', adopted, notHere, permissions.operate, 'ignismq_operate');
+      gate('shovel', adopted, notHere, permissions.operate, 'ignismq_operate');
+      gate('schedule-shovel', active, inactive, permissions.operate, 'ignismq_operate');
+      gate('sweep', active, inactive, permissions.operate, 'ignismq_operate');
+      gate('deactivate', active, inactive, permissions.deactivate, 'ignismq_deactivate');
+    }
+
+    const ACTION_BUTTONS = ['add-consumers', 'stop-consumers', 'shovel', 'schedule-shovel', 'sweep', 'deactivate'];
+    let running = false;
+
+    /**
+     * Every action button is locked while one is in flight, not just the one clicked. They act on the
+     * same queue, and a sweep running for minutes must not be joined by a deactivate.
+     */
+    function lockActions(button, label) {
+      running = true;
+      ACTION_BUTTONS.forEach(id => {
+        const node = el(id);
+        node.dataset.wasDisabled = String(node.disabled);
+        node.disabled = true;
+      });
+      button.dataset.label = button.textContent;
+      button.textContent = label;
+    }
+
+    function unlockActions(button) {
+      running = false;
+      ACTION_BUTTONS.forEach(id => {
+        const node = el(id);
+        node.disabled = node.dataset.wasDisabled === 'true';
+      });
+      if (button.dataset.label) {
+        button.textContent = button.dataset.label;
+      }
+    }
+
+    async function act(buttonId, path, query, pending) {
+      if (running) {
+        return;
+      }
+      const button = el(buttonId);
+      const queue = selected;
+      lockActions(button, pending.working);
+      const notice = toast('pending', pending.title, pending.detail);
+      try {
+        const outcome = await json(`${api}/queues/${encodeURIComponent(queue)}/${path}${query}`, {method: 'POST'});
+        toast('ok', `${outcome.action} on ${queue}`, `${outcome.detail} (${outcome.scope})`, notice);
+        await refreshInventory();
+        await loadQueue(version);
+      } catch (error) {
+        toast('error', `${path} on ${queue} failed`, error.message, notice);
+      } finally {
+        unlockActions(button);
+      }
+    }
+
+    const count = id => Math.max(1, Number(el(id).value) || 1);
+    el('add-consumers').addEventListener('click', () => {
+      const many = count('add-count');
+      act('add-consumers', 'consumers', `?delta=${many}`, {working: 'Adding...',
+        title: `Adding ${many} consumer${many === 1 ? '' : 's'}`, detail: `on this instance of ${selected}.`});
+    });
+    el('stop-consumers').addEventListener('click', () => {
+      const many = count('stop-count');
+      act('stop-consumers', 'consumers', `?delta=-${many}`, {working: 'Stopping...',
+        title: `Stopping ${many} consumer${many === 1 ? '' : 's'}`, detail: `on this instance of ${selected}.`});
+    });
+    el('shovel').addEventListener('click', () => act('shovel', 'shovel', `?concurrency=${count('shovel-now')}`,
+      {working: 'Draining...', title: `Draining the sideline of ${selected}`,
+       detail: `Starting ${count('shovel-now')} shovel consumers here. They run until the sideline is empty.`}));
+    el('schedule-shovel').addEventListener('click', () => act('schedule-shovel', 'shovel',
+      `?concurrency=${count('shovel-now')}&intervalSeconds=${count('shovel-interval')}`,
+      {working: 'Storing...', title: `Storing a repeating shovel on ${selected}`,
+       detail: 'Every instance adopts it on its next refresh.'}));
+    el('sweep').addEventListener('click', () => act('sweep', 'sweep', '',
+      {working: 'Sweeping...', title: `Sweeping ${selected}`,
+       detail: 'This runs synchronously on the server and can take a while on a large queue. Leave it to finish.'}));
+    el('deactivate').addEventListener('click', () => {
+      const typed = el('confirm-name').value.trim();
+      if (typed !== selected) {
+        toast('error', 'Confirmation does not match',
+          `Type the queue name exactly - "${selected}" - to deactivate it.`);
+        return;
+      }
+      if (window.confirm(`Deactivate ${selected}?\n\nThis cannot be undone by any API. Consumers stop on every `
+          + `instance and anything still in the queue stays there.`)) {
+        act('deactivate', 'deactivate', `?confirm=${encodeURIComponent(typed)}`,
+          {working: 'Deactivating...', title: `Deactivating ${selected}`, detail: 'This cannot be undone.'});
+      }
+    });
+
+    function applyQueueFilter() {
+      const term = el('queue-filter').value.trim().toLowerCase();
+      document.querySelectorAll('#queues button').forEach(button => {
+        button.hidden = term.length > 0 && !button.dataset.name.toLowerCase().includes(term);
+      });
+    }
+    el('queue-filter').addEventListener('input', applyQueueFilter);
+
+    let meters = [];
+    async function refreshInstance() {
+      try {
+        const [view, metrics] = await Promise.all([json(`${api}/instance`), json(`${api}/instance/metrics`)]);
+        setScope(view.clientId, view.farmId);
+        el('instance-banner').innerHTML = `Everything on this tab describes <strong>one process</strong>.
+          A deployment runs many, and IgnisMQ has no register of them, so nothing here is a deployment
+          total. The queue tab, by contrast, is cluster state and is the same read from any instance.`;
+        el('instance-stats').innerHTML = [
+          ['queues running here', view.queues.length],
+          ['consumers here', view.queues.reduce((sum, queue) => sum + queue.consumers, 0)],
+          ['shovels here', view.queues.reduce((sum, queue) => sum + queue.shovels, 0)],
+          ['worker threads', view.workerThreads],
+          ['meters', metrics.meterCount],
+          ['metrics', metrics.metricsEnabled ? 'on' : 'off']
+        ].map(([label, value]) => `<div class="stat"><b class="num">${typeof value === 'number' ? num(value)
+          : esc(value)}</b><span>${label}</span></div>`).join('');
+        el('instance-queues').innerHTML = view.queues.length
+          ? `<table><thead><tr><th>Queue</th><th>Consumers</th><th>Shovels</th><th>Stored shovel</th></tr></thead>
+             <tbody>${view.queues.map(queue => `<tr><td>${esc(queue.name)}</td>
+               <td class="num">${num(queue.consumers)}</td><td class="num">${num(queue.shovels)}</td>
+               <td class="num">${shovelCell(queue)}</td></tr>`).join('')}
+             </tbody></table>`
+          : '<div class="empty">This instance is running no queues.</div>';
+        meters = metrics.meters;
+        renderMeters();
+        stamp();
+      } catch (error) {
+        el('instance-queues').innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+      }
+    }
+
+    // A gauge whose source has been collected reports NaN. Printing "NaN" in a console is worse than
+    // saying nothing, because it reads as a value the queue actually has.
+    const finite = value => Number.isFinite(value);
+    const round = value => finite(value) ? num(Math.round(value * 1000) / 1000) : '\u2014';
+    const millis = seconds => finite(seconds) ? `${num(Math.round(seconds * 100000) / 100)} ms` : '\u2014';
+
+    /**
+     * Micrometer reports raw statistics; an operator wants the three numbers that mean something.
+     * Timer totals are seconds, so they are shown as a mean and a max in milliseconds.
+     */
+    function readValue(meter) {
+      const value = meter.measurements;
+      const figure = (label, text) => `<span class="figure"><em>${label}</em>${text}</span>`;
+      if (meter.type === 'TIMER' && value.COUNT > 0) {
+        return figure('count', num(value.COUNT)) + figure('mean', millis(value.TOTAL_TIME / value.COUNT))
+          + figure('max', millis(value.MAX));
+      }
+      if (meter.type === 'DISTRIBUTION_SUMMARY' && value.COUNT > 0) {
+        return figure('count', num(value.COUNT)) + figure('mean', round(value.TOTAL / value.COUNT))
+          + figure('max', round(value.MAX));
+      }
+      return Object.entries(value)
+        .map(([statistic, amount]) => figure(statistic.toLowerCase(), round(amount))).join('');
+    }
+
+    /**
+     * Meters are grouped by what they are about, because a flat list of forty rows answers no question.
+     * A queue's own meters and the Magazine meters underneath it sit together; anything with neither
+     * tag belongs to the process.
+     */
+    function groupMeters(list) {
+      const groups = new Map();
+      list.forEach(meter => {
+        const subject = meter.tags.queue || meter.tags.magazine || null;
+        const queue = subject === null ? null : subject.replace(/_SIDELINE$/, '');
+        const key = queue === null ? '\u0000process' : queue;
+        if (!groups.has(key)) {
+          groups.set(key, {queue, meters: []});
+        }
+        groups.get(key).meters.push(meter);
+      });
+      return [...groups.values()].sort((left, right) =>
+        (left.queue === null ? '' : left.queue).localeCompare(right.queue === null ? '' : right.queue));
+    }
+
+    function renderMeters() {
+      const term = el('meter-filter').value.trim().toLowerCase();
+      const matches = meter => term.length === 0
+        || meter.name.toLowerCase().includes(term)
+        || Object.entries(meter.tags).some(([key, value]) => `${key}=${value}`.toLowerCase().includes(term));
+      const groups = groupMeters(meters.filter(matches));
+      if (!groups.length) {
+        el('meters').innerHTML = meters.length
+          ? '<div class="empty">No meter matches that filter.</div>'
+          : `<div class="empty">This process has recorded no meters yet. Nothing has been published or
+             consumed here, or metrics are switched off.</div>`;
+        return;
+      }
+      el('meters').innerHTML = groups.map((group, index) => {
+        const title = group.queue === null
+          ? 'Process &mdash; pools, schedulers and anything not tied to one queue'
+          : `Queue <strong>${esc(group.queue)}</strong>`;
+        const rows = group.meters.map(meter => {
+          const rest = Object.entries(meter.tags).filter(([key]) => key !== 'queue' && key !== 'magazine');
+          const sideline = meter.tags.magazine && meter.tags.magazine.endsWith('_SIDELINE');
+          return `<tr><td>${esc(meter.name)}${sideline ? ' <span class="chip">sideline</span>' : ''}</td>
+            <td>${rest.map(([key, value]) => `<span class="chip">${esc(key)}=${esc(value)}</span>`).join('')
+              || '<span class="meta">&mdash;</span>'}</td>
+            <td>${readValue(meter)}</td></tr>`;
+        }).join('');
+        // Open the process group and any single matching group; collapse the rest, so a deployment with
+        // forty queues does not render forty expanded tables.
+        const open = groups.length <= 2 || group.queue === null ? ' open' : '';
+        return `<details class="group"${open}><summary>${title}
+            <span class="count">${group.meters.length} meter${group.meters.length === 1 ? '' : 's'}</span></summary>
+          <table><thead><tr><th>Meter</th><th>Tags</th><th>Current</th></tr></thead>
+          <tbody>${rows}</tbody></table></details>`;
       }).join('');
-      // Open the process group and any single matching group; collapse the rest, so a deployment with
-      // forty queues does not render forty expanded tables.
-      const open = groups.length <= 2 || group.queue === null ? ' open' : '';
-      return `<details class="group"${open}><summary>${title}
-          <span class="count">${group.meters.length} meter${group.meters.length === 1 ? '' : 's'}</span></summary>
-        <table><thead><tr><th>Meter</th><th>Tags</th><th>Current</th></tr></thead>
-        <tbody>${rows}</tbody></table></details>`;
-    }).join('');
-  }
-  el('meter-filter').addEventListener('input', renderMeters);
+    }
+    el('meter-filter').addEventListener('input', renderMeters);
 
-  function setScope(clientId, farmId) {
-    // Not a selector. One manager serves one clientId, and the queue set it reads is named after it,
-    // so there is no second scope this process could show.
-    el('scope').innerHTML = `<b>${esc(clientId)}</b> &middot; farm ${esc(farmId)}`;
-  }
+    function setScope(clientId, farmId) {
+      // Not a selector. One manager serves one clientId, and the queue set it reads is named after it,
+      // so there is no second scope this process could show.
+      el('scope').innerHTML = `<b>${esc(clientId)}</b> &middot; farm ${esc(farmId)}`;
+    }
 
-  refreshPermissions();
-  refreshInventory();
-  refreshInstance();
-  setInterval(() => {
-    // Re-asked on every cycle because a role can be revoked while the tab is open.
     refreshPermissions();
     refreshInventory();
-    if (selected) {
-      loadQueue(version);
-    }
-    if (!el('view-instance').classList.contains('hidden')) {
-      refreshInstance();
-    }
-  }, 30000);
+    refreshInstance();
+    setInterval(() => {
+      // Re-asked on every cycle because a role can be revoked while the tab is open.
+      refreshPermissions();
+      refreshInventory();
+      if (selected) {
+        loadQueue(version);
+      }
+      if (!el('view-instance').classList.contains('hidden')) {
+        refreshInstance();
+      }
+    }, 30000);
 </script>
 </body>
 </html>

@@ -37,19 +37,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.verify;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
  * The sideline and handler-timeout meters.
@@ -72,8 +68,8 @@ class ConsumerMetricsTest {
 
     @BeforeEach
     void setUp() {
-        magazine = Mockito.mock(Magazine.class);
-        sidelineMagazine = Mockito.mock(Magazine.class);
+        magazine = mock(Magazine.class);
+        sidelineMagazine = mock(Magazine.class);
         when(magazine.getMagazineIdentifier()).thenReturn(QUEUE);
     }
 
@@ -211,7 +207,7 @@ class ConsumerMetricsTest {
     @Test
     @DisplayName("a batching consumer publishes the size of each batch handed over")
     void batchSizeIsRecordedWhenBatching() {
-        Mockito.doReturn(data("m1"), data("m2"), data("m3"))
+        doReturn(data("m1"), data("m2"), data("m3"))
                 .doThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null))
                 .when(magazine).fire();
 
@@ -319,7 +315,7 @@ class ConsumerMetricsTest {
 
         assertEquals(1.0, messages(IgnisMetrics.IGNORED));
         assertEquals(0.0, sidelined(IgnisMetrics.REASON_UNREADABLE));
-        verify(sidelineMagazine, org.mockito.Mockito.never()).load(any());
+        verify(sidelineMagazine, never()).load(any());
     }
 
     private Thread occupy(final HandlerExecutor executor, final CountDownLatch release)
@@ -370,9 +366,8 @@ class ConsumerMetricsTest {
         };
     }
 
-    /** A payload that is not valid JSON, so an Integer-typed consumer cannot read it. */
     private void firesUnreadableThen() {
-        Mockito.doReturn(data("not-valid-json{{{"))
+        doReturn(data("not-valid-json{{{"))
                 .doThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null))
                 .when(magazine).fire();
     }
@@ -460,8 +455,8 @@ class ConsumerMetricsTest {
      * the re-stubbing call itself triggering the NOTHING_TO_FIRE it just installed.
      */
     private void firesThen(final String message) {
-        Mockito.doReturn(MagazineData.<String>builder().magazineIdentifier(QUEUE).shard(1)
-                        .data(message).firePointer(1).build())
+        doReturn(MagazineData.<String>builder().magazineIdentifier(QUEUE).shard(1)
+                .data(message).firePointer(1).build())
                 .doThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null))
                 .when(magazine).fire();
     }
@@ -504,7 +499,6 @@ class ConsumerMetricsTest {
         };
     }
 
-    /** A null failure means "hang past the timeout" rather than "throw". */
     private static MessageHandler<String> throwingHandler(final RuntimeException failure) {
         return new MessageHandler<>() {
             @Override

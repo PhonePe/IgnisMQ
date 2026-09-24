@@ -16,14 +16,15 @@
 
 package com.phonepe.ignis.leadership;
 
-import com.phonepe.ignis.common.LoadBalancer;
 import com.phonepe.ignis.client.StorageClient;
+import com.phonepe.ignis.common.LoadBalancer;
 import com.phonepe.ignis.common.MagazineRegistry;
 import com.phonepe.ignis.metric.IgnisMetrics;
-import com.phonepe.ignis.sweep.Sweeper;
+import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
+import com.phonepe.ignis.scheduler.ScheduledTask;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.storage.BaseStorage;
-import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
+import com.phonepe.ignis.sweep.Sweeper;
 import com.phonepe.ignis.utils.Constants;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
@@ -31,7 +32,6 @@ import org.apache.curator.framework.CuratorFramework;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ScheduledFuture;
 
 /**
  * @author shantanu.tiwari
@@ -48,10 +48,12 @@ public class TaskInitializer {
     private final BaseStorage storage;
     private final StorageClient client;
     private LeaderElector leaderElector;
-    private ScheduledFuture<?> sweeperTask;
+    private ScheduledTask sweeperTask;
     private final String farmId;
     private final IgnisSchedulerCommands scheduler;
-    /** True when this initializer created the scheduler and must therefore shut it down. */
+    /**
+     * True when this initializer created the scheduler and must therefore shut it down.
+     */
     private final boolean ownsScheduler;
     private final MagazineRegistry magazineRegistry;
     private final IgnisMetrics metrics;
@@ -71,7 +73,7 @@ public class TaskInitializer {
         // fixed shape rather than a growable worker pool it would never grow.
         this.scheduler = ownsScheduler
                 ? new IgnisSchedulerCommands("ignismq-control", Constants.SCHEDULER_CONTROL_THREADS,
-                        Constants.SCHEDULER_CONTROL_THREADS)
+                Constants.SCHEDULER_CONTROL_THREADS)
                 : scheduler;
         this.curatorFramework = curatorFramework;
         this.queueService = queueService;
@@ -88,12 +90,12 @@ public class TaskInitializer {
             return;
         }
 
-        final Sweeper sweeperTask = new Sweeper(queueService, clientId, storage, client, farmId,
+        final Sweeper sweeper = new Sweeper(queueService, clientId, storage, client, farmId,
                 metrics, magazineRegistry);
-        final Map<Integer, Set<LoadBalancer>> workers = Map.of(1, Set.of(sweeperTask));
+        final Map<Integer, Set<LoadBalancer>> workers = Map.of(1, Set.of(sweeper));
         leaderElector = new LeaderElector(clientId, curatorFramework, workers);
         leaderElector.start();
-        scheduleSweeperTask(sweeperTask);
+        scheduleSweeperTask(sweeper);
     }
 
     /**

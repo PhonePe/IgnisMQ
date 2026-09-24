@@ -178,7 +178,10 @@ class SchedulerMetricsTest {
         }, 0, 20);
 
         assertTrue(runs.await(10, TimeUnit.SECONDS), "a throwing task must stay scheduled");
-        assertTrue(failures("worker", "retried") >= 3.0);
+        // The latch is counted down inside the task body; the counter is incremented by the guard
+        // wrapper after the throw propagates, so the last increment trails the latch reaching zero.
+        await().untilAsserted(() -> assertTrue(failures("worker", "retried") >= 3.0,
+                "every ordinary exception must be counted as retried"));
         assertEquals(0.0, failures("worker", "fatal"));
     }
 

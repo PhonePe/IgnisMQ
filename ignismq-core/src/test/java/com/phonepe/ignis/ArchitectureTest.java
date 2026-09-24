@@ -26,14 +26,14 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
-public class ArchitectureTest {
+class ArchitectureTest {
 
     private static final JavaClasses CLASSES = new ClassFileImporter()
             .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
             .importPackages("com.phonepe.ignis");
 
     @Test
-    public void dropwizardAndDropwizardMetricsStayOutOfCore() {
+    void dropwizardAndDropwizardMetricsStayOutOfCore() {
         noClasses()
                 .should().dependOnClassesThat()
                 .resideInAnyPackage("io.dropwizard..", "com.codahale.metrics..")
@@ -42,7 +42,7 @@ public class ArchitectureTest {
     }
 
     @Test
-    public void nothingSchedulesWorkOnAJavaUtilTimer() {
+    void nothingSchedulesWorkOnAJavaUtilTimer() {
         noClasses()
                 .that().resideOutsideOfPackage("com.phonepe.ignis.scheduler")
                 .should().dependOnClassesThat()
@@ -54,7 +54,7 @@ public class ArchitectureTest {
     }
 
     @Test
-    public void valueTypesDoNotDependOnBehaviour() {
+    void valueTypesDoNotDependOnBehaviour() {
         noClasses()
                 .that().resideInAnyPackage("com.phonepe.ignis.entity", "com.phonepe.ignis.common",
                         "com.phonepe.ignis.config", "com.phonepe.ignis.metric")
@@ -68,7 +68,7 @@ public class ArchitectureTest {
     }
 
     @Test
-    public void aerospikeTypesStayInStorageServiceAndClient() {
+    void aerospikeTypesStayInStorageServiceAndClient() {
         noClasses()
                 .that().resideOutsideOfPackage("com.phonepe.ignis.service..")
                 .and().resideOutsideOfPackage("com.phonepe.ignis.client..")
@@ -79,7 +79,7 @@ public class ArchitectureTest {
     }
 
     @Test
-    public void theManagerDoesNotExposeMagazineTypes() {
+    void theManagerDoesNotExposeMagazineTypes() {
         noMethods()
                 .that().areDeclaredIn(IgnisMQManager.class)
                 .and().arePublic()
@@ -89,7 +89,7 @@ public class ArchitectureTest {
     }
 
     @Test
-    public void queuesDoNotExposeMagazineTypesPublicly() {
+    void queuesDoNotExposeMagazineTypesPublicly() {
         noMethods()
                 .that().areDeclaredIn(MagazineQueue.class)
                 .and().arePublic()
@@ -99,7 +99,7 @@ public class ArchitectureTest {
     }
 
     @Test
-    public void packagesAreFreeOfCycles() {
+    void packagesAreFreeOfCycles() {
         slices()
                 .matching("com.phonepe.ignis.(**)")
                 .should().beFreeOfCycles()

@@ -20,15 +20,13 @@ import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 /**
  * The per-queue meters, and the cost of recording one event.
@@ -42,12 +40,12 @@ class QueueMetersTest {
     @Test
     @DisplayName("recording an event resolves no meter, because every meter is resolved at construction")
     void recordingResolvesNothing() {
-        final IgnisMetrics metrics = Mockito.spy(new IgnisMetrics(registry));
+        final IgnisMetrics metrics = spy(new IgnisMetrics(registry));
         final QueueMeters meters = new QueueMeters(metrics, QUEUE);
         // The batch-size summary is deliberately resolved on first use rather than at construction,
         // so that a queue which never batches never publishes it. One call settles it.
         meters.handlerBatch(1);
-        Mockito.clearInvocations(metrics);
+        clearInvocations(metrics);
 
         // Everything on the message path, called the way the consumer calls it.
         for (int i = 0; i < 3; i++) {

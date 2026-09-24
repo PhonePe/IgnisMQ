@@ -30,15 +30,10 @@ import org.apache.zookeeper.data.Stat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -47,7 +42,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-public class LeaderElectorTest {
+class LeaderElectorTest {
 
     private final List<LeaderElector> electors = new ArrayList<>();
 
@@ -55,13 +50,13 @@ public class LeaderElectorTest {
     private LoadBalancer loadBalancer;
 
     @BeforeEach
-    public void setUp() {
-        curatorFramework = Mockito.mock(CuratorFramework.class, RETURNS_DEEP_STUBS);
-        loadBalancer = Mockito.mock(LoadBalancer.class);
+    void setUp() {
+        curatorFramework = mock(CuratorFramework.class, RETURNS_DEEP_STUBS);
+        loadBalancer = mock(LoadBalancer.class);
     }
 
     @AfterEach
-    public void stopElectors() {
+    void stopElectors() {
         electors.forEach(LeaderElector::stop);
         electors.clear();
     }
@@ -132,27 +127,27 @@ public class LeaderElectorTest {
     // --- Basic state changed tests ---
 
     @Test
-    public void testStateChangedLostConnection() {
+    void testStateChangedLostConnection() {
         createDefaultElector().stateChanged(curatorFramework, ConnectionState.LOST);
     }
 
     @Test
-    public void testStateChangedConnected() {
+    void testStateChangedConnected() {
         createDefaultElector().stateChanged(curatorFramework, ConnectionState.CONNECTED);
     }
 
     @Test
-    public void testStateChangedReconnected() {
+    void testStateChangedReconnected() {
         createDefaultElector().stateChanged(curatorFramework, ConnectionState.RECONNECTED);
     }
 
     @Test
-    public void testStateChangedSuspended() {
+    void testStateChangedSuspended() {
         createDefaultElector().stateChanged(curatorFramework, ConnectionState.SUSPENDED);
     }
 
     @Test
-    public void testStateChangedLostWhileLeader() throws Exception {
+    void testStateChangedLostWhileLeader() throws Exception {
         LeaderElector le = createDefaultElector();
         ((AtomicBoolean) getField(le, "leader")).set(true);
         le.stateChanged(curatorFramework, ConnectionState.LOST);
@@ -162,7 +157,7 @@ public class LeaderElectorTest {
     // --- Stop tests ---
 
     @Test
-    public void testStopSetsStopFlag() throws Exception {
+    void testStopSetsStopFlag() throws Exception {
         LeaderElector le = createDefaultElector();
         le.stop();
         assertTrue(((AtomicBoolean) getField(le, "stop")).get());
@@ -171,7 +166,7 @@ public class LeaderElectorTest {
     // --- Start test ---
 
     @Test
-    public void testStartCreatesPathAndSelector() throws Exception {
+    void testStartCreatesPathAndSelector() throws Exception {
         LeaderElector le = createDefaultElector();
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
@@ -193,7 +188,7 @@ public class LeaderElectorTest {
      * come up on JDK 17.
      */
     @Test
-    public void testStartEntersTheElectionWithAutoRequeue() throws Exception {
+    void testStartEntersTheElectionWithAutoRequeue() throws Exception {
         final LeaderElector le = createDefaultElector();
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
@@ -213,12 +208,12 @@ public class LeaderElectorTest {
      * every peer's partition assignment - a worker that exists but is never assigned anything.
      */
     @Test
-    public void testReconnectRecreatesMembership() throws Exception {
+    void testReconnectRecreatesMembership() throws Exception {
         final LeaderElector le = createDefaultElector();
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
         le.start();
-        Mockito.clearInvocations(curatorFramework);
+        clearInvocations(curatorFramework);
 
         le.stateChanged(curatorFramework, ConnectionState.RECONNECTED);
 
@@ -230,26 +225,28 @@ public class LeaderElectorTest {
      * {@code NodeExists} is not an error and must not be logged or propagated as one.
      */
     @Test
-    public void testReconnectToleratesMembershipThatStillExists() throws Exception {
+    void testReconnectToleratesMembershipThatStillExists() throws Exception {
         final LeaderElector le = createDefaultElector();
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString()))
                 .thenThrow(new KeeperException.NodeExistsException());
 
         le.start();
-        le.stateChanged(curatorFramework, ConnectionState.RECONNECTED);
+
+        assertDoesNotThrow(() -> le.stateChanged(curatorFramework, ConnectionState.RECONNECTED),
+                "NodeExists on reconnect is the expected case and must not propagate");
     }
 
     /**
      * A disconnect must not try to write to ZooKeeper - there is nothing to write to.
      */
     @Test
-    public void testDisconnectDoesNotAttemptMembershipCreation() throws Exception {
+    void testDisconnectDoesNotAttemptMembershipCreation() throws Exception {
         final LeaderElector le = createDefaultElector();
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
         le.start();
-        Mockito.clearInvocations(curatorFramework);
+        clearInvocations(curatorFramework);
 
         le.stateChanged(curatorFramework, ConnectionState.LOST);
 
@@ -262,7 +259,7 @@ public class LeaderElectorTest {
      * calling {@code updateState} on a component the caller believes is gone.
      */
     @Test
-    public void testStopClosesTheSelectorAndTheScheduler() throws Exception {
+    void testStopClosesTheSelectorAndTheScheduler() throws Exception {
         final LeaderElector le = createDefaultElector();
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
@@ -279,7 +276,7 @@ public class LeaderElectorTest {
      * A framework lifecycle stops things it never started, and may stop them twice.
      */
     @Test
-    public void testStopIsIdempotentAndSafeWithoutStart() {
+    void testStopIsIdempotentAndSafeWithoutStart() {
         final LeaderElector le = createDefaultElector();
 
         le.stop();
@@ -304,7 +301,7 @@ public class LeaderElectorTest {
     // --- TakeLeadership tests ---
 
     @Test
-    public void testTakeLeadershipAndStop() throws Exception {
+    void testTakeLeadershipAndStop() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         setupLeaderSelector(le, true);
@@ -324,7 +321,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testTakeLeadershipAndLoseLeadership() throws Exception {
+    void testTakeLeadershipAndLoseLeadership() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         setupLeaderSelector(le, true);
@@ -346,7 +343,7 @@ public class LeaderElectorTest {
     // --- updateState / peerCountChange tests ---
 
     @Test
-    public void testUpdateStateWithNodeExistsException() throws Exception {
+    void testUpdateStateWithNodeExistsException() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         ((AtomicBoolean) getField(le, "leader")).set(true);
@@ -359,7 +356,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testUpdateStateWithGenericException() throws Exception {
+    void testUpdateStateWithGenericException() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
 
@@ -370,7 +367,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testUpdateStateNotLeader() throws Exception {
+    void testUpdateStateNotLeader() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         setupLeaderSelector(le, false);
@@ -386,7 +383,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testPeerCountChangeNoMembershipChanges() throws Exception {
+    void testPeerCountChangeNoMembershipChanges() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         setupLeaderSelector(le, true);
@@ -404,7 +401,7 @@ public class LeaderElectorTest {
     // --- updatePartitionWorkerState tests ---
 
     @Test
-    public void testUpdatePartitionWorkerStateActivate() throws Exception {
+    void testUpdatePartitionWorkerStateActivate() throws Exception {
         LeaderElector le = createDefaultElector();
         String balancerId = (String) getField(le, "balancerId");
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
@@ -416,7 +413,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testUpdatePartitionWorkerStateDeactivate() throws Exception {
+    void testUpdatePartitionWorkerStateDeactivate() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(true))));
         setupLeaderSelector(le, true);
@@ -427,7 +424,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testUpdatePartitionWorkerStateNoNodeException() throws Exception {
+    void testUpdatePartitionWorkerStateNoNodeException() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         setupLeaderSelector(le, true);
@@ -447,7 +444,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testUpdatePartitionWorkerStateGenericException() throws Exception {
+    void testUpdatePartitionWorkerStateGenericException() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         setupLeaderSelector(le, true);
@@ -466,7 +463,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testPeerCountChangeSetDataException() throws Exception {
+    void testPeerCountChangeSetDataException() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         setupLeaderSelector(le, true);
@@ -484,7 +481,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testPeerCountChangeCreateCommunicatorPath() throws Exception {
+    void testPeerCountChangeCreateCommunicatorPath() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         setupLeaderSelector(le, true);
@@ -505,7 +502,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testMultipleWorkers() throws Exception {
+    void testMultipleWorkers() throws Exception {
         LoadBalancer lb2 = mock(LoadBalancer.class);
         Map<Integer, Set<LoadBalancer>> workers = ImmutableMap.of(
                 1, ImmutableSet.of(loadBalancer),
@@ -521,7 +518,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testRescindMembershipWithNullCurator() throws Exception {
+    void testRescindMembershipWithNullCurator() throws Exception {
         LeaderElector le = createDefaultElector();
         // Just call stop which internally calls rescindMembership
         // curatorFramework is not null but delete might fail - that's ok
@@ -531,7 +528,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testAlreadyRunningActivateNoOp() throws Exception {
+    void testAlreadyRunningActivateNoOp() throws Exception {
         LeaderElector le = createDefaultElector();
         String balancerId = (String) getField(le, "balancerId");
         // Already running = true, same reader => no activate call
@@ -545,7 +542,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testAlreadyStoppedDeactivateNoOp() throws Exception {
+    void testAlreadyStoppedDeactivateNoOp() throws Exception {
         LeaderElector le = createDefaultElector();
         // Already stopped = false, different reader => no deactivate call
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
@@ -558,7 +555,7 @@ public class LeaderElectorTest {
     }
 
     @Test
-    public void testNullLeaderSelector() throws Exception {
+    void testNullLeaderSelector() throws Exception {
         LeaderElector le = createDefaultElector();
         setupIsRunning(le, new HashMap<>(Map.of(1, new AtomicBoolean(false))));
         // leaderSelector is null by default

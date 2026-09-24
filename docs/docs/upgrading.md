@@ -20,6 +20,7 @@ still compiles, or the configuration still loads, and the behaviour is different
 | Handlers | **A queue without batching now reaches `handle(M)`.** It previously reached `handle(List<M>)` with a one-element list |
 | Limits | The consumer and shovel caps are now reachable: 100, not 99 |
 | Correctness | **A message that fails to deserialise is no longer sidelined twice**, and no longer deleted when its sideline write was refused |
+| Handlers | **A `String` or primitive queue now receives its payload as published**, instead of JSON-encoded |
 | Metrics | `ignismq.sideline` gains `reason=unreadable`, previously counted as `reason=exception` |
 | Bundle | `IgnisMQException` now maps to a **4xx** where the caller is at fault, instead of a blanket `500` |
 | Bundle | A console is mounted at `/ignismq/v1` and `/ignisConsole`. **New HTTP endpoints appear in your application** |
@@ -110,6 +111,32 @@ Existing records keep their stale `fireTS` bin; nothing reads it. It disappears 
 **default** — not to zero. This matters more than it looks: zero would be clamped to a 1 ms floor and
 every batch on every pre-existing queue would time out instantly.
 
+## String payloads arrive as published — the third silent one
+
+!!! danger "A `String` or primitive queue now receives what was published. **Silent.**"
+    POJO queues are unaffected, and always were correct.
+
+`publish` has always JSON-encoded every payload, but the consumer decoded it again for every type
+*except* `String` and the primitives — so the encoding was applied and never undone:
+
+| Published | Delivered in 1.x | Delivered in 2.0 |
+|---|---|---|
+| `hello world` | `"hello world"` | `hello world` |
+| `{"a":1}` | `"{\"a\":1}"` | `{"a":1}` |
+
+Not just the surrounding quotes: full escaping was applied, so quotes, newlines and tabs came back
+with backslashes the publisher never wrote.
+
+**The wire format has not changed** — the fix is on the read side only. 1.x encodes identically, so
+decoding on read leaves stored records untouched and retroactively fixes messages already in flight
+or sidelined. Nothing needs draining, and a rollback is equally safe.
+
+**What to do:** if a `String` handler compensated by stripping quotes or re-parsing, remove that or
+it will now corrupt the message. Handlers that simply used the value need no change.
+
+A literal `int.class` queue was separately broken — it threw `ClassCastException` on every message,
+while boxed `Integer` always worked — and now behaves as `Integer.class` already did.
+
 ## Correctness changes you are unlikely to object to
 
 - **A message is no longer deleted when the sideline transfer failed.** In 1.x the source record was
@@ -128,9 +155,11 @@ every batch on every pre-existing queue would time out instantly.
 1. Raise `handlerTimeoutInMins` for any queue with slow handlers, and check it against
    `sweepDurationInMins`.
 2. Set `workerThreads` from your real concurrency, rather than accepting the default blindly.
-3. Rewrite dashboards and alerts against [the new meters](api/metrics.md) and the
+3. Check whether any queue's message type is `String` or a primitive, and if so whether its handler
+   compensates for the old encoding. Nothing needs draining — only the handler may need editing.
+4. Rewrite dashboards and alerts against [the new meters](api/metrics.md) and the
    [runbook](operations/monitoring.md).
-4. Deploy, and watch `ignismq.handler.timeouts`, `ignismq.handler.executions{mode=refused}` and
+5. Deploy, and watch `ignismq.handler.timeouts`, `ignismq.handler.executions{mode=refused}` and
    `ignismq.sweep{outcome=failure}` first. Those three catch every silent change above.
 
 

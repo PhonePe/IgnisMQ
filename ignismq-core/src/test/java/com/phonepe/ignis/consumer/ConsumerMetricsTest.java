@@ -213,7 +213,7 @@ class ConsumerMetricsTest {
     @Test
     @DisplayName("a batching consumer publishes the size of each batch handed over")
     void batchSizeIsRecordedWhenBatching() {
-        doReturn(data("m1"), data("m2"), data("m3"))
+        doReturn(stringData("m1"), stringData("m2"), stringData("m3"))
                 .doThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null))
                 .when(magazine).fire();
 
@@ -461,8 +461,7 @@ class ConsumerMetricsTest {
      * the re-stubbing call itself triggering the NOTHING_TO_FIRE it just installed.
      */
     private void firesThen(final String message) {
-        doReturn(MagazineData.<String>builder().magazineIdentifier(QUEUE).shard(1)
-                .data(message).firePointer(1).build())
+        doReturn(stringData(message))
                 .doThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null))
                 .when(magazine).fire();
     }
@@ -475,9 +474,27 @@ class ConsumerMetricsTest {
                 HANDLER_TIMEOUT_IN_MS, new QueueMeters(metrics, QUEUE));
     }
 
+    /**
+     * A record holding exactly the text given. This is the raw storage form - use it for payloads
+     * already in their stored shape (a JSON number for an Integer queue, or deliberately corrupt
+     * text) and {@link #stringData} for a String queue, whose stored form is quoted.
+     */
     private static MagazineData<String> data(final String message) {
         return MagazineData.<String>builder().magazineIdentifier(QUEUE).shard(1)
                 .data(message).firePointer(1).build();
+    }
+
+    /**
+     * A String-queue record in the form {@code publish()} would actually have stored it: JSON
+     * encoded, so {@code m1} is held as {@code "m1"}. The consumer decodes every payload, so bare
+     * text staged here would be read as corruption rather than as a message.
+     */
+    private static MagazineData<String> stringData(final String message) {
+        try {
+            return data(new ObjectMapper().writeValueAsString(message));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("could not stage " + message, e);
+        }
     }
 
     private MagazineConsumerTask<String> task(final MessageHandler<String> handler) {

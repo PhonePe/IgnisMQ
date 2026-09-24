@@ -251,6 +251,10 @@ Any Jackson-serializable Java object works as a message:
     queue.publish("{\"key\": \"raw-json-string\"}");
     ```
 
+    The handler receives each of these exactly as published — quotes, newlines and all. Before 2.0 a
+    `String` queue delivered the JSON-encoded form instead; see
+    [Upgrading](upgrading.md#string-payloads-arrive-as-published-the-third-silent-one).
+
 === "Map"
 
     ```java

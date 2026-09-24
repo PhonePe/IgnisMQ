@@ -48,7 +48,6 @@ public final class MagazineConsumerTask<M> implements Runnable {
     private final Magazine<String> sidelineMagazine;
     private final MessageHandler<M> messageHandler;
     private final ObjectReader reader;
-    private final boolean rawPayload;
     private final BatchingConfig batchingConfig;
     private final long runBudgetMillis;
     private final HandlerExecutor handlerExecutor;
@@ -72,10 +71,13 @@ public final class MagazineConsumerTask<M> implements Runnable {
         this.magazine = magazine;
         this.sidelineMagazine = sidelineMagazine;
         this.messageHandler = messageHandler;
-        this.rawPayload = clazz.isPrimitive() || clazz == String.class;
+        // Every payload is decoded, whatever M is. publish() JSON-encodes unconditionally, so the
+        // read side has to decode unconditionally to match it - including for String and the
+        // primitives, which used to be handed back as the stored text and so arrived quoted and
+        // escaped.
         // Resolved once: readValue(String, Class) looks the deserialiser up on every call, and this
         // one runs per message.
-        this.reader = rawPayload ? null : mapper.readerFor(clazz);
+        this.reader = mapper.readerFor(clazz);
         this.batchingConfig = batchingConfig;
     }
 
@@ -259,15 +261,11 @@ public final class MagazineConsumerTask<M> implements Runnable {
             if (Objects.isNull(payload)) {
                 continue;
             }
-            if (rawPayload) {
-                messages.add((M) payload);
-            } else {
-                try {
-                    messages.add(reader.readValue(payload));
-                } catch (JsonProcessingException e) {
-                    records.remove();
-                    dispose(item, e, IgnisMetrics.REASON_UNREADABLE);
-                }
+            try {
+                messages.add(reader.readValue(payload));
+            } catch (JsonProcessingException e) {
+                records.remove();
+                dispose(item, e, IgnisMetrics.REASON_UNREADABLE);
             }
         }
         return messages;

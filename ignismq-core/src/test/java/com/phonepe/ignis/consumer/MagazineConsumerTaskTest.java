@@ -86,11 +86,11 @@ class MagazineConsumerTaskTest {
     @Test
     void testRejectedMessageIsSidelinedThenDeleted() {
         firesThen("msg1");
-        when(sidelineMagazine.load("msg1")).thenReturn(true);
+        when(sidelineMagazine.load(stored("msg1"))).thenReturn(true);
 
         task(handler(false)).run();
 
-        verify(sidelineMagazine, times(1)).load("msg1");
+        verify(sidelineMagazine, times(1)).load(stored("msg1"));
         verify(magazine, times(1)).delete(any());
     }
 
@@ -102,11 +102,11 @@ class MagazineConsumerTaskTest {
     @Test
     void testRejectedMessageIsNotDeletedWhenSidelineLoadReturnsFalse() {
         firesThen("msg1");
-        when(sidelineMagazine.load("msg1")).thenReturn(false);
+        when(sidelineMagazine.load(stored("msg1"))).thenReturn(false);
 
         task(handler(false)).run();
 
-        verify(sidelineMagazine, times(1)).load("msg1");
+        verify(sidelineMagazine, times(1)).load(stored("msg1"));
         verify(magazine, never()).delete(any());
     }
 
@@ -117,7 +117,7 @@ class MagazineConsumerTaskTest {
     @Test
     void testRejectedMessageIsNotDeletedWhenSidelineLoadThrows() {
         firesThen("msg1");
-        when(sidelineMagazine.load("msg1")).thenThrow(new RuntimeException("sideline down"));
+        when(sidelineMagazine.load(stored("msg1"))).thenThrow(new RuntimeException("sideline down"));
 
         task(handler(false)).run();
 
@@ -131,7 +131,7 @@ class MagazineConsumerTaskTest {
     @Test
     void testThrowingHandlerDoesNotDeleteWhenSidelineRefuses() {
         firesThen("msg1");
-        when(sidelineMagazine.load("msg1")).thenReturn(false);
+        when(sidelineMagazine.load(stored("msg1"))).thenReturn(false);
 
         task(throwingHandler(Collections.emptySet())).run();
 
@@ -158,15 +158,15 @@ class MagazineConsumerTaskTest {
     @Test
     void testOneFailedSidelineDoesNotBlockTheRestOfTheBatch() {
         when(magazine.fire())
-                .thenReturn(data("msg1"), data("msg2"))
+                .thenReturn(stringData("msg1"), stringData("msg2"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
-        when(sidelineMagazine.load("msg1")).thenReturn(false);
-        when(sidelineMagazine.load("msg2")).thenReturn(true);
+        when(sidelineMagazine.load(stored("msg1"))).thenReturn(false);
+        when(sidelineMagazine.load(stored("msg2"))).thenReturn(true);
 
         task(handler(false)).run();
 
-        verify(sidelineMagazine, times(1)).load("msg1");
-        verify(sidelineMagazine, times(1)).load("msg2");
+        verify(sidelineMagazine, times(1)).load(stored("msg1"));
+        verify(sidelineMagazine, times(1)).load(stored("msg2"));
         verify(magazine, times(1)).delete(any());
     }
 
@@ -178,7 +178,7 @@ class MagazineConsumerTaskTest {
     @Test
     void testAFullBatchIsHandedOverWithoutWaiting() {
         when(magazine.fire())
-                .thenReturn(data("msg1"), data("msg2"), data("msg3"))
+                .thenReturn(stringData("msg1"), stringData("msg2"), stringData("msg3"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
         final CapturingHandler handler = new CapturingHandler(true);
 
@@ -198,7 +198,7 @@ class MagazineConsumerTaskTest {
     @Test
     void testAPartialBatchIsHandedOverAtTheDeadlineWithoutOvershooting() {
         when(magazine.fire())
-                .thenReturn(data("msg1"))
+                .thenReturn(stringData("msg1"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
         final CapturingHandler handler = new CapturingHandler(true);
 
@@ -218,7 +218,7 @@ class MagazineConsumerTaskTest {
     @Test
     void testABacklogIsEmittedAsSuccessiveFullBatches() {
         when(magazine.fire())
-                .thenReturn(data("m1"), data("m2"), data("m3"), data("m4"), data("m5"))
+                .thenReturn(stringData("m1"), stringData("m2"), stringData("m3"), stringData("m4"), stringData("m5"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
         final CapturingHandler handler = new CapturingHandler(true);
 
@@ -256,7 +256,7 @@ class MagazineConsumerTaskTest {
     @Test
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
     void testABackloggedBatchingConsumerReturnsAtItsDeadline() {
-        when(magazine.fire()).thenAnswer(invocation -> data("endless"));
+        when(magazine.fire()).thenAnswer(invocation -> stringData("endless"));
         final CapturingHandler handler = new CapturingHandler(true);
 
         final long started = System.currentTimeMillis();
@@ -274,7 +274,7 @@ class MagazineConsumerTaskTest {
     @Test
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
     void testABackloggedSingleMessageConsumerReturnsAtItsBudget() {
-        when(magazine.fire()).thenAnswer(invocation -> data("endless"));
+        when(magazine.fire()).thenAnswer(invocation -> stringData("endless"));
 
         final long started = System.currentTimeMillis();
         // A one-second budget rather than the production thirty: the property under test is that
@@ -304,7 +304,7 @@ class MagazineConsumerTaskTest {
     @Test
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
     void testEveryClaimedMessageIsConsumedEvenWhenTheBudgetExpires() {
-        when(magazine.fire()).thenAnswer(invocation -> data("endless"));
+        when(magazine.fire()).thenAnswer(invocation -> stringData("endless"));
         final CapturingHandler handler = new CapturingHandler(true);
 
         batchTask(handler, 2, 1, 1_000L).run();
@@ -318,7 +318,7 @@ class MagazineConsumerTaskTest {
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
     void testSuccessiveBatchesArriveWholeAndInOrder() {
         when(magazine.fire())
-                .thenReturn(data("msg1"), data("msg2"), data("msg3"), data("msg4"))
+                .thenReturn(stringData("msg1"), stringData("msg2"), stringData("msg3"), stringData("msg4"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
         final RetainingHandler handler = new RetainingHandler();
 
@@ -332,7 +332,7 @@ class MagazineConsumerTaskTest {
     @Test
     @SuppressWarnings("unchecked")
     void testAnAcceptedBatchIsRetiredInOneCall() {
-        when(magazine.fire()).thenReturn(data("a"), data("b"), data("c"))
+        when(magazine.fire()).thenReturn(stringData("a"), stringData("b"), stringData("c"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
 
         batchTask(handler(true), 3, 1).run();
@@ -456,7 +456,7 @@ class MagazineConsumerTaskTest {
     @Timeout(value = 30000, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
     void testTheRunBudgetNeverCutsTheBatchingWaitShort() {
         when(magazine.fire())
-                .thenReturn(data("msg1"))
+                .thenReturn(stringData("msg1"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
         final CapturingHandler handler = new CapturingHandler(true);
 
@@ -481,7 +481,7 @@ class MagazineConsumerTaskTest {
         final Magazine<String> selfSidelining = mock(Magazine.class);
         when(selfSidelining.load(any())).thenReturn(true);
         when(selfSidelining.fire())
-                .thenReturn(data("true"), data("false"), data(null), null);
+                .thenReturn(stringData("true"), stringData("false"), data(null), null);
 
         selfSidelinedTask(selfSidelining, new TestMessageHandler(), String.class).run();
 
@@ -537,8 +537,8 @@ class MagazineConsumerTaskTest {
     void testABatchedDrainSidelinesOnlyTheRejectedBatch() {
         final Magazine<String> selfSidelining = mock(Magazine.class);
         when(selfSidelining.load(any())).thenReturn(true);
-        when(selfSidelining.fire()).thenReturn(data("true"), data("false"), data("true"),
-                data("true"), data("true"), data("true"), data(null), null);
+        when(selfSidelining.fire()).thenReturn(stringData("true"), stringData("false"), stringData("true"),
+                stringData("true"), stringData("true"), stringData("true"), data(null), null);
 
         new MagazineConsumerTask<>(selfSidelining, selfSidelining, new TestMessageHandler(),
                 new ObjectMapper(), String.class,
@@ -603,7 +603,7 @@ class MagazineConsumerTaskTest {
     @Test
     void testThrowingHandlerDeletesOnceTheSidelineHasAccepted() {
         firesThen("msg1");
-        when(sidelineMagazine.load("msg1")).thenReturn(true);
+        when(sidelineMagazine.load(stored("msg1"))).thenReturn(true);
 
         task(throwingHandler(Collections.emptySet())).run();
 
@@ -821,7 +821,7 @@ class MagazineConsumerTaskTest {
 
     private void firesThen(final String message) {
         when(magazine.fire())
-                .thenReturn(data(message))
+                .thenReturn(stringData(message))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
     }
 
@@ -844,7 +844,7 @@ class MagazineConsumerTaskTest {
     @Test
     void testABatchingQueueCallsTheListOverload() {
         when(magazine.fire())
-                .thenReturn(data("msg1"), data("msg2"))
+                .thenReturn(stringData("msg1"), stringData("msg2"))
                 .thenThrow(new MagazineException(ErrorCode.NOTHING_TO_FIRE, "nothing", null));
         final DispatchRecordingHandler handler = new DispatchRecordingHandler();
 
@@ -885,6 +885,13 @@ class MagazineConsumerTaskTest {
                 handlerExecutor, HANDLER_TIMEOUT_IN_MS, meters);
     }
 
+    /**
+     * A record holding exactly the text given, with no encoding applied.
+     * <p>
+     * This is the raw storage form. Use it for payloads that are already in their stored shape -
+     * a JSON number for an {@code Integer} queue, or deliberately corrupt text - and
+     * {@link #stringData} for a String queue, whose stored form is quoted.
+     */
     private static MagazineData<String> data(final String message) {
         return MagazineData.<String>builder()
                 .magazineIdentifier("TEST_QUEUE")
@@ -892,6 +899,32 @@ class MagazineConsumerTaskTest {
                 .data(message)
                 .firePointer(1)
                 .build();
+    }
+
+    /**
+     * A record for a String queue in the form {@code publish()} would actually have stored it.
+     * <p>
+     * {@code MagazineQueue.publish} JSON-encodes every payload, so a String queue holds
+     * {@code "msg1"} with its quotes - never the bare {@code msg1}. Staging the bare text would
+     * stage a record ignisMQ could not have written, and now that the consumer decodes every
+     * payload rather than handing String through untouched, such a record is indistinguishable
+     * from genuine corruption and is sidelined as unreadable. Which is the correct treatment of
+     * it, and the reason the fixture has to be faithful.
+     */
+    private static MagazineData<String> stringData(final String message) {
+        return data(stored(message));
+    }
+
+    /**
+     * The stored text for a String payload. This is what the sideline and the shovel move around,
+     * so it is also what a {@code sidelineMagazine.load(...)} assertion has to name.
+     */
+    private static String stored(final String message) {
+        try {
+            return new ObjectMapper().writeValueAsString(message);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("could not stage " + message, e);
+        }
     }
 
     private static MessageHandler<String> handler(final boolean outcome) {

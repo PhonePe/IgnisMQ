@@ -60,17 +60,6 @@
         <url>https://github.com/PhonePe/ignisMQ/actions</url>
     </ciManagement>
 
-    <distributionManagement>
-        <snapshotRepository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
-        <repository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-        </repository>
-    </distributionManagement>
-
     <properties>
         <!-- Java / Build -->
         <jdk.source.version>17</jdk.source.version>
@@ -83,12 +72,12 @@
         <maven.deploy.plugin.version>3.1.4</maven.deploy.plugin.version>
         <maven.source.plugin.version>3.2.0</maven.source.plugin.version>
         <maven.javadoc.plugin.version>3.3.1</maven.javadoc.plugin.version>
-        <maven.surefire.plugin.version>3.0.0-M8</maven.surefire.plugin.version>
+        <maven.surefire.plugin.version>3.5.2</maven.surefire.plugin.version>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
-        <maven.gpg.plugin.version>1.6</maven.gpg.plugin.version>
+        <maven.gpg.plugin.version>3.2.7</maven.gpg.plugin.version>
         <maven.sonar.plugin.version>5.7.0.6970</maven.sonar.plugin.version>
         <maven.enforcer.plugin.version>3.5.0</maven.enforcer.plugin.version>
-        <sonatype.central.publishing.maven.plugin.version>0.5.0</sonatype.central.publishing.maven.plugin.version>
+        <sonatype.central.publishing.maven.plugin.version>0.11.0</sonatype.central.publishing.maven.plugin.version>
         <jacoco.maven.plugin.version>0.8.13</jacoco.maven.plugin.version>
         <lombok.maven.version>1.18.20.0</lombok.maven.version>
         <maven.javadoc.skip>false</maven.javadoc.skip>
@@ -98,7 +87,7 @@
         <maven.deploy.skip>false</maven.deploy.skip>
 
         <!-- Dependency Versions -->
-        <lombok.version>1.18.38</lombok.version>
+        <lombok.version>1.18.46</lombok.version>
         <dropwizard.version>2.1.12</dropwizard.version>
         <!-- Must track the metrics-core that ${dropwizard.version} ships, since the bundle
              consumes it at provided scope from the application's Dropwizard distribution. -->
@@ -119,7 +108,7 @@
         <archunit.version>1.4.1</archunit.version>
         <mockito-core.version>4.3.1</mockito-core.version>
         <junit.testcontainer.version>1.0.6</junit.testcontainer.version>
-        <awaitility.version>4.2.0</awaitility.version>
+        <awaitility.version>4.2.2</awaitility.version>
         <jna.version>5.13.0</jna.version>
 
         <!-- Sonar properties -->

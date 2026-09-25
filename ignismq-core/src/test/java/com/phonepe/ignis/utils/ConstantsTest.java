@@ -16,19 +16,26 @@
 
 package com.phonepe.ignis.utils;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-public class ConstantsTest {
+class ConstantsTest {
 
+    /**
+     * Every assertion here is expected-first. S3415 cannot tell which side is which when both are
+     * compile-time constants, and swapping to satisfy it would put the actual value first, which is
+     * the very thing the rule exists to prevent.
+     */
     @Test
-    public void testConstants() {
-        assertEquals(32, Constants.DEFAULT_SHARDS);
+    @SuppressWarnings("java:S3415")
+    void testConstants() {
+        assertEquals(8, Constants.DEFAULT_SHARDS);
         assertEquals(64, Constants.PARALLEL_FACTOR);
         assertEquals(100, Constants.MAX_CONSUMERS_ALLOWED);
         assertEquals(2, Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY);
-        assertEquals(2 * 60 * 1000, Constants.INITIAL_DELAY_IN_MS);
+        assertEquals(1000, Constants.INITIAL_DELAY_IN_MS);
         assertEquals(1000, Constants.DELAY_PERIOD_IN_MS);
         assertEquals(10 * 1000, Constants.SHOVEL_DELAY_IN_MS);
         assertEquals(24 * 60 * 60, Constants.MAX_ALLOWED_SHOVEL_TIME_INTERVAL_IN_SECONDS);
@@ -41,7 +48,10 @@ public class ConstantsTest {
         assertNotNull(Constants.AEROSPIKE_META_SET);
         assertNotNull(Constants.MAGAZINE_SET_FORMAT);
         assertNotNull(Constants.MAGAZINE_SHARD_FORMAT);
-        assertNotNull(Constants.MAGAZINE_DATA_KEY_FORMAT);
-        assertNotNull(Constants.MAGAZINE_META_KEY_FORMAT);
+        assertNotNull(Constants.MAGAZINE_SHARD_PREFIX);
+        assertEquals(1000, Constants.SWEEP_BATCH_SIZE);
+        assertEquals(32, Constants.FIRE_HISTORY_ENTRIES);
+        assertEquals(8, Constants.FIRE_HISTORY_WINDOWS_PER_SWEEP_DURATION);
+        assertEquals(12 * 60 * 60 * 1000L, Constants.MAX_SWEEP_DURATION_IN_MS);
     }
 }

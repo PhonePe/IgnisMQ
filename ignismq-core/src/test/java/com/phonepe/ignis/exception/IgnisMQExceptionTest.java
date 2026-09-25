@@ -16,14 +16,14 @@
 
 package com.phonepe.ignis.exception;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
-public class IgnisMQExceptionTest {
+class IgnisMQExceptionTest {
 
     @Test
-    public void testBuilder() {
+    void testBuilder() {
         IgnisMQException exception = IgnisMQException.builder()
                 .errorCode(ErrorCode.QUEUE_NOT_FOUND)
                 .message("Queue not found")
@@ -35,7 +35,7 @@ public class IgnisMQExceptionTest {
     }
 
     @Test
-    public void testBuilderWithCause() {
+    void testBuilderWithCause() {
         RuntimeException cause = new RuntimeException("root cause");
         IgnisMQException exception = IgnisMQException.builder()
                 .errorCode(ErrorCode.AEROSPIKE_ERROR)
@@ -48,7 +48,7 @@ public class IgnisMQExceptionTest {
     }
 
     @Test
-    public void testPropagateWithIgnisMQException() {
+    void testPropagateWithIgnisMQException() {
         IgnisMQException original = IgnisMQException.builder()
                 .errorCode(ErrorCode.QUEUE_ALREADY_EXISTS)
                 .build();
@@ -58,7 +58,7 @@ public class IgnisMQExceptionTest {
     }
 
     @Test
-    public void testPropagateWithWrappedIgnisMQException() {
+    void testPropagateWithWrappedIgnisMQException() {
         IgnisMQException original = IgnisMQException.builder()
                 .errorCode(ErrorCode.QUEUE_ALREADY_EXISTS)
                 .build();
@@ -69,7 +69,7 @@ public class IgnisMQExceptionTest {
     }
 
     @Test
-    public void testPropagateWithGenericException() {
+    void testPropagateWithGenericException() {
         RuntimeException generic = new RuntimeException("generic");
 
         IgnisMQException result = IgnisMQException.propagate(generic);
@@ -79,7 +79,7 @@ public class IgnisMQExceptionTest {
     }
 
     @Test
-    public void testPropagateWithMessageAndGenericException() {
+    void testPropagateWithMessageAndGenericException() {
         RuntimeException generic = new RuntimeException("generic");
 
         IgnisMQException result = IgnisMQException.propagate("custom msg", generic);
@@ -88,7 +88,7 @@ public class IgnisMQExceptionTest {
     }
 
     @Test
-    public void testPropagateWithErrorCode() {
+    void testPropagateWithErrorCode() {
         RuntimeException generic = new RuntimeException("generic msg");
 
         IgnisMQException result = IgnisMQException.propagate(ErrorCode.AEROSPIKE_ERROR, generic);
@@ -97,7 +97,7 @@ public class IgnisMQExceptionTest {
     }
 
     @Test
-    public void testPropagateWithErrorCodeAndIgnisMQException() {
+    void testPropagateWithErrorCodeAndIgnisMQException() {
         IgnisMQException original = IgnisMQException.builder()
                 .errorCode(ErrorCode.QUEUE_NOT_FOUND)
                 .build();
@@ -107,7 +107,7 @@ public class IgnisMQExceptionTest {
     }
 
     @Test
-    public void testPropagateWithErrorCodeAndWrappedIgnisMQException() {
+    void testPropagateWithErrorCodeAndWrappedIgnisMQException() {
         IgnisMQException original = IgnisMQException.builder()
                 .errorCode(ErrorCode.QUEUE_NOT_FOUND)
                 .build();
@@ -118,7 +118,7 @@ public class IgnisMQExceptionTest {
     }
 
     @Test
-    public void testAllErrorCodes() {
+    void testAllErrorCodes() {
         for (ErrorCode code : ErrorCode.values()) {
             IgnisMQException exception = IgnisMQException.builder()
                     .errorCode(code)

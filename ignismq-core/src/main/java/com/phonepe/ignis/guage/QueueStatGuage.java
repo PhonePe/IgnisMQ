@@ -16,9 +16,8 @@
 
 package com.phonepe.ignis.guage;
 
-import com.codahale.metrics.CachedGauge;
 import com.phonepe.ignis.IQueue;
-import com.phonepe.ignis.IgnisMQManager;
+import com.phonepe.ignis.common.QueueMetaData;
 import com.phonepe.ignis.metric.QueueStat;
 import com.phonepe.ignis.service.QueueService;
 import lombok.extern.slf4j.Slf4j;
@@ -26,45 +25,56 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * @author shantanu.tiwari
  */
 @Slf4j
-public class QueueStatGuage extends CachedGauge<List<QueueStat>> {
+public class QueueStatGuage implements Supplier<List<QueueStat>> {
     private final QueueService queueService;
-    private final IgnisMQManager ignisMQManager;
+    private final Supplier<Map<String, IQueue<?>>> localQueues;
 
-    public QueueStatGuage(final long timeout, final TimeUnit timeoutUnit,
-                          final QueueService queueService,
-                          final IgnisMQManager ignisMQManager) {
-        super(timeout, timeoutUnit);
+    /**
+     * @param queueService source of the queues registered in storage
+     * @param localQueues  supplier of the queues this process actually holds; only these can be
+     *                     reported on, because reporting requires a live magazine handle
+     */
+    public QueueStatGuage(final QueueService queueService,
+                          final Supplier<Map<String, IQueue<?>>> localQueues) {
         this.queueService = queueService;
-        this.ignisMQManager = ignisMQManager;
+        this.localQueues = localQueues;
     }
 
     @Override
-    protected List<QueueStat> loadValue() {
+    public List<QueueStat> get() {
         try {
-            Map<String, IQueue<?>> cachedQueues = ignisMQManager.getAllQueues();
-            return queueService.getQueues(true).entrySet()
+            Map<String, IQueue<?>> cachedQueues = localQueues.get();
+            return queueService.getQueues(true).keySet()
                     .stream()
-                    .filter(entry -> cachedQueues.containsKey(entry.getKey()))
-                    .map(entry ->
-                            QueueStat.builder()
-                                    .name(entry.getKey())
-                                    .consumed(cachedQueues.get(entry.getKey()).getMetaData().getConsumed())
-                                    .published(cachedQueues.get(entry.getKey()).getMetaData().getPublished())
-                                    .unConsumed(cachedQueues.get(entry.getKey()).getUnconsumedCount())
-                                    .sidelined(cachedQueues.get(entry.getKey()).getMetaData().getSidelined())
-                                    .shovelled(cachedQueues.get(entry.getKey()).getMetaData().getShovelled())
-                                    .build()
-                    ).collect(Collectors.toList());
+                    .map(name -> {
+                        final IQueue<?> queue = cachedQueues.get(name);
+                        return queue == null ? null : toStat(name, queue);
+                    })
+                    .filter(Objects::nonNull)
+                    .toList();
         } catch (Exception e) {
             log.info("Error calculating metrics", e);
             return Collections.emptyList();
         }
+    }
+
+    private static QueueStat toStat(final String name, final IQueue<?> queue) {
+        final QueueMetaData metaData = queue.getMetaData();
+        return QueueStat.builder()
+                .name(name)
+                .active(true)
+                .published(metaData.getPublished())
+                .consumed(metaData.getConsumed())
+                .unConsumed(Math.max(metaData.getPublished() - metaData.getConsumed(), 0L))
+                .sidelined(metaData.getSidelined())
+                .shovelled(metaData.getShovelled())
+                .build();
     }
 }

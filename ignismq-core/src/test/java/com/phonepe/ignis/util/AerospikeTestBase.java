@@ -20,16 +20,16 @@ import com.aerospike.client.AerospikeClient;
 import com.aerospike.client.Host;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.policy.ClientPolicy;
+import com.phonepe.aerospike.config.AerospikeConfiguration;
+import com.phonepe.aerospike.config.AerospikeHost;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
-import com.phonepe.aerospike.config.AerospikeConfiguration;
-import com.phonepe.aerospike.config.AerospikeHost;
 import io.appform.testcontainers.aerospike.AerospikeContainerConfiguration;
 import io.appform.testcontainers.aerospike.container.AerospikeContainer;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.After;
-import org.junit.Before;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.util.List;
 
@@ -39,7 +39,7 @@ import java.util.List;
 @Slf4j
 public abstract class AerospikeTestBase {
     public static final String AEROSPIKE_HOST = "localhost";
-    public static final String AEROSPIKE_DOCKER_IMAGE = "aerospike/aerospike-server:6.1.0.7";
+    public static final String AEROSPIKE_DOCKER_IMAGE = "aerospike/aerospike-server:6.2.0.7";
     public static final String AEROSPIKE_NAMESPACE = "ignismq";
     public static final int AEROSPIKE_PORT = 3000;
     public static final String CLIENT_ID = "CLIENT_ID";
@@ -57,21 +57,19 @@ public abstract class AerospikeTestBase {
 
     protected IAerospikeClient aerospikeClient;
 
-    @Before
+    @BeforeEach
     public void setUpAerospikeClient() {
         aerospikeClient = new AerospikeClient(new ClientPolicy(),
                 new Host(AEROSPIKE_DOCKER_CONTAINER.getHost(), AEROSPIKE_DOCKER_CONTAINER.getConnectionPort()));
-        aerospikeClient.truncate(
-                ((AerospikeClient) aerospikeClient).getInfoPolicyDefault(),
-                AEROSPIKE_NAMESPACE, null, null);
+        truncateNamespace();
     }
 
-    @After
+    @AfterEach
     public void tearDownAerospikeClient() {
         if (aerospikeClient != null) {
-            aerospikeClient.truncate(
-                    ((AerospikeClient) aerospikeClient).getInfoPolicyDefault(),
-                    AEROSPIKE_NAMESPACE, null, null);
+            truncateNamespace();
+            aerospikeClient.close();
+            aerospikeClient = null;
         }
     }
 
@@ -81,6 +79,12 @@ public abstract class AerospikeTestBase {
 
     protected static int getContainerPort() {
         return AEROSPIKE_DOCKER_CONTAINER.getConnectionPort();
+    }
+
+    protected void truncateNamespace() {
+        aerospikeClient.truncate(
+                ((AerospikeClient) aerospikeClient).getInfoPolicyDefault(),
+                AEROSPIKE_NAMESPACE, null, null);
     }
 
     protected AerospikeConfiguration getAerospikeConfiguration() {

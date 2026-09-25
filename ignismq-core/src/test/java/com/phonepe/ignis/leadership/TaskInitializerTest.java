@@ -17,72 +17,91 @@
 package com.phonepe.ignis.leadership;
 
 import com.phonepe.ignis.client.StorageClient;
+import com.phonepe.ignis.metric.IgnisMetrics;
+import com.phonepe.ignis.scheduler.IgnisSchedulerCommands;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.util.AerospikeTestBase;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.CreateMode;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
-public class TaskInitializerTest extends AerospikeTestBase {
+class TaskInitializerTest extends AerospikeTestBase {
+
+    private final List<TaskInitializer> taskInitializers = new ArrayList<>();
 
     private CuratorFramework curatorFramework;
     private AerospikeQueueService queueService;
     private AerospikeStorage storage;
     private StorageClient storageClient;
 
-    @Before
-    public void setUp() {
-        curatorFramework = Mockito.mock(CuratorFramework.class, RETURNS_DEEP_STUBS);
-        queueService = Mockito.spy(createQueueService());
+    @BeforeEach
+    void setUp() {
+        curatorFramework = mock(CuratorFramework.class, RETURNS_DEEP_STUBS);
+        queueService = spy(createQueueService());
         storage = (AerospikeStorage) createBaseStorage();
-        storageClient = Mockito.mock(StorageClient.class);
+        storageClient = mock(StorageClient.class);
+    }
+
+    @AfterEach
+    void stopTaskInitializers() {
+        taskInitializers.forEach(TaskInitializer::stop);
+        taskInitializers.clear();
     }
 
     @Test
-    public void testConstants() {
+    void testConstants() {
         assertEquals(15 * 60 * 1000, TaskInitializer.DELAY_FOR_SWEEPER_TASK);
     }
 
     @Test
-    public void testConstructor() {
-        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID);
+    void testConstructor() {
+        TaskInitializer taskInitializer = newTaskInitializer(null);
         assertNotNull(taskInitializer);
     }
 
     @Test
-    public void testStartAndStop() throws Exception {
-        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID);
+    void testStartAndStop() throws Exception {
+        TaskInitializer taskInitializer = newTaskInitializer(null);
 
         // Deep stubs on curatorFramework handle the full create chain automatically
         when(curatorFramework.create().creatingParentContainersIfNeeded()
                 .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
 
         taskInitializer.start();
+        final Object afterFirstStart = leaderElectorOf(taskInitializer);
+        assertNotNull(afterFirstStart, "start must install a leader elector");
 
-        // Calling start again should be a no-op ("Already initialised")
+        // Calling start again is a no-op: the second call must not replace the running elector.
         taskInitializer.start();
+        assertSame(afterFirstStart, leaderElectorOf(taskInitializer),
+                "a second start must not swap out the elector the first one installed");
 
-        // Stop should call leaderElector.stop()
         taskInitializer.stop();
+        assertNull(leaderElectorOf(taskInitializer), "stop must release the elector");
+    }
+
+    private static Object leaderElectorOf(final TaskInitializer taskInitializer) throws Exception {
+        final Field field = TaskInitializer.class.getDeclaredField("leaderElector");
+        field.setAccessible(true);
+        return field.get(taskInitializer);
     }
 
     @Test
-    public void testStartSetsLeaderElector() throws Exception {
-        TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
-                CLIENT_ID, storage, storageClient, FARM_ID);
+    void testStartSetsLeaderElector() throws Exception {
+        TaskInitializer taskInitializer = newTaskInitializer(null);
 
         // Mock create chain
         when(curatorFramework.create().creatingParentContainersIfNeeded()
@@ -96,5 +115,66 @@ public class TaskInitializerTest extends AerospikeTestBase {
         taskInitializer.start();
 
         assertNotNull(leField.get(taskInitializer));
+    }
+
+    /**
+     * A framework lifecycle calls stop even when start never ran or failed part way through.
+     * This used to NPE on the null leader elector.
+     */
+    @Test
+    void testStopWithoutStartIsSafe() {
+        TaskInitializer taskInitializer = newTaskInitializer(null);
+
+        assertDoesNotThrow(taskInitializer::stop,
+                "stop must tolerate a start that never ran; this used to NPE on the null elector");
+    }
+
+    @Test
+    void testStopIsIdempotentAndCancelsTheSweeperTask() throws Exception {
+        TaskInitializer taskInitializer = newTaskInitializer(null);
+        when(curatorFramework.create().creatingParentContainersIfNeeded()
+                .withMode(any(CreateMode.class)).forPath(anyString())).thenReturn("");
+        taskInitializer.start();
+
+        Field taskField = TaskInitializer.class.getDeclaredField("sweeperTask");
+        taskField.setAccessible(true);
+        assertNotNull(taskField.get(taskInitializer));
+
+        taskInitializer.stop();
+        assertNull(taskField.get(taskInitializer), "sweeper task must be released on stop");
+
+        // Second stop must not throw.
+        taskInitializer.stop();
+    }
+
+    /**
+     * A task initializer given no scheduler builds its own, and must therefore shut it down. One
+     * that is handed the manager's must not, or stopping the sweeper would stop every consumer.
+     */
+    @Test
+    void testASuppliedSchedulerOutlivesTheTaskInitializer() {
+        final IgnisSchedulerCommands shared = new IgnisSchedulerCommands();
+        final TaskInitializer taskInitializer = newTaskInitializer(shared);
+
+        taskInitializer.stop();
+
+        assertFalse(shared.isStopped(), "a scheduler owned by the caller must survive");
+        shared.stop();
+        assertTrue(shared.isStopped());
+    }
+
+    @Test
+    void testMetricsAreRequired() {
+        assertThrows(NullPointerException.class,
+                () -> new TaskInitializer(curatorFramework, queueService, CLIENT_ID, storage, storageClient,
+                        FARM_ID, null, null, null));
+    }
+
+    private TaskInitializer newTaskInitializer(final IgnisSchedulerCommands scheduler) {
+        final TaskInitializer taskInitializer = new TaskInitializer(curatorFramework, queueService,
+                CLIENT_ID, storage, storageClient, FARM_ID,
+                new IgnisMetrics(new SimpleMeterRegistry()), scheduler, null);
+        taskInitializers.add(taskInitializer);
+        return taskInitializer;
     }
 }

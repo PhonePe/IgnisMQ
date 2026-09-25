@@ -46,5 +46,6 @@ public class QueueEntity {
     private long sweptCounter;
     private long sidelineSweptCounter;
     private long sweepDuration;
+    private long handlerTimeout;
     private BatchingConfig batchingConfig;
 }

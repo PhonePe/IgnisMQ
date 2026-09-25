@@ -16,14 +16,15 @@
 
 package com.phonepe.ignis.exception;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class ErrorCodeTest {
+class ErrorCodeTest {
 
     @Test
-    public void testAllErrorCodes() {
+    void testAllErrorCodes() {
         ErrorCode[] codes = ErrorCode.values();
         assertTrue(codes.length > 0);
 

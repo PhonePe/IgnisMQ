@@ -16,7 +16,7 @@
 
 package com.phonepe.ignis.storage;
 
-import com.phonepe.magazine.core.StorageType;
+import com.phonepe.magazine.entity.StorageType;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import lombok.Getter;
 

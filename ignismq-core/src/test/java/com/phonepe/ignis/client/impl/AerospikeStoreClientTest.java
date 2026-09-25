@@ -17,20 +17,20 @@
 package com.phonepe.ignis.client.impl;
 
 import com.aerospike.client.IAerospikeClient;
-import com.phonepe.ignis.util.AerospikeTestBase;
 import com.phonepe.aerospike.config.AerospikeConfiguration;
 import com.phonepe.aerospike.config.AerospikeHost;
-import org.junit.Test;
+import com.phonepe.ignis.util.AerospikeTestBase;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
-public class AerospikeStoreClientTest extends AerospikeTestBase {
+class AerospikeStoreClientTest extends AerospikeTestBase {
 
     @Test
-    public void testStartAndGetClient() {
+    void testStartAndGetClient() {
         AerospikeConfiguration config = getAerospikeConfiguration();
         AerospikeStoreClient client = new AerospikeStoreClient(config);
 
@@ -40,7 +40,7 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStartIdempotent() {
+    void testStartIdempotent() {
         AerospikeConfiguration config = getAerospikeConfiguration();
         AerospikeStoreClient client = new AerospikeStoreClient(config);
 
@@ -52,17 +52,18 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testStopMultipleTimes() {
+    void testStopMultipleTimes() {
         AerospikeConfiguration config = getAerospikeConfiguration();
         AerospikeStoreClient client = new AerospikeStoreClient(config);
 
-        client.stop();
-        // Second stop should be safe
-        client.stop();
+        // A lifecycle may stop a client it never started, and may stop it twice.
+        assertDoesNotThrow(client::stop);
+        assertDoesNotThrow(client::stop, "stop must be idempotent");
+        assertNull(client.getClient(), "a stopped client must not hand out a live connection");
     }
 
     @Test
-    public void testWithTlsConfig() {
+    void testWithTlsConfig() {
         AerospikeConfiguration config = getAerospikeConfiguration();
         // The testcontainer doesn't use TLS, but we verify construction works
         AerospikeStoreClient client = new AerospikeStoreClient(config);
@@ -71,7 +72,7 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testWithZeroThreadPoolSize() {
+    void testWithZeroThreadPoolSize() {
         AerospikeConfiguration config = AerospikeConfiguration.builder()
                 .hosts(List.of(AerospikeHost.builder()
                         .host(getContainerHost())
@@ -92,7 +93,7 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
     }
 
     @Test
-    public void testWithUserPasswordTls() {
+    void testWithUserPasswordTls() {
         // Tests the TLS policy creation branch (user + password non-empty)
         // Can't actually connect with TLS to testcontainer, but we test the config path
         // by using correct host but with user/pass set — the constructor will fail
@@ -114,12 +115,9 @@ public class AerospikeStoreClientTest extends AerospikeTestBase {
                 .password("testpass")
                 .tlsProtocols(Set.of("TLSv1.2"))
                 .build();
-        try {
-            new AerospikeStoreClient(config);
-            fail("Expected exception due to TLS mismatch with testcontainer");
-        } catch (Exception e) {
-            // Expected - TLS connection to non-TLS server fails
-            // But configureClientPolicy was fully executed
-        }
+        // The policy is fully built before the connection is attempted, so reaching the connection
+        // failure is what proves the user/password/TLS branch was exercised.
+        assertThrows(Exception.class, () -> new AerospikeStoreClient(config),
+                "a TLS client cannot connect to the non-TLS test container");
     }
 }

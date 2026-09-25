@@ -20,14 +20,15 @@ import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.utils.Utils;
 import com.phonepe.ignis.service.QueueService;
 import com.phonepe.ignis.entity.QueueEntity;
-import com.phonepe.ignis.leadership.LoadBalancer;
+import com.phonepe.ignis.common.LoadBalancer;
+import com.phonepe.ignis.common.MagazineRegistry;
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.storage.BaseStorage;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.TimerTask;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -36,22 +37,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Created on 12/03/22
  */
 @Slf4j
-public class Sweeper extends TimerTask implements LoadBalancer {
+public class Sweeper implements Runnable, LoadBalancer {
     private final AtomicBoolean active = new AtomicBoolean(false);
     private final QueueService queueService;
-    private final String clientId;
-    private final BaseStorage storage;
-    private final StorageClient client;
-    private final String farmId;
+    private final QueueSweeper queueSweeper;
 
     public Sweeper(final QueueService queueService, final String clientId,
                    final BaseStorage storage, final StorageClient client,
-                   final String farmId) {
+                   final String farmId, final IgnisMetrics metrics,
+                   final MagazineRegistry magazineRegistry) {
         this.queueService = queueService;
-        this.clientId = clientId;
-        this.storage = storage;
-        this.client = client;
-        this.farmId = farmId;
+        this.queueSweeper = new QueueSweeper(queueService, clientId, storage, client, farmId,
+                metrics, magazineRegistry);
     }
 
     @Override
@@ -63,7 +60,7 @@ public class Sweeper extends TimerTask implements LoadBalancer {
                 final List<Future<Boolean>> futureList = new ArrayList<>();
                 queues.forEach((queueName, queueEntity) ->
                         futureList.add(Utils.executorService.submit(() -> {
-                            Utils.sweepQueue(queueService, clientId, client, storage, queueName, queueEntity, farmId);
+                            queueSweeper.sweepQueue(queueName, queueEntity);
                             return true;
                         })));
                 Utils.waitForRequestsCompletion(futureList);

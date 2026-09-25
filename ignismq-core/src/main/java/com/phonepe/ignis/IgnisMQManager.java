@@ -17,11 +17,10 @@
 package com.phonepe.ignis;
 
 import com.aerospike.client.IAerospikeClient;
-import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.Preconditions;
 import com.phonepe.ignis.client.StorageClient;
 import com.phonepe.ignis.client.impl.AerospikeStoreClient;
+import com.phonepe.ignis.common.MagazineRegistry;
 import com.phonepe.ignis.common.MessageHandler;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.entity.QueueEntity;
@@ -29,18 +28,22 @@ import com.phonepe.ignis.exception.ErrorCode;
 import com.phonepe.ignis.exception.IgnisMQException;
 import com.phonepe.ignis.guage.QueueStatGuage;
 import com.phonepe.ignis.leadership.TaskInitializer;
+import com.phonepe.ignis.metric.IgnisMetrics;
+import com.phonepe.ignis.metric.QueueDepthMetrics;
+import com.phonepe.ignis.metric.QueueStat;
+import com.phonepe.ignis.refresh.QueueRefresher;
+import com.phonepe.ignis.refresh.RefreshableQueue;
 import com.phonepe.ignis.request.CreateQueueRequest;
 import com.phonepe.ignis.request.ShovelConfig;
+import com.phonepe.ignis.scheduler.IgnisSchedulers;
 import com.phonepe.ignis.service.AerospikeQueueService;
 import com.phonepe.ignis.service.QueueService;
-import com.phonepe.ignis.storage.AerospikeStorage;
 import com.phonepe.ignis.storage.BaseStorage;
+import com.phonepe.ignis.sweep.QueueSweeper;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.ErrorMessage;
-import com.phonepe.ignis.utils.Utils;
-import com.phonepe.magazine.core.StorageTypeVisitor;
-import io.appform.functionmetrics.MonitoredFunction;
-import io.dropwizard.lifecycle.Managed;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
@@ -48,15 +51,14 @@ import org.apache.curator.framework.CuratorFramework;
 import javax.validation.Valid;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author shantanu.tiwari
  */
 @Slf4j
-public final class IgnisMQManager implements Managed {
-    private static final String METRIC_TIMER_FORMAT = "commands.%s_%s.all";
-    private final MetricRegistry metricRegistry;
+public final class IgnisMQManager {
+    private final MeterRegistry meterRegistry;
+    private final IgnisMetrics metrics;
     private final Map<String, IQueue<?>> ignisMQMap = new ConcurrentHashMap<>();
     private final String clientId;
     private final BaseStorage storage;
@@ -65,45 +67,79 @@ public final class IgnisMQManager implements Managed {
     private final TaskInitializer taskInitializer;
     private final String farmId;
     private Map<String, Map.Entry<Class, MessageHandler>> messageHandlers = new HashMap<>();
-    private QueueService queueService;
-    private StorageClient storageClient;
+    private final QueueService queueService;
+    private final StorageClient storageClient;
+    private final boolean ownsStorageClient;
+    private final QueueStatGuage queueStatGuage;
+    private final QueueDepthMetrics queueDepthMetrics;
+    private final QueueSweeper queueSweeper;
+    private final QueueRefresher queueRefresher;
+    private final IgnisSchedulers schedulers;
 
+    /**
+     * The manager builds a storage client and closes it on {@link #stop()}.
+     */
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
-                          final MetricRegistry metricRegistry, final CuratorFramework curatorFramework,
-                          final String farmId) throws Exception {
-        this.clientId = clientId;
-        this.storage = storage;
-        this.mapper = mapper;
-        this.metricRegistry = metricRegistry;
-        this.farmId = farmId;
-        this.start();
-
-        this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
-                storage, storageClient, farmId);
-        scheduleWatcher();
+                          final MeterRegistry meterRegistry, final CuratorFramework curatorFramework,
+                          final String farmId, final IgnisMQSettings settings) {
+        this(clientId, storage, mapper, meterRegistry, null, curatorFramework, farmId, settings);
     }
 
+    /**
+     * @param storageClient the caller keeps ownership, so {@link #stop()} leaves it open. Null to
+     *                      have the manager build and own one.
+     * @param settings      null for {@link IgnisMQSettings#defaults()}.
+     */
     public IgnisMQManager(final String clientId, final BaseStorage storage, final ObjectMapper mapper,
-                          final MetricRegistry metricRegistry, final StorageClient storageClient,
-                          final CuratorFramework curatorFramework, final String farmId) throws Exception {
+                          final MeterRegistry meterRegistry, final StorageClient storageClient,
+                          final CuratorFramework curatorFramework, final String farmId,
+                          final IgnisMQSettings settings) {
+        final IgnisMQSettings effective = Objects.isNull(settings) ? IgnisMQSettings.defaults() : settings;
         this.clientId = clientId;
-        this.farmId = farmId;
         this.storage = storage;
         this.mapper = mapper;
-        this.metricRegistry = metricRegistry;
-        this.storageClient = storageClient;
-        this.queueService = buildQueueCommands(storage, storageClient);
+        this.farmId = farmId;
+        this.schedulers = new IgnisSchedulers(effective.getWorkerThreads());
+        this.metrics = new IgnisMetrics(
+                Objects.requireNonNull(meterRegistry, "Meter registry is required."),
+                effective.isMetricsEnabled());
+        // Magazine is an implementation detail ignisMQ's callers never configure, so disabling
+        // instrumentation has to silence its meters too. Both registries are therefore the same
+        // one: the caller's when enabled, a sink when not.
+        this.meterRegistry = metrics.getRegistry();
+        this.schedulers.bindTo(metrics);
+
+        this.ownsStorageClient = Objects.isNull(storageClient);
+        this.storageClient = ownsStorageClient ? buildStorageClient() : storageClient;
+        this.queueService = buildQueueCommands(storage, this.storageClient);
+
         this.taskInitializer = new TaskInitializer(curatorFramework, queueService, clientId,
-                storage, storageClient, farmId);
+                storage, this.storageClient, farmId, metrics, schedulers.getControl(),
+                this::lookupMagazines);
+        this.queueStatGuage = new QueueStatGuage(queueService, this::getAllQueues);
+        this.queueDepthMetrics = new QueueDepthMetrics(metrics, queueStatGuage,
+                Constants.QUEUE_DEPTH_REFRESH_IN_MS);
+        this.queueSweeper = new QueueSweeper(queueService, clientId, storage, this.storageClient,
+                farmId, metrics, this::lookupMagazines);
+        this.queueRefresher = new QueueRefresher(queueService, new ManagedQueues());
         scheduleWatcher();
     }
 
     public void initialiseMessageHandlers(final Map<String, Map.Entry<Class, MessageHandler>> messageHandlers) {
-        Preconditions.checkNotNull(messageHandlers, "Message handler map cannot be null");
-        Preconditions.checkArgument(this.messageHandlers.isEmpty(), "Message handler map is already initialised.");
+        Objects.requireNonNull(messageHandlers, "Message handler map cannot be null");
+        if (!this.messageHandlers.isEmpty()) {
+            throw new IllegalArgumentException("Message handler map is already initialised.");
+        }
         this.messageHandlers = messageHandlers;
         refreshQueues();
-        metricRegistry.register("ignis.queue.stats", new QueueStatGuage(3, TimeUnit.MINUTES, queueService, this));
+    }
+
+    /**
+     * Point-in-time statistics for every active queue. Callers are expected to cache this: it
+     * issues metadata reads per queue and is not meant for a hot path.
+     */
+    public List<QueueStat> getQueueStats() {
+        return queueStatGuage.get();
     }
 
     /**
@@ -111,7 +147,6 @@ public final class IgnisMQManager implements Managed {
      * @return IQueue -> Instance of Magazine queue which can be used to publish the message.
      * @throws IgnisMQException with ErrorCode QUEUE_NOT_FOUND if queue doesn't exist in the ignisMQMap.
      */
-    @MonitoredFunction
     public <M> IQueue<M> getQueue(final String name) {
         final IQueue<M> queue = (IQueue<M>) ignisMQMap.get(name);
         if (Objects.isNull(queue)) {
@@ -127,7 +162,6 @@ public final class IgnisMQManager implements Managed {
      *
      * @return ignisMQMap
      */
-    @MonitoredFunction
     public Map<String, IQueue<?>> getAllQueues() {
         return ignisMQMap;
     }
@@ -137,9 +171,26 @@ public final class IgnisMQManager implements Managed {
      *
      * @return ignisMQMap
      */
-    @MonitoredFunction
     public Set<String> getAllQueuesFromDB() {
         return new HashSet<>(queueService.getQueues(true).keySet());
+    }
+
+    /**
+     * Every queue in storage and what was persisted about it, which is the only view that is true
+     * of the cluster rather than of this process. A queue no instance has adopted still appears.
+     *
+     * @param active whether to list the active or the deactivated queues.
+     * @return queue name to its stored definition.
+     */
+    public Map<String, QueueEntity> getStoredQueues(final boolean active) {
+        return queueService.getQueues(active);
+    }
+
+    /**
+     * @return the stored definition of one queue, whether or not it is active or held here.
+     */
+    public Optional<QueueEntity> getStoredQueue(final String queueName) {
+        return queueService.get(queueName);
     }
 
     /**
@@ -150,14 +201,136 @@ public final class IgnisMQManager implements Managed {
      * @throws IgnisMQException with ErrorCode QUEUE_ALREADY_EXISTS if queue already exists in the ignisMQMap.
      * @throws Exception        if magazine creation has failed.
      */
-    @MonitoredFunction
     public void createQueue(final CreateQueueRequest queueRequest) throws Exception {
+        metrics.time(IgnisMetrics.QUEUE_CREATE, Tags.empty(), () -> doCreateQueue(queueRequest));
+    }
+
+    /**
+     * This function is to stop the consumers and shovel tasks and remove queue from active queues.
+     * <p>
+     * Caution: Use this function carefully, once queue is deactivated, there is no option to activate again.
+     * And queue will be completely deactivated once refresh job is completed.
+     *
+     * @param queueName: Name of the queue to be deleted
+     */
+    public void deactivateQueue(final String queueName) {
+        log.info("Deactivating queue '{}'", queueName);
+        if (ignisMQMap.containsKey(queueName)) {
+            final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
+            queue.stopConsumers(Constants.MAX_CONSUMERS_ALLOWED);
+            queue.stopShovelConsumers(Constants.MAX_CONSUMERS_ALLOWED);
+            ignisMQMap.remove(queueName);
+            queueDepthMetrics.deregister(queueName);
+        }
+        queueService.get(queueName).ifPresent(queueEntity -> {
+            if (queueEntity.isActive()) {
+                queueService.updateState(queueName, false);
+            }
+        });
+        log.info("Queue '{}' successfully deactivated", queueName);
+    }
+
+    /**
+     * To create new consumers of a queue.
+     *
+     * @param queueName -> Name of the queue
+     * @param count     -> The number of consumers to be created
+     */
+    public void increaseConsumers(final String queueName, final int count) {
+        final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
+        queue.createConsumers(count);
+        queueService.updateConcurrency(queueName, queue.getNoOfConsumers());
+    }
+
+    /**
+     * To stop consumers of main queue.
+     *
+     * @param queueName -> Name of the queue
+     * @param count     -> The number of consumers to be stopped
+     */
+    public void decreaseConsumers(final String queueName, final int count) {
+        final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
+        queue.stopConsumers(count);
+        queueService.updateConcurrency(queueName, queue.getNoOfConsumers());
+    }
+
+    /**
+     * To shovel the messages from sideline magazine to main magazine every x seconds.
+     * If any queue shoveling config is missed during queue creation then shoveling can be scheduled using this method.
+     *
+     * @param queueName    -> Name of the queue
+     * @param shovelConfig -> Shovel config
+     */
+    public void scheduleShoveling(final String queueName, @Valid final ShovelConfig shovelConfig) {
+        final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
+        queue.scheduleShoveling(shovelConfig.getConcurrency(), shovelConfig.getTimeIntervalInSecs());
+        queueService.updateShovelConfig(queueName, queue.getNoOfShovelConsumers(),
+                shovelConfig.getTimeIntervalInSecs());
+    }
+
+    public void sweepQueue(final String queueName) {
+        final QueueEntity queueEntity = queueService.get(queueName).orElse(null);
+        if (Objects.isNull(queueEntity)) {
+            log.info("Queue {} doesn't exist", queueName);
+            return;
+        }
+        queueSweeper.sweepQueue(queueName, queueEntity);
+    }
+
+    /**
+     * Releases everything this manager owns: every scheduled task - consumers, shovels, the queue
+     * watcher - and, when the manager created the storage client itself, the client's connection
+     * pool. Safe to call more than once. A caller that supplied its own {@link StorageClient} keeps
+     * ownership of it.
+     */
+    public void stop() {
+        schedulers.stop();
+        if (ownsStorageClient && Objects.nonNull(storageClient)) {
+            try {
+                storageClient.stop();
+            } catch (Exception e) {
+                log.error("Error while closing the storage client", e);
+            }
+        }
+    }
+
+    public void refreshQueues() {
+        try {
+            metrics.time(IgnisMetrics.QUEUE_REFRESH, Tags.empty(), this::doRefreshQueues);
+        } catch (Exception e) {
+            // doRefreshQueues does not throw; the checked signature comes from the timing helper,
+            // and refreshQueues has never been a throwing method for its callers.
+            throw IgnisMQException.propagate(e);
+        }
+    }
+
+    /**
+     * A queue is created once, anywhere; this is how every other instance finds out and how a
+     * deactivation elsewhere takes effect here.
+     */
+    private void scheduleWatcher() {
+        schedulers.getControl().scheduleRepeating(this::refreshQueues,
+                Constants.WATCHER_INITIAL_DELAY_IN_MS, Constants.REFRESH_INTERVAL_IN_MS);
+    }
+
+    private MagazineRegistry.QueueMagazines lookupMagazines(final String queueName) {
+        final IQueue<?> queue = ignisMQMap.get(queueName);
+        if (!(queue instanceof MagazineQueue<?> magazineQueue)) {
+            return null;
+        }
+        return new MagazineRegistry.QueueMagazines(magazineQueue.mainMagazine(),
+                magazineQueue.sidelineMagazine());
+    }
+
+    private void doCreateQueue(final CreateQueueRequest queueRequest) throws Exception {
         validateRequest(queueRequest);
+        final long sweepDuration = queueRequest.getSweepDurationInMins() * 60 * 1000L;
+        final long handlerTimeout = queueRequest.getHandlerTimeoutInMins() * 60 * 1000L;
         IQueue<?> queue = createMagazine(
                 queueRequest.getName(), queueRequest.getShards(), queueRequest.getMessageExpiry().toSeconds(),
                 queueRequest.getQueueExpiry().toSeconds() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
                 queueRequest.getConcurrency(), queueRequest.getMessageHandlerType(), queueRequest.getShovelConfig(),
-                queueRequest.getBatchingConfig()
+                queueRequest.getBatchingConfig(), sweepDuration, handlerTimeout
         );
 
         //Storing the queue details
@@ -174,221 +347,35 @@ public final class IgnisMQManager implements Managed {
                                 ? queueRequest.getShovelConfig().getTimeIntervalInSecs() : -1)
                         .messageHandlerType(queueRequest.getMessageHandlerType())
                         .active(true)
-                        .sweepDuration(queueRequest.getSweepDurationInMins() * 60 * 1000L)
+                        .sweepDuration(sweepDuration)
+                        .handlerTimeout(handlerTimeout)
                         .createdAt(System.currentTimeMillis())
                         .batchingConfig(queueRequest.getBatchingConfig())
                         .build(),
                 // Queue needs to be persisted for (queueExpiry + messageExpiry) to avoid magazine identifier clashes.
-                // And (queueExpiry > messageExpiry) ==> (queueExpiry * 2) >= (queueExpiry + messageExpiry). So factor = 2 is chosen
+                // And (queueExpiry > messageExpiry) ==> (queueExpiry * 2) >= (queueExpiry + messageExpiry),
+                // so factor = 2 is chosen
                 queueRequest.getQueueExpiry().toSeconds() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY
         );
         ignisMQMap.put(queueRequest.getName(), queue);
+        queueDepthMetrics.register(queueRequest.getName());
         log.info("Queue '{}' successfully created", queueRequest.getName());
         refreshQueues();
     }
 
-    /**
-     * This function is to stop the consumers and shovel tasks and remove queue from active queues.
-     * <p>
-     * Caution: Use this function carefully, once queue is deactivated, there is no option to activate again.
-     * And queue will be completely deactivated once refresh job is completed.
-     *
-     * @param queueName: Name of the queue to be deleted
-     */
-    @MonitoredFunction
-    public void deactivateQueue(final String queueName) {
-        log.info("Deactivating queue '{}'", queueName);
-        if (ignisMQMap.containsKey(queueName)) {
-            final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
-            queue.stopConsumers(Constants.MAX_CONSUMERS_ALLOWED);
-            queue.stopShovelConsumers(Constants.MAX_CONSUMERS_ALLOWED);
-            ignisMQMap.remove(queueName);
-        }
-        queueService.get(queueName).ifPresent(queueEntity -> {
-            if (queueEntity.isActive()) {
-                queueService.updateState(queueName, false);
-            }
-        });
-        log.info("Queue '{}' successfully deactivated", queueName);
+    private StorageClient buildStorageClient() {
+        return storage.accept(aerospikeStorage ->
+                new AerospikeStoreClient(aerospikeStorage.getConfiguration()));
     }
 
-    /**
-     * To create new consumers of a queue.
-     *
-     * @param queueName -> Name of the queue
-     * @param count     -> The number of consumers to be created
-     */
-    @MonitoredFunction
-    public void increaseConsumers(final String queueName, final int count) {
-        final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
-        queue.createConsumers(count);
-        queueService.updateConcurrency(queueName, queue.getNoOfConsumers());
-    }
-
-    /**
-     * To stop consumers of main queue.
-     *
-     * @param queueName -> Name of the queue
-     * @param count     -> The number of consumers to be stopped
-     */
-    @MonitoredFunction
-    public void decreaseConsumers(final String queueName, final int count) {
-        final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
-        queue.stopConsumers(count);
-        queueService.updateConcurrency(queueName, queue.getNoOfConsumers());
-    }
-
-    /**
-     * To shovel the messages from sideline magazine to main magazine every x seconds.
-     * If any queue shoveling config is missed during queue creation then shoveling can be scheduled using this method.
-     *
-     * @param queueName    -> Name of the queue
-     * @param shovelConfig -> Shovel config
-     */
-    @MonitoredFunction
-    public void scheduleShoveling(final String queueName, @Valid final ShovelConfig shovelConfig) {
-        final MagazineQueue queue = (MagazineQueue) getQueue(queueName);
-        queue.scheduleShoveling(shovelConfig.getConcurrency(), shovelConfig.getTimeIntervalInSecs());
-        queueService.updateShovelConfig(queueName, queue.getNoOfShovelConsumers(), shovelConfig.getTimeIntervalInSecs());
-    }
-
-    public void sweepQueue(final String queueName) {
-        final QueueEntity queueEntity = queueService.get(queueName).orElse(null);
-        if (Objects.isNull(queueEntity)) {
-            log.info("Queue {} doesn't exist", queueName);
-            return;
-        }
-        Utils.sweepQueue(queueService, clientId, storageClient, storage, queueName, queueEntity, farmId);
-    }
-
-    @Override
-    public void start() throws Exception {
-        if (Objects.isNull(storageClient)) {
-            storage.getStorageType().accept(new StorageTypeVisitor<Void>() {
-                @Override
-                public Void visitAerospike() {
-                    AerospikeStorage aerospikeMagazineStorage = (AerospikeStorage) storage;
-                    storageClient = new AerospikeStoreClient(aerospikeMagazineStorage.getConfiguration());
-                    return null;
-                }
-
-                @Override
-                public Void visitHBase() {
-                    throw IgnisMQException.builder()
-                            .errorCode(ErrorCode.NOT_IMPLEMENTED)
-                            .build();
-                }
-            });
-            this.queueService = buildQueueCommands(storage, storageClient);
-        }
-    }
-
-    @Override
-    public void stop() {
-        // Nothing to stop
-    }
-
-    @MonitoredFunction
-    public void refreshQueues() {
+    private void doRefreshQueues() {
         if (messageHandlers.isEmpty()) {
             log.info("No message handlers registered, so queue refreshing is not possible, gracefully ignoring.");
             return;
         }
-
-        final Map<String, QueueEntity> activeQueuesInDB = queueService.getQueues(true);
-        final Map<String, QueueEntity> inactiveQueuesInDB = queueService.getQueues(false);
-
-        final Map<String, QueueEntity> allQueuesInDB = new HashMap<>();
-        allQueuesInDB.putAll(activeQueuesInDB);
-        allQueuesInDB.putAll(inactiveQueuesInDB);
-
-        log.info("Removing expired queues...");
-        allQueuesInDB.entrySet().stream()
-                .filter(entry -> entry.getValue().isActive())
-                .filter(entry -> (entry.getValue().getCreatedAt() + (entry.getValue().getQueueExpiry() * 1000L))
-                        <= System.currentTimeMillis())
-                .forEach(entry -> {
-                    deactivateQueue(entry.getKey());
-                    activeQueuesInDB.remove(entry.getKey());
-                });
-
-        final List<String> cachedActiveQueues = new ArrayList<>(ignisMQMap.keySet());
-
-        log.info("Refreshing... Checking for new queues");
-        activeQueuesInDB.entrySet().stream()
-                .filter(entry -> !cachedActiveQueues.contains(entry.getKey()))
-                .forEach(entry -> {
-                    try {
-                        boolean isNullShovelConfig = entry.getValue().getShovelConcurrency() > 0
-                                && entry.getValue().getShovelTimeIntervalInSecs() > 0;
-                        ShovelConfig shovelConfig = isNullShovelConfig
-                                ? ShovelConfig.builder()
-                                .concurrency(entry.getValue().getShovelConcurrency())
-                                .timeIntervalInSecs(entry.getValue().getShovelTimeIntervalInSecs())
-                                .build()
-                                : null;
-                        IQueue<?> queue = createMagazine(
-                                entry.getKey(), entry.getValue().getShards(), entry.getValue().getMessageExpiry(),
-                                entry.getValue().getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
-                                entry.getValue().getConcurrency(), entry.getValue().getMessageHandlerType(),
-                                shovelConfig, entry.getValue().getBatchingConfig());
-                        ignisMQMap.put(entry.getKey(), queue);
-                        log.info("Queue '{}' successfully created", entry.getKey());
-                    } catch (Exception e) {
-                        log.error("Error creating queues in watcher", e);
-                    }
-                });
-
-        log.info("Refreshing... Deactivating inactive queues");
-        inactiveQueuesInDB.keySet().stream()
-                .filter(cachedActiveQueues::contains)
-                .forEach(this::deactivateQueue);
-
-        log.info("Refreshing... Checking if any queue concurrency or shovel config has updated");
-        cachedActiveQueues.stream()
-                .filter(ignisMQMap::containsKey)
-                .filter(activeQueuesInDB::containsKey)
-                .forEach(queueName -> {
-                    MagazineQueue queue = (MagazineQueue) ignisMQMap.get(queueName);
-                    QueueEntity queueEntity = activeQueuesInDB.get(queueName);
-
-                    if (queue.getNoOfConsumers() < queueEntity.getConcurrency()) {
-                        queue.createConsumers(queueEntity.getConcurrency() - queue.getNoOfConsumers());
-                    } else if (queue.getNoOfConsumers() > queueEntity.getConcurrency()) {
-                        queue.stopConsumers(queue.getNoOfConsumers() - queueEntity.getConcurrency());
-                    }
-
-                    if (Objects.nonNull(queue.getShovelConfig())) {
-                        if (queue.getShovelConfig().getConcurrency() != queueEntity.getShovelConcurrency()
-                                || queue.getShovelConfig().getTimeIntervalInSecs() != queueEntity.getShovelTimeIntervalInSecs()) {
-                            queue.stopShovelConsumers(Constants.MAX_CONSUMERS_ALLOWED);
-                            queue.scheduleShoveling(queueEntity.getShovelConcurrency(), queueEntity.getShovelTimeIntervalInSecs());
-                        }
-                    } else if (queueEntity.getShovelConcurrency() > 0 && queueEntity.getShovelTimeIntervalInSecs() > 0) {
-                        queue.stopShovelConsumers(Constants.MAX_CONSUMERS_ALLOWED);
-                        queue.scheduleShoveling(queueEntity.getShovelConcurrency(), queueEntity.getShovelTimeIntervalInSecs());
-                    }
-                });
+        queueRefresher.refresh();
     }
 
-    /*
-        Watcher to activate and deactivate queues.
-        Queue can be created only once, and this watcher will then have a role to create the active queue and deactivate inactive ones.
-     */
-    private void scheduleWatcher() {
-        new Timer().schedule(new TimerTask() {
-            @Override
-            public void run() {
-                try {
-                    refreshQueues();
-                } catch (Exception e) {
-                    log.error("Fatal!!! Error refreshing queues...", e);
-                }
-            }
-        }, Constants.WATCHER_INITIAL_DELAY_IN_MS, Constants.REFRESH_INTERVAL_IN_MS);
-    }
-
-    @MonitoredFunction
     private <M> IQueue<M> createMagazine(final String queueName,
                                          final int queueShards,
                                          final int recordTtlInSeconds,
@@ -396,7 +383,9 @@ public final class IgnisMQManager implements Managed {
                                          final int concurrency,
                                          final String messageHandlerType,
                                          final ShovelConfig shovelConfig,
-                                         final BatchingConfig batchingConfig) throws Exception {
+                                         final BatchingConfig batchingConfig,
+                                         final long sweepDurationInMillis,
+                                         final long handlerTimeoutInMillis) {
         if (!messageHandlers.containsKey(messageHandlerType)) {
             throw IgnisMQException.builder()
                     .errorCode(ErrorCode.INVALID_MESSAGE_HANDLER)
@@ -404,43 +393,24 @@ public final class IgnisMQManager implements Managed {
                     .build();
         }
 
-        final com.codahale.metrics.Timer publishMetricTimer =
-                metricRegistry.timer(String.format(METRIC_TIMER_FORMAT, queueName, "publish"));
-        final com.codahale.metrics.Timer consumeMetricTimer =
-                metricRegistry.timer(String.format(METRIC_TIMER_FORMAT, queueName, "consume"));
         return new MagazineQueue<M>(
                 clientId, farmId, queueName, queueShards, recordTtlInSeconds, metaDataTtlInSeconds,
                 storageClient, storage, concurrency, messageHandlers.get(messageHandlerType).getValue(),
-                shovelConfig, mapper, messageHandlers.get(messageHandlerType).getKey(), queueService,
-                batchingConfig, publishMetricTimer, consumeMetricTimer
+                shovelConfig, mapper, messageHandlers.get(messageHandlerType).getKey(),
+                batchingConfig, sweepDurationInMillis, handlerTimeoutInMillis, schedulers.getWorker(),
+                schedulers.getHandler(), meterRegistry, metrics
         );
     }
 
-    @MonitoredFunction
-    private QueueService buildQueueCommands(final BaseStorage storage, final StorageClient storageClient) throws Exception {
-        return storage.getStorageType().accept(new StorageTypeVisitor<>() {
-            @Override
-            public QueueService visitAerospike() {
-                AerospikeStorage aerospikeStorage = (AerospikeStorage) storage;
-                return new AerospikeQueueService(
-                        (IAerospikeClient) storageClient.getClient(),
-                        aerospikeStorage.getConfiguration(),
-                        aerospikeStorage.getNamespace(),
-                        clientId,
-                        farmId
-                );
-            }
-
-            @Override
-            public QueueService visitHBase() {
-                throw IgnisMQException.builder()
-                        .errorCode(ErrorCode.NOT_IMPLEMENTED)
-                        .build();
-            }
-        });
+    private QueueService buildQueueCommands(final BaseStorage storage, final StorageClient storageClient) {
+        return storage.accept(aerospikeStorage -> new AerospikeQueueService(
+                (IAerospikeClient) storageClient.getClient(),
+                aerospikeStorage.getConfiguration(),
+                aerospikeStorage.getNamespace(),
+                clientId,
+                farmId));
     }
 
-    @MonitoredFunction
     private void validateRequest(final CreateQueueRequest queueRequest) {
         if (!queueRequest.isValid()) {
             throw IgnisMQException.builder()
@@ -453,6 +423,54 @@ public final class IgnisMQManager implements Managed {
             throw IgnisMQException.builder()
                     .errorCode(ErrorCode.QUEUE_ALREADY_EXISTS)
                     .build();
+        }
+    }
+
+    /**
+     * The manager owns the live queue set, so a refresh pass goes through this rather than the map.
+     */
+    private final class ManagedQueues implements QueueRefresher.QueueLifecycle {
+
+        @Override
+        public Set<String> liveQueueNames() {
+            return Set.copyOf(ignisMQMap.keySet());
+        }
+
+        @Override
+        public RefreshableQueue queue(final String queueName) {
+            final IQueue<?> queue = ignisMQMap.get(queueName);
+            return queue instanceof RefreshableQueue refreshable ? refreshable : null;
+        }
+
+        @Override
+        public void adopt(final String queueName, final QueueEntity entity) {
+            ignisMQMap.put(queueName, fromEntity(queueName, entity));
+            queueDepthMetrics.register(queueName);
+            log.info("Queue '{}' successfully created", queueName);
+        }
+
+        @Override
+        public void deactivate(final String queueName) {
+            deactivateQueue(queueName);
+        }
+
+        private IQueue<?> fromEntity(final String queueName, final QueueEntity entity) {
+            final ShovelConfig shovelConfig = entity.getShovelConcurrency() > 0
+                    && entity.getShovelTimeIntervalInSecs() > 0
+                    ? ShovelConfig.builder()
+                    .concurrency(entity.getShovelConcurrency())
+                    .timeIntervalInSecs(entity.getShovelTimeIntervalInSecs())
+                    .build()
+                    : null;
+            return createMagazine(queueName, entity.getShards(), entity.getMessageExpiry(),
+                    entity.getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
+                    entity.getConcurrency(), entity.getMessageHandlerType(), shovelConfig,
+                    entity.getBatchingConfig(), entity.getSweepDuration(),
+                    // Queues created before the timeout was configurable have no such bin, and read
+                    // back as 0.
+                    entity.getHandlerTimeout() > 0
+                            ? entity.getHandlerTimeout()
+                            : Constants.DEFAULT_HANDLER_TIMEOUT_IN_MINS * 60 * 1000L);
         }
     }
 }

@@ -30,45 +30,49 @@ public class MyAppConfiguration extends Configuration {
 
 ### Bundle Implementation
 
-Subclass `IgnisMQBundle` and implement the four abstract methods:
+Subclass `IgnisMQBundle` and implement its single abstract method, which returns everything the bundle needs:
 
 ```java
 public class MyIgnisMQBundle extends IgnisMQBundle<MyAppConfiguration> {
 
+    @Getter
     private CuratorFramework curatorFramework;
 
     @Override
-    protected BaseStorage getStorage(MyAppConfiguration config) {
-        return new AerospikeStorage(config.getAerospikeConfig(), "my-namespace");
-    }
+    protected IgnisMQContext context(MyAppConfiguration config) {
+        // Built here, not in Application.run: a ConfiguredBundle's run() executes before the
+        // application's, so anything handed in afterwards is still null at this point.
+        this.curatorFramework = CuratorFrameworkFactory.newClient(
+                config.getZookeeperConnectionString(), new ExponentialBackoffRetry(1000, 3));
+        this.curatorFramework.start();
 
-    @Override
-    protected String getClientId(MyAppConfiguration config) {
-        return config.getClientId();
-    }
-
-    @Override
-    protected String getFarmId(MyAppConfiguration config) {
-        return config.getFarmId();
-    }
-
-    @Override
-    protected CuratorFramework getCuratorFramework() {
-        return curatorFramework;
-    }
-
-    public void setCuratorFramework(CuratorFramework curatorFramework) {
-        this.curatorFramework = curatorFramework;
+        return IgnisMQContext.builder()
+                .clientId(config.getClientId())
+                .farmId(config.getFarmId())
+                .storage(new AerospikeStorage(config.getAerospikeConfig(), "my-namespace"))
+                .curatorFramework(curatorFramework)
+                .build();
     }
 }
 ```
 
-| Method | Returns | Purpose |
-|--------|---------|---------|
-| `getStorage(T config)` | `BaseStorage` | Creates the Aerospike storage backend |
-| `getClientId(T config)` | `String` | Unique identifier for this application/service |
-| `getFarmId(T config)` | `String` | Identifier for the deployment region/datacenter |
-| `getCuratorFramework()` | `CuratorFramework` | ZooKeeper client for leader election |
+!!! danger "Build the CuratorFramework inside `context(config)`"
+    Dropwizard runs every `ConfiguredBundle.run()` **before** `Application.run()`. `context(config)` is
+    called from the bundle's `run()`, and `curatorFramework` is `@NonNull`, so a client injected from
+    `Application.run()` arrives too late and startup fails with a `NullPointerException`.
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `storage` | `BaseStorage` | The Aerospike storage backend. Required |
+| `clientId` | `String` | Unique identifier for this application/service. Required |
+| `farmId` | `String` | Identifier for the deployment region/datacenter. Required |
+| `curatorFramework` | `CuratorFramework` | ZooKeeper client for leader election. Required |
+| `settings` | `IgnisMQSettings` | Worker-pool size and the metrics switch. Optional; defaults to `IgnisMQSettings.defaults()` |
+
+!!! note "One method, not five"
+    The four required fields are `@NonNull` on the builder, so omitting one throws at startup rather
+    than failing to compile. That is the trade a single extension point makes: a new input becomes a
+    new field here instead of a new abstract method every existing subclass has to implement.
 
 ### Application Class
 
@@ -84,15 +88,7 @@ public class MyApplication extends Application<MyAppConfiguration> {
 
     @Override
     public void run(MyAppConfiguration config, Environment environment) throws Exception {
-        // Set up CuratorFramework before the bundle runs
-        CuratorFramework curator = CuratorFrameworkFactory.newClient(
-                config.getZookeeperConnectionString(),
-                new ExponentialBackoffRetry(1000, 3)
-        );
-        curator.start();
-        ignisMQBundle.setCuratorFramework(curator);
-
-        // Get the manager created by the bundle
+        // The bundle has already run by this point, so the manager exists and ZooKeeper is connected.
         IgnisMQManager manager = ignisMQBundle.getIgnisMQManager();
 
         // Register all message handlers BEFORE creating queues
@@ -123,7 +119,7 @@ public class MyApplication extends Application<MyAppConfiguration> {
 
 If you're not using Dropwizard, create an `IgnisMQManager` directly.
 
-=== "6-Parameter Constructor"
+=== "Manager-owned StorageClient"
 
     The manager builds the `StorageClient` internally from the provided `BaseStorage`.
 
@@ -157,9 +153,10 @@ If you're not using Dropwizard, create an `IgnisMQManager` directly.
             "my-service",           // clientId
             storage,                // BaseStorage
             new ObjectMapper(),     // Jackson ObjectMapper
-            new MetricRegistry(),   // Dropwizard MetricRegistry
+            new SimpleMeterRegistry(), // Micrometer MeterRegistry
             curator,                // CuratorFramework
-            "datacenter-1"          // farmId
+            "datacenter-1",         // farmId
+            IgnisMQSettings.defaults()  // or null for the same
     );
 
     // 4. Register handlers and create queues
@@ -174,7 +171,7 @@ If you're not using Dropwizard, create an `IgnisMQManager` directly.
             .build());
     ```
 
-=== "7-Parameter Constructor (Pre-built StorageClient)"
+=== "With a pre-built StorageClient"
 
     Use this when you already have an Aerospike client and want to share it.
 
@@ -186,15 +183,25 @@ If you're not using Dropwizard, create an `IgnisMQManager` directly.
             "my-service",           // clientId
             storage,                // BaseStorage
             new ObjectMapper(),     // Jackson ObjectMapper
-            new MetricRegistry(),   // Dropwizard MetricRegistry
-            storageClient,          // Pre-built StorageClient
+            new SimpleMeterRegistry(), // Micrometer MeterRegistry
+            storageClient,          // pre-built; stop() will not close it
             curator,                // CuratorFramework
-            "datacenter-1"          // farmId
+            "datacenter-1",         // farmId
+            IgnisMQSettings.defaults()  // or null for the same
     );
     ```
 
 !!! note "Constructor side effects"
-    Both constructors immediately start background tasks: the watcher thread (refreshes queues every 5 minutes) and the `TaskInitializer` (leader election + sweeper). Make sure ZooKeeper and Aerospike are reachable before constructing the manager.
+    The constructor builds the scheduler pools, the storage client (unless you supplied one) and the
+    queue watcher, which refreshes queues every 5 minutes. Aerospike must be reachable.
+
+    It does **not** start leader election or the sweeper: `getTaskInitializer().start()` does, and the
+    Dropwizard bundle calls it for you on application start.
+
+    Shutdown mirrors that, and **`stop()` alone is not enough**: it stops the scheduler pools and the
+    storage client, but leader election and the sweeper belong to the `TaskInitializer`. Call
+    `getTaskInitializer().stop()` first, then `stop()` - which is exactly what the bundle's `Managed`
+    does. A `StorageClient` you supplied yourself is left open, since you own it.
 
 ---
 
@@ -244,6 +251,10 @@ Any Jackson-serializable Java object works as a message:
     queue.publish("{\"key\": \"raw-json-string\"}");
     ```
 
+    The handler receives each of these exactly as published — quotes, newlines and all. Before 2.0 a
+    `String` queue delivered the JSON-encoded form instead; see
+    [Upgrading](upgrading.md#string-payloads-arrive-as-published-the-third-silent-one).
+
 === "Map"
 
     ```java
@@ -257,6 +268,42 @@ Any Jackson-serializable Java object works as a message:
 
 !!! tip "Publish return value"
     `publish()` returns `true` if the message was successfully written to Magazine (Aerospike). It throws `JsonProcessingException` if serialization fails.
+
+---
+
+### Publishing now, consuming later
+
+A queue created with `concurrency: 0` is **publish-only**: it accepts messages and starts nothing.
+Consumption is turned on afterwards, without recreating the queue.
+
+```java
+manager.createQueue(CreateQueueRequest.builder()
+        .name("order-events")
+        .concurrency(0)                     // accepts publishes, consumes nothing
+        .messageHandlerType("order-handler")
+        .messageExpiry(new TimeToLive(TimeUnit.DAY, 2))
+        .queueExpiry(new TimeToLive(TimeUnit.DAY, 7))
+        .build());
+
+manager.<OrderEvent>getQueue("order-events").publish(event);   // accumulates
+
+manager.increaseConsumers("order-events", 4);   // consumption starts, here and everywhere
+```
+
+`increaseConsumers` **persists the new count**, and every other instance reconciles to it on its next
+refresh pass - so this starts consumption across the deployment, not only in the process that made the
+call. `decreaseConsumers(name, n)` is the reverse, and taking it back to zero pauses consumption
+while publishes continue.
+
+!!! warning "A paused queue still expires"
+    Nothing about `concurrency: 0` suspends TTLs. Messages are deleted `messageExpiry` after they were
+    published whether or not anything ever consumed them, and the sweeper still runs. Pausing for
+    longer than `messageExpiry` loses messages.
+
+!!! note "This is the only trigger that exists today"
+    Starting consumption on a schedule, on a queue-depth threshold, or on an external event is not
+    built in - `increaseConsumers` is the hook you would drive from your own scheduler or alert. See
+    the roadmap in the project plan for where that may go.
 
 ---
 
@@ -274,9 +321,9 @@ public interface MessageHandler<M> {
 
 | Method | Called When | Return `true` | Return `false` |
 |--------|-----------|---------------|----------------|
-| `handle(M)` | Single message consumed | Message acknowledged and deleted | Message sidelined for retry |
-| `handle(List<M>)` | Batch mode enabled | All messages in batch acknowledged | All messages in batch sidelined |
-| `getIgnorableExceptions()` | Exception thrown during handling | — | Exceptions in this set are swallowed (message skipped, not sidelined) |
+| `handle(M)` | Each message, when the queue has **no** `batchingConfig` | Message acknowledged and deleted | Message sidelined for retry |
+| `handle(List<M>)` | Each flushed batch, when the queue **has** a `batchingConfig` | All messages in the batch acknowledged and deleted | All messages in the batch sidelined for retry |
+| `getIgnorableExceptions()` | Exception thrown during handling | — | Exceptions in this set are swallowed: the message is **deleted**, not sidelined |
 
 ### Simple Handler
 
@@ -343,7 +390,7 @@ public class PaymentHandler implements MessageHandler<PaymentEvent> {
 
 ### Handler with Ignorable Exceptions
 
-Exceptions in the ignorable set are caught and swallowed — the message is **skipped** without being sidelined.
+Exceptions in the ignorable set are caught and swallowed — the message is **deleted** without being sidelined, and is never redelivered.
 
 ```java
 public class EventSyncHandler implements MessageHandler<SyncEvent> {
@@ -352,7 +399,7 @@ public class EventSyncHandler implements MessageHandler<SyncEvent> {
     public boolean handle(SyncEvent event) throws Exception {
         if (eventStore.exists(event.getEventId())) {
             throw new DuplicateEventException(event.getEventId());
-            // This exception is ignorable — message is simply skipped
+            // This exception is ignorable - the message is deleted, not sidelined
         }
         eventStore.save(event);
         return true;
@@ -379,7 +426,7 @@ public class EventSyncHandler implements MessageHandler<SyncEvent> {
 !!! info "Exception handling flow"
     When an exception is thrown during `handle()`:
 
-    1. If the exception class is in `getIgnorableExceptions()` → message is **skipped** (not sidelined)
+    1. If the exception class is in `getIgnorableExceptions()` → message is **deleted** (not sidelined, and gone for good)
     2. Otherwise → message is **sidelined** to the sideline Magazine for later retry
 
 ---
@@ -462,6 +509,13 @@ public class AnalyticsHandler implements MessageHandler<AnalyticsEvent> {
 !!! tip "When to use batching"
     Batching is most beneficial when the per-message overhead is high (e.g., database round-trips, HTTP calls). For simple in-memory processing, single-message consumption is typically sufficient.
 
+    **Batching also reduces IgnisMQ's own storage cost**, independently of what your handler does.
+    An accepted batch is deleted in **one** round trip rather than one per message, so the Aerospike
+    work per message drops from four calls to `3 + 1/maxBatchSize`. Measured on the
+    [benchmark](benchmark.md) at `maxBatchSize=10`, that was **+22% to +49% drain throughput** and
+    22% fewer Aerospike calls. So a cheap handler can still be worth batching — though a batch is
+    also all-or-nothing on failure, which is the trade to weigh against it.
+
 ---
 
 ## 6. Shoveling Configuration
@@ -476,7 +530,7 @@ manager.createQueue(CreateQueueRequest.builder()
         .concurrency(8)
         .messageHandlerType("payment-handler")
         .shovelConfig(ShovelConfig.builder()
-                .concurrency(4)         // 4 parallel shovel threads
+                .concurrency(4)         // 4 parallel shovel tasks
                 .timeIntervalInSecs(600) // Run every 10 minutes
                 .build())
         .build());
@@ -484,7 +538,7 @@ manager.createQueue(CreateQueueRequest.builder()
 
 | Parameter | Range | Default | Description |
 |-----------|-------|---------|-------------|
-| `concurrency` | 1 – 50 | 4 | Number of parallel shovel threads |
+| `concurrency` | 1 – 50 | 4 | Number of parallel shovel tasks |
 | `timeIntervalInSecs` | 0 – 86,400 (1 day) | 600 (10 min) | Interval between shovel runs |
 
 ### Schedule Shoveling Later
@@ -504,13 +558,13 @@ Trigger an immediate, one-time shovel that stops when the sideline is empty:
 
 ```java
 IQueue<?> queue = manager.getQueue("payment-events");
-queue.shovel(4); // 4 concurrent threads, runs once
+queue.shovel(4); // 4 concurrent one-shot tasks on the shared worker pool
 ```
 
 !!! warning "Shovel behavior"
     - **Scheduled shoveling** runs repeatedly at the configured interval
     - **Manual shovel** (`queue.shovel(concurrency)`) runs once and stops when sideline is drained
-    - Shovel threads count toward the max consumer limit (100 per queue)
+    - Shovels are capped separately from consumers, by the same check — up to 100 of each
 
 ---
 
@@ -537,18 +591,18 @@ log.info("Total queues in cluster: {}", allQueueNames.size());
 
 ### Scaling Consumers
 
-Adjust the number of consumer threads for a queue at runtime:
+Adjust the number of consumer tasks for a queue at runtime:
 
 ```java
-// Scale up: add 4 more consumer threads
+// Scale up: add 4 more consumer tasks
 manager.increaseConsumers("order-events", 4);
 
-// Scale down: stop 2 consumer threads
+// Scale down: stop 2 consumer tasks
 manager.decreaseConsumers("order-events", 2);
 ```
 
 !!! note "Consumer limits"
-    The maximum total consumers per queue is **100** (`MAX_CONSUMERS_ALLOWED`). Attempting to exceed this throws `IgnisMQException` with error code `MAX_ALLOWED_CONSUMERS_EXCEEDED`.
+    The maximum is **100 consumers per queue** (`MAX_CONSUMERS_ALLOWED`). Exceeding it throws `IgnisMQException` with error code `MAX_ALLOWED_CONSUMERS_EXCEEDED`.
 
 ### Deactivating a Queue
 
@@ -562,7 +616,7 @@ manager.deactivateQueue("order-events");
 
 ### Manual Sweep
 
-Trigger the sweep process for a specific queue (normally runs automatically via leader election):
+Trigger the sweep process for a specific queue. Normally one instance sweeps automatically - the leader assigns the sweep partition to a member, and the assigned instance runs it:
 
 ```java
 manager.sweepQueue("order-events");
@@ -599,19 +653,31 @@ log.info("Shovelled:  {}", meta.getShovelled());
 
 ### Automatic Metrics
 
-IgnisMQ automatically registers metrics with the Dropwizard `MetricRegistry`:
+Core records metrics through the supplied Micrometer `MeterRegistry`. The Dropwizard bundle bridges
+those meters into `Environment.metrics()` and registers the cached queue-stat gauge:
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `commands.{queueName}_publish.all` | Timer | Latency of publish operations |
-| `commands.{queueName}_consume.all` | Timer | Latency of consume operations |
-| `ignis.queue.stats` | Gauge | `QueueStatGuage` — reports queue statistics every 3 minutes |
+| `ignismq.publish` | Timer | Publish latency, tagged `queue` and `outcome` |
+| `ignismq.consume` | Timer | Batch processing after the messages were claimed, tagged `queue` |
+| `ignismq.handler.duration` | Timer | The handler call alone, tagged `queue` and `outcome` |
+| `ignismq.queue.depth` | Gauge | Backlog per queue |
+| `ignis.queue.stats` | Gauge | Bundle-only cached queue statistics, refreshed every 3 minutes |
+
+The full set, with every tag and the scope of each meter, is in **[Metrics](api/metrics.md)**.
 
 ```java
-// Access metrics programmatically
-Timer publishTimer = metricRegistry.timer("commands.order-events_publish.all");
-log.info("Publish p99: {} ms", publishTimer.getSnapshot().get99thPercentile() / 1_000_000);
+// Access core metrics programmatically
+Timer publishTimer = meterRegistry.find(IgnisMetrics.PUBLISH)
+        .tag("queue", "order-events")
+        .tag("outcome", "success")
+        .timer();
+log.info("Publish mean: {} ms", publishTimer.mean(TimeUnit.MILLISECONDS));
 ```
+
+!!! warning "Renamed in 2.0"
+    These replace `commands.{queueName}_publish.all` and `commands.{queueName}_consume.all`. The old
+    names are not aliased — see the [upgrade notes](upgrading.md).
 
 ---
 

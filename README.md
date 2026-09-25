@@ -15,17 +15,18 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Maven Central](https://img.shields.io/maven-central/v/com.phonepe/ignisMQ)](https://central.sonatype.com/artifact/com.phonepe/ignisMQ)
 
-A distributed, persistent message queue built on top of [Magazine](https://github.com/PhonePe/Magazine) with Aerospike as the storage backend. IgnisMQ provides reliable message delivery with consumer groups, leader election, dead-letter queues, and automatic shoveling.
+A distributed, persistent message queue built on top of [Magazine](https://github.com/PhonePe/Magazine) with Aerospike as the storage backend. IgnisMQ provides at-least-once message delivery with a sideline queue for failures, automatic shoveling, and ZooKeeper-based coordination so exactly one instance sweeps.
 
 ## Features
 
 - **Persistent queues** backed by Aerospike via Magazine
-- **Consumer groups** with ZooKeeper-based leader election
-- **Dead-letter queue (DLQ)** support with configurable retry policies
+- **Single-sweeper coordination** via ZooKeeper-based leader election and partition assignment
+- **Sideline queue** for messages a handler could not process, re-driven by a configurable shovel
 - **Shoveling** — automatic transfer of messages between queues
 - **Sweeping** — periodic cleanup and reprocessing of stale messages
-- **Dropwizard integration** via `ignismq-dw-bundle`
-- **Function metrics** with AspectJ-based instrumentation
+- **Micrometer instrumentation** in a framework-agnostic core
+- **Dropwizard integration** via `ignismq-dw-bundle`, which bridges those meters into the
+  application's `MetricRegistry`
 
 ## Getting Started
 
@@ -57,45 +58,112 @@ A distributed, persistent message queue built on top of [Magazine](https://githu
 
 ### Quick Start
 
+#### 1. Implement a handler
+
 ```java
-// Create queue configuration
-IgnisMQConfig config = IgnisMQConfig.builder()
-        .queueConfigs(List.of(
-            QueueConfig.builder()
-                .queueName("my-queue")
-                .namespace("test")
-                .build()
-        ))
-        .build();
+public class OrderEventHandler implements MessageHandler<OrderEvent> {
 
-// Initialize and start the queue manager
-IgnisMQManager manager = new IgnisMQManager(config, aerospikeClient, curatorFramework, metricRegistry);
-manager.start();
+    @Override
+    public boolean handle(final OrderEvent message) {
+        // true  -> acknowledged and deleted
+        // false -> moved to the sideline queue
+        return process(message);
+    }
 
-// Enqueue a message
-manager.enqueue("my-queue", message);
+    @Override
+    public boolean handle(final List<OrderEvent> messages) {
+        messages.forEach(this::handle);
+        return true;
+    }
 
-// Register a consumer
-manager.registerConsumer("my-queue", message -> {
-    // Process message
-    return true;
-});
+    @Override
+    public Set<Class<?>> getIgnorableExceptions() {
+        // Thrown by the handler, these delete the message instead of sidelining it.
+        return Set.of();
+    }
+}
 ```
+
+#### 2. Build the manager
+
+```java
+final AerospikeStorage storage = new AerospikeStorage(aerospikeConfiguration, "my-namespace");
+
+final IgnisMQManager manager = new IgnisMQManager(
+        "my-service",               // clientId: this application
+        storage,
+        new ObjectMapper(),
+        new SimpleMeterRegistry(),  // any Micrometer MeterRegistry
+        curatorFramework,           // ZooKeeper client, for leader election
+        "datacenter-1",             // farmId: this deployment
+        IgnisMQSettings.defaults());
+```
+
+#### 3. Register handlers, then create the queue
+
+Handlers must be registered first: `createQueue` resolves `messageHandlerType` against this map and
+fails if it is missing.
+
+```java
+manager.initialiseMessageHandlers(Map.of(
+        "order-handler", Map.entry(OrderEvent.class, new OrderEventHandler())));
+
+manager.createQueue(CreateQueueRequest.builder()
+        .name("order-events")
+        .concurrency(4)                       // consumers for this queue
+        .messageHandlerType("order-handler")  // must match the key above
+        .build());
+```
+
+#### 4. Publish
+
+```java
+final IQueue<OrderEvent> queue = manager.getQueue("order-events");
+queue.publish(new OrderEvent("ORD-001", 149.99, "CREATED"));
+```
+
+There is no consume call. Consumers are scheduled when the queue is created and poll on a fixed
+delay; a handler returning `false`, throwing, or exceeding its timeout sends the message to the
+sideline queue - except for exceptions listed in `getIgnorableExceptions()`, which delete the
+message instead.
+
+Shut down with `manager.getTaskInitializer().stop()` followed by `manager.stop()`. The first releases
+leader election and the sweeper; the second stops the schedulers and the storage client. `stop()` alone
+leaves the leader elector's thread and its ZooKeeper selector running.
 
 ### Dropwizard Bundle
 
+The bundle builds the manager, bridges ignisMQ's and Magazine's Micrometer meters into Dropwizard's
+`MetricRegistry`, registers a cached `ignis.queue.stats` gauge, and ties leader election and shutdown
+to the application lifecycle. You supply four things:
+
 ```java
 public class MyApplication extends Application<MyConfiguration> {
+
     private final IgnisMQBundle<MyConfiguration> ignisMQBundle = new IgnisMQBundle<>() {
+
         @Override
-        protected IgnisMQConfig getIgnisMQConfig(MyConfiguration config) {
-            return config.getIgnisMQConfig();
+        protected IgnisMQContext context(final MyConfiguration config) {
+            return IgnisMQContext.builder()
+                    .clientId(config.getClientId())
+                    .farmId(config.getFarmId())
+                    .storage(new AerospikeStorage(config.getAerospike(), config.getNamespace()))
+                    .curatorFramework(curatorFramework)
+                    // Optional. Defaults to IgnisMQSettings.defaults().
+                    .settings(IgnisMQSettings.builder().workerThreads(128).build())
+                    .build();
         }
     };
 
     @Override
-    public void initialize(Bootstrap<MyConfiguration> bootstrap) {
+    public void initialize(final Bootstrap<MyConfiguration> bootstrap) {
         bootstrap.addBundle(ignisMQBundle);
+    }
+
+    @Override
+    public void run(final MyConfiguration configuration, final Environment environment) {
+        ignisMQBundle.getIgnisMQManager().initialiseMessageHandlers(Map.of(
+                "order-handler", Map.entry(OrderEvent.class, new OrderEventHandler())));
     }
 }
 ```
@@ -110,6 +178,10 @@ public class MyApplication extends Application<MyConfiguration> {
 ## Documentation
 
 Full documentation is available at [https://phonepe.github.io/ignisMQ/](https://phonepe.github.io/ignisMQ/).
+
+Worth reading before you adopt it: the [Roadmap](docs/docs/roadmap.md) states plainly what IgnisMQ
+does **not** do — no fan-out to independent consumers, no retry with backoff, no delayed delivery,
+at-least-once rather than exactly-once — and why.
 
 ## Building
 

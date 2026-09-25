@@ -16,14 +16,14 @@
 
 package com.phonepe.ignis.common;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class QueueMetaDataTest {
+class QueueMetaDataTest {
 
     @Test
-    public void testBuilder() {
+    void testBuilder() {
         QueueMetaData metaData = QueueMetaData.builder()
                 .published(100)
                 .consumed(50)
@@ -38,7 +38,7 @@ public class QueueMetaDataTest {
     }
 
     @Test
-    public void testDefaultValues() {
+    void testDefaultValues() {
         QueueMetaData metaData = QueueMetaData.builder().build();
         assertEquals(0, metaData.getPublished());
         assertEquals(0, metaData.getConsumed());

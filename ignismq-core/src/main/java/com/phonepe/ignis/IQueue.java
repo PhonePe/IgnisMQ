@@ -18,6 +18,9 @@ package com.phonepe.ignis;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.phonepe.ignis.common.QueueMetaData;
+import com.phonepe.ignis.common.ShardDepth;
+
+import java.util.List;
 
 /**
  * @author shantanu.tiwari
@@ -41,6 +44,17 @@ public sealed interface IQueue<M> permits MagazineQueue {
      * @return QueueMetaData
      */
     QueueMetaData getMetaData();
+
+    /**
+     * The same published and consumed counts as {@link #getMetaData()}, split by shard of the main
+     * magazine.
+     * <p>
+     * Publishing picks a shard at random, so an even spread is the expected shape; a shard sitting
+     * far from the others is one whose consumers are not keeping up with it.
+     *
+     * @return one entry per shard, ordered by shard index.
+     */
+    List<ShardDepth> getShardDepths();
 
     /**
      * To shovel the messages from sideline magazine to main magazine explicitly without any delay.

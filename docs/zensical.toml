@@ -9,15 +9,23 @@ nav = [
   {"Getting Started" = "getting-started.md"},
   {"Core Concepts" = "core-concepts.md"},
   {"Usage Guide" = "usage.md"},
+  {"Upgrading to 2.0" = "upgrading.md"},
   {"Architecture" = "architecture.md"},
   {"API" = [
     {"API Reference" = "api/api-reference.md"},
     {"Configuration" = "api/configuration.md"},
+    {"Metrics" = "api/metrics.md"},
     {"Error Codes" = "api/error-codes.md"}
+  ]},
+  {"Operations" = [
+    {"Monitoring Runbook" = "operations/monitoring.md"},
+    {"Console" = "operations/console.md"}
   ]},
   {"Storage Backends" = [
     {"Aerospike" = "backends/aerospike.md"}
   ]},
+  {"Benchmark" = "benchmark.md"},
+  {"Roadmap" = "roadmap.md"},
   {"References" = "references.md"}
 ]
 

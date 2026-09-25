@@ -5,7 +5,7 @@
 
     <groupId>com.phonepe</groupId>
     <artifactId>ignisMQ</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>2.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>ignisMQ</name>
@@ -86,32 +86,40 @@
         <maven.surefire.plugin.version>3.0.0-M8</maven.surefire.plugin.version>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
         <maven.gpg.plugin.version>1.6</maven.gpg.plugin.version>
-        <maven.sonar.plugin.version>3.9.1.2184</maven.sonar.plugin.version>
+        <maven.sonar.plugin.version>5.7.0.6970</maven.sonar.plugin.version>
+        <maven.enforcer.plugin.version>3.5.0</maven.enforcer.plugin.version>
         <sonatype.central.publishing.maven.plugin.version>0.5.0</sonatype.central.publishing.maven.plugin.version>
-        <jacoco.maven.plugin.version>0.8.11</jacoco.maven.plugin.version>
+        <jacoco.maven.plugin.version>0.8.13</jacoco.maven.plugin.version>
         <lombok.maven.version>1.18.20.0</lombok.maven.version>
         <maven.javadoc.skip>false</maven.javadoc.skip>
+        <!-- JaCoCo's prepare-agent overwrites this at build time. Declared empty so that surefire's
+             @{argLine} still resolves when coverage is skipped. -->
+        <argLine/>
         <maven.deploy.skip>false</maven.deploy.skip>
 
         <!-- Dependency Versions -->
         <lombok.version>1.18.38</lombok.version>
         <dropwizard.version>2.1.12</dropwizard.version>
-        <metrics-core.version>4.1.23</metrics-core.version>
-        <aspectjrt.version>1.9.8</aspectjrt.version>
-        <function-metrics.version>1.0.6</function-metrics.version>
-        <protonpack.version>1.16</protonpack.version>
-        <magazine.version>v1.0.0-4</magazine.version>
+        <!-- Must track the metrics-core that ${dropwizard.version} ships, since the bundle
+             consumes it at provided scope from the application's Dropwizard distribution. -->
+        <caffeine.version>3.2.4</caffeine.version>
+        <metrics-core.version>4.2.25</metrics-core.version>
+        <slf4j.version>1.7.36</slf4j.version>
+        <aerospike.client.version>6.3.1</aerospike.client.version>
+        <magazine.version>2.0.1</magazine.version>
+        <micrometer.version>1.14.4</micrometer.version>
+        <jackson.version>2.13.5</jackson.version>
+        <validation-api.version>2.0.1.Final</validation-api.version>
         <zookeeper.version>3.4.13</zookeeper.version>
         <curator.version>4.2.0</curator.version>
         <aerospike.bundle.version>v1.0.0-2</aerospike.bundle.version>
 
-        <!-- Build Plugins -->
-        <aspectj-maven-plugin.version>1.13.1</aspectj-maven-plugin.version>
-
         <!-- Testing -->
-        <junit.version>4.12</junit.version>
+        <junit.version>5.10.2</junit.version>
+        <archunit.version>1.4.1</archunit.version>
         <mockito-core.version>4.3.1</mockito-core.version>
         <junit.testcontainer.version>1.0.6</junit.testcontainer.version>
+        <awaitility.version>4.2.0</awaitility.version>
         <jna.version>5.13.0</jna.version>
 
         <!-- Sonar properties -->
@@ -122,43 +130,48 @@
         <sonar.tests>src/test</sonar.tests>
         <sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
         <sonar.dynamicAnalysis>reuseReports</sonar.dynamicAnalysis>
-        <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+        <sonar.coverage.jacoco.xmlReportPaths>
+            ${maven.multiModuleProjectDirectory}/ignismq-coverage/target/site/jacoco-aggregate/jacoco.xml
+        </sonar.coverage.jacoco.xmlReportPaths>
         <sonar.language>java</sonar.language>
         <sonar.qualitygate.wait>true</sonar.qualitygate.wait>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Keeps every transitively pulled Jupiter artifact on one version; mockito-junit-jupiter
+                 otherwise drags in junit-jupiter-api 5.8.2 alongside our 5.10.2 engine. -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Testcontainers 1.15.3 pulls JNA 5.2.0, which ships no arm64 binary, so Docker
+                 detection dies with an UnsatisfiedLinkError rather than a useful message. Managed
+                 here rather than per module: ignismq-core pinned it locally and ignismq-dw-bundle
+                 inherited the broken version the moment it gained a testcontainer. -->
+            <dependency>
+                <groupId>net.java.dev.jna</groupId>
+                <artifactId>jna</artifactId>
+                <version>${jna.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.dropwizard</groupId>
-            <artifactId>dropwizard-core</artifactId>
-            <version>${dropwizard.version}</version>
             <scope>provided</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.commons</groupId>
-                    <artifactId>commons-lang3</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
-            <groupId>io.appform.functionmetrics</groupId>
-            <artifactId>function-metrics</artifactId>
-            <version>${function-metrics.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.aspectj</groupId>
-            <artifactId>aspectjrt</artifactId>
-            <version>${aspectjrt.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-core</artifactId>
-            <version>${metrics-core.version}</version>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
@@ -167,42 +180,34 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- Polling with a deadline, rather than sleeping for a duration guessed to be long enough.
+             A fixed sleep is either slower than it needs to be or flaky under load, and the
+             asynchronous properties these tests assert on - a pool refilling, a meter being
+             recorded - are exactly the "becomes true shortly" shape awaitility exists for. -->
         <dependency>
-            <groupId>io.appform.testcontainer</groupId>
-            <artifactId>junit-testcontainer-commons</artifactId>
-            <version>${junit.testcontainer.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.appform.testcontainer</groupId>
-            <artifactId>junit-testcontainer-aerospike</artifactId>
-            <version>${junit.testcontainer.version}</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.aerospike</groupId>
-                    <artifactId>aerospike-client</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.dropwizard</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>net.java.dev.jna</groupId>
-            <artifactId>jna</artifactId>
-            <version>${jna.version}</version>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>${awaitility.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>${maven.enforcer.plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -258,50 +263,11 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.plugin.version}</version>
-            </plugin>
-            <plugin>
-                <groupId>dev.aspectj</groupId>
-                <artifactId>aspectj-maven-plugin</artifactId>
-                <version>${aspectj-maven-plugin.version}</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.aspectj</groupId>
-                        <artifactId>aspectjrt</artifactId>
-                        <version>${aspectjrt.version}</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>org.aspectj</groupId>
-                        <artifactId>aspectjtools</artifactId>
-                        <version>${aspectjrt.version}</version>
-                    </dependency>
-                </dependencies>
                 <configuration>
-                    <complianceLevel>17</complianceLevel>
-                    <source>${jdk.source.version}</source>
-                    <target>${jdk.target.version}</target>
-                    <showWeaveInfo>true</showWeaveInfo>
-                    <forceAjcCompile>true</forceAjcCompile>
-                    <sources/>
-                    <weaveDirectories>
-                        <weaveDirectory>${project.build.directory}/classes</weaveDirectory>
-                    </weaveDirectories>
-                    <verbose>true</verbose>
-                    <Xlint>ignore</Xlint>
-                    <aspectLibraries>
-                        <aspectLibrary>
-                            <groupId>io.appform.functionmetrics</groupId>
-                            <artifactId>function-metrics</artifactId>
-                        </aspectLibrary>
-                    </aspectLibraries>
+                    <forkCount>2</forkCount>
+                    <reuseForks>true</reuseForks>
+                    <argLine>@{argLine} -Xmx1g</argLine>
                 </configuration>
-                <executions>
-                    <execution>
-                        <phase>process-classes</phase>
-                        <goals>
-                            <goal>compile</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>org.sonatype.central</groupId>
@@ -323,6 +289,11 @@
                     <releaseProfiles>release</releaseProfiles>
                     <goals>deploy</goals>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.sonarsource.scanner.maven</groupId>
+                <artifactId>sonar-maven-plugin</artifactId>
+                <version>${maven.sonar.plugin.version}</version>
             </plugin>
             <plugin>
                 <groupId>org.jacoco</groupId>
@@ -369,6 +340,15 @@
     </build>
 
     <profiles>
+        <profile>
+            <!-- Adds the aggregate-coverage module. Kept out of the default reactor so an ordinary
+                 build does not pay for it; Sonar needs the aggregate because a per-module report
+                 credits nothing for code one module covers through another. -->
+            <id>coverage</id>
+            <modules>
+                <module>ignismq-coverage</module>
+            </modules>
+        </profile>
         <profile>
             <id>release</id>
             <activation>

@@ -17,8 +17,6 @@
 package com.phonepe.ignis.service;
 
 import com.phonepe.ignis.entity.QueueEntity;
-import com.phonepe.magazine.Magazine;
-import com.phonepe.magazine.common.MagazineData;
 
 import java.util.Map;
 import java.util.Optional;
@@ -41,7 +39,15 @@ public sealed interface QueueService permits AerospikeQueueService {
 
     Map<String, QueueEntity> getQueues(final boolean active);
 
-    void addFireTimestamp(final MagazineData<String> magazineData, final long timestamp);
-
-    void sweep(final String queueName, final int shard, final long sweepTillFireTimestamp, final Magazine<String> sidelineMagazine);
+    /**
+     * Persists how far a sweep has progressed through each shard.
+     * <p>
+     * The pointers are absolute - the next slot to examine - rather than deltas, so a retried or
+     * overlapping pass converges on the same value instead of compounding.
+     *
+     * @param shardPointers  shard id to the next slot to sweep, keyed as Magazine keys its shards.
+     * @param sweptCounter   running total of messages re-homed, stored as an absolute value.
+     */
+    void updateSweepProgress(final String queueName, final boolean isSideline,
+                             final Map<String, Long> shardPointers, final long sweptCounter);
 }

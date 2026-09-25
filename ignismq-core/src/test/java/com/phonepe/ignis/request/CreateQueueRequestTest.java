@@ -20,14 +20,14 @@ import com.phonepe.ignis.common.TimeToLive;
 import com.phonepe.ignis.common.TimeUnit;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.utils.Constants;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
-public class CreateQueueRequestTest {
+class CreateQueueRequestTest {
 
     @Test
-    public void testDefaults() {
+    void testDefaults() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -45,7 +45,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testCustomValues() {
+    void testCustomValues() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .shards(64)
@@ -66,7 +66,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testIsValidSuccess() {
+    void testIsValidSuccess() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -79,7 +79,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testIsValidFailsWhenMessageExpiryGreaterThanQueueExpiry() {
+    void testIsValidFailsWhenMessageExpiryGreaterThanQueueExpiry() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -92,7 +92,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testIsValidFailsWhenQueueExpiryExceedsMax() {
+    void testIsValidFailsWhenQueueExpiryExceedsMax() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -104,7 +104,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testIsValidFailsWhenMessageExpiryExceedsMax() {
+    void testIsValidFailsWhenMessageExpiryExceedsMax() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -116,7 +116,7 @@ public class CreateQueueRequestTest {
     }
 
     @Test
-    public void testGetDefaultTimeToLive() {
+    void testGetDefaultTimeToLive() {
         CreateQueueRequest request = CreateQueueRequest.builder()
                 .name("QUEUE_1")
                 .concurrency(5)
@@ -126,5 +126,28 @@ public class CreateQueueRequestTest {
         TimeToLive defaultTtl = request.getDefaultTimeToLive();
         assertEquals(TimeUnit.DAY, defaultTtl.getTimeUnit());
         assertEquals(Constants.DEFAULT_DURATION_DAY, defaultTtl.getDuration());
+    }
+
+    @Test
+    void testHandlerTimeoutDefaultsWhenUnset() {
+        CreateQueueRequest request = CreateQueueRequest.builder()
+                .name("QUEUE_1")
+                .concurrency(5)
+                .messageHandlerType("handler")
+                .build();
+
+        assertEquals(Constants.DEFAULT_HANDLER_TIMEOUT_IN_MINS, request.getHandlerTimeoutInMins());
+    }
+
+    @Test
+    void testHandlerTimeoutIsOverridable() {
+        CreateQueueRequest request = CreateQueueRequest.builder()
+                .name("QUEUE_1")
+                .concurrency(5)
+                .messageHandlerType("handler")
+                .handlerTimeoutInMins(3)
+                .build();
+
+        assertEquals(3, request.getHandlerTimeoutInMins());
     }
 }

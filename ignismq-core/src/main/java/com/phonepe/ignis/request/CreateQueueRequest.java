@@ -24,7 +24,6 @@ import com.phonepe.ignis.common.TimeUnit;
 import com.phonepe.ignis.config.BatchingConfig;
 import com.phonepe.ignis.utils.Constants;
 import com.phonepe.ignis.utils.ErrorMessage;
-import io.dropwizard.validation.ValidationMethod;
 import lombok.Builder;
 import lombok.Data;
 
@@ -33,6 +32,7 @@ import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
+import javax.validation.constraints.AssertTrue;
 import java.util.Objects;
 
 /**
@@ -58,6 +58,9 @@ public class CreateQueueRequest {
     @Min(5)
     @Max(300)
     private final int sweepDurationInMins;
+    @Min(1)
+    @Max(Constants.MAX_HANDLER_TIMEOUT_IN_MINS)
+    private final int handlerTimeoutInMins;
     @Valid
     private final BatchingConfig batchingConfig;
 
@@ -71,6 +74,7 @@ public class CreateQueueRequest {
                               @JsonProperty("messageHandler") final String messageHandlerType,
                               @JsonProperty("shovelConfig") final ShovelConfig shovelConfig,
                               @JsonProperty("sweepDurationInMins") final Integer sweepDurationInMins,
+                              @JsonProperty("handlerTimeoutInMins") final Integer handlerTimeoutInMins,
                               @JsonProperty("batchingConfig") final BatchingConfig batchingConfig) {
         this.name = name;
         this.shards = Objects.nonNull(shards) ? shards : Constants.DEFAULT_SHARDS;
@@ -81,6 +85,8 @@ public class CreateQueueRequest {
         this.shovelConfig = shovelConfig;
         this.sweepDurationInMins = Objects.nonNull(sweepDurationInMins)
                 ? sweepDurationInMins : DEFAULT_SWEEP_DURATION_IN_MINS;
+        this.handlerTimeoutInMins = Objects.nonNull(handlerTimeoutInMins)
+                ? handlerTimeoutInMins : Constants.DEFAULT_HANDLER_TIMEOUT_IN_MINS;
         this.batchingConfig = batchingConfig;
     }
 
@@ -91,7 +97,7 @@ public class CreateQueueRequest {
                 .build();
     }
 
-    @ValidationMethod(message = ErrorMessage.QUEUE_EXPIRY_VALIDATION_MESSAGE)
+    @AssertTrue(message = ErrorMessage.QUEUE_EXPIRY_VALIDATION_MESSAGE)
     @JsonIgnore
     public boolean isValid() {
         return queueExpiry.isValid()

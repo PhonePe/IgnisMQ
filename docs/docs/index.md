@@ -18,7 +18,7 @@ IgnisMQ is a Java library that provides reliable asynchronous message processing
 
     ---
 
-    Backed by Aerospike — handles millions of messages per second with sub-millisecond latency. Sharded queues distribute load across the cluster.
+    Backed by Aerospike, with a consume path that costs a flat four storage operations per message however many consumers you add. Sharded queues spread load across the cluster, and throughput scales with consumers until the storage tier is the limit. See the [benchmark](benchmark.md).
 
 -   :material-shield-check:{ .lg .middle } **Reliable Delivery**
 
@@ -30,13 +30,13 @@ IgnisMQ is a Java library that provides reliable asynchronous message processing
 
     ---
 
-    ZooKeeper-based **leader election** ensures exactly one sweeper runs across the cluster. Load balancing distributes partitions across nodes.
+    ZooKeeper-based **leader election** picks the instance that assigns the sweep partition; the assigned instance - leader or not - is the one that sweeps. Exactly one sweeps at a time.
 
 -   :material-tune:{ .lg .middle } **Configurable Everything**
 
     ---
 
-    Concurrency, TTLs, batch sizes, shovel intervals, sweep durations — every aspect of queue behavior is tunable at runtime.
+    Concurrency and shovel configuration are editable on a running queue. TTLs, shards, batching and sweep durations are fixed at creation.
 
 </div>
 
@@ -50,11 +50,12 @@ sequenceDiagram
     participant M as Magazine (Aerospike)
     participant S as Sideline Magazine
     
-    App->>MQ: publish("order-queue", order)
-    MQ->>Q: publish(order)
+    App->>MQ: getQueue("order-queue")
+    MQ-->>App: IQueue
+    App->>Q: publish(order)
     Q->>M: magazine.load(json)
     
-    Note over Q: Consumer timer fires every 1s
+    Note over Q: A consumer task polls on the worker pool
     
     Q->>M: magazine.fire()
     M-->>Q: MagazineData
@@ -63,11 +64,16 @@ sequenceDiagram
     alt Handler returns false
         Q->>S: sidelineMagazine.load(json)
         Note over S: Message saved for retry
+        alt Sideline accepted it
+            Q->>M: magazine.delete(data)
+        else Sideline refused it
+            Note over M: Left in place for the sweeper<br/>- deleting would lose the only copy
+        end
+    else Handler returns true
+        Q->>M: magazine.deleteAll(batch)
     end
     
-    Q->>M: magazine.delete(data)
-    
-    Note over S: Shovel timer fires periodically
+    Note over S: A shovel task runs periodically
     S-->>M: Move messages back to main queue
 ```
 
@@ -79,15 +85,14 @@ sequenceDiagram
     // 1. Extend the bundle
     public class MyIgnisMQBundle extends IgnisMQBundle<MyConfig> {
         @Override
-        protected BaseStorage getStorage(MyConfig config) {
-            return new AerospikeStorage(config.getAerospikeConfig(), "my-ns");
+        protected IgnisMQContext context(MyConfig config) {
+            return IgnisMQContext.builder()
+                    .clientId(config.getClientId())
+                    .farmId(config.getFarmId())
+                    .storage(new AerospikeStorage(config.getAerospikeConfig(), "my-ns"))
+                    .curatorFramework(curator)
+                    .build();
         }
-        @Override
-        protected String getClientId(MyConfig c) { return c.getClientId(); }
-        @Override
-        protected String getFarmId(MyConfig c) { return c.getFarmId(); }
-        @Override
-        protected CuratorFramework getCuratorFramework() { return curator; }
     }
 
     // 2. Register in your Application
@@ -115,7 +120,8 @@ sequenceDiagram
     BaseStorage storage = new AerospikeStorage(aerospikeConfig, "my-ns");
     IgnisMQManager manager = new IgnisMQManager(
         "my-client", storage, new ObjectMapper(),
-        new MetricRegistry(), curatorFramework, "farm-1"
+        new SimpleMeterRegistry(), curatorFramework, "farm-1",
+        IgnisMQSettings.defaults()
     );
 
     // 2. Register handlers
@@ -164,15 +170,15 @@ flowchart TD
     end
 
     subgraph Per-Queue Components
-        Q1 --> C["Consumer Timers<br/>(1s interval)"]
-        Q1 --> SH["Shovel Timers<br/>(configurable interval)"]
+        Q1 --> C["Consumer tasks<br/>(1s fixed delay)"]
+        Q1 --> SH["Shovel tasks<br/>(configurable interval)"]
     end
 
     subgraph Cluster Coordination
         Manager --> TI["TaskInitializer"]
         TI --> LE["LeaderElector"]
         LE --> ZK["ZooKeeper"]
-        TI --> SW["Sweeper<br/>(leader-only)"]
+        TI --> SW["Sweeper<br/>(one assigned instance)"]
     end
 
     subgraph Storage
@@ -200,5 +206,8 @@ flowchart TD
 | [API Reference](api/api-reference.md) | Every class, method, and field documented |
 | [Configuration](api/configuration.md) | All configuration options with defaults and constraints |
 | [Error Codes](api/error-codes.md) | Complete error catalog with causes and solutions |
+| [Monitoring Runbook](operations/monitoring.md) | What to alert on, what each alert means, what to check |
+| [Console](operations/console.md) | The bundled console: read views, per-shard depth, and the role-guarded actions |
 | [Aerospike Backend](backends/aerospike.md) | Data model, indexing, sweep internals |
+| [Roadmap](roadmap.md) | What IgnisMQ does **not** do yet, and why |
 | [References](references.md) | Academic and industry work that inspired IgnisMQ's design |

@@ -176,9 +176,14 @@
     .meter-bar { display:block; height:6px; min-width:54px; border-radius:99px; background:var(--line);
       overflow:hidden; }
     .meter-bar > i { display:block; height:100%; background:var(--accent); border-radius:99px; }
+    /* A real button, not a span with tabindex. It is focusable and activatable because of what it
+       is rather than because of attributes bolted on, and it carries the description as its
+       accessible name, so a screen reader reads it on focus without needing the tooltip at all.
+       The reset is only to undo the user agent's own button chrome. */
     .hint { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px;
       border-radius:50%; border:1px solid var(--line-strong); color:var(--muted); font-size:9.5px;
-      font-style:normal; font-weight:700; cursor:pointer; vertical-align:middle; user-select:none; }
+      font-family:inherit; font-style:normal; font-weight:700; line-height:1; padding:0;
+      background:none; cursor:pointer; vertical-align:middle; user-select:none; }
     .hint:hover, .hint:focus { border-color:var(--accent); color:var(--accent); outline:none; }
     /* The description used to ride on the marker's title attribute, which meant waiting out the
        browser's ~1s hover delay (not configurable) and, until it arrived, staring at the
@@ -377,8 +382,9 @@
                     in your metrics backend.
                 </div>
                 <div class="legend">
-                    <p>Hover the <span class="hint" tabindex="0" role="note"
-                        data-hint="Every meter carries one of these, explaining what it measures.">i</span>
+                    <p>Hover the <button type="button" class="hint"
+                        data-hint="Every meter carries one of these, explaining what it measures."
+                        aria-label="Every meter carries one of these, explaining what it measures.">i</button>
                         beside any meter for what it measures.</p>
                     <p><strong>Timers</strong> are in <strong>milliseconds</strong>. Their
                         <em>mean</em> covers the whole life of this process and never decays, while their
@@ -960,7 +966,9 @@
 
     function info(meter) {
       const text = METER_INFO[meter.name];
-      return text ? ` <span class="hint" tabindex="0" role="note" data-hint="${esc(text)}">i</span>` : '';
+      return text
+        ? ` <button type="button" class="hint" data-hint="${esc(text)}" aria-label="${esc(text)}">i</button>`
+        : '';
     }
 
     /**
@@ -1014,39 +1022,36 @@
     function meterSections(list) {
       const typed = type => list.filter(meter => meter.type === type);
       const modelled = new Set(['TIMER', 'DISTRIBUTION_SUMMARY', 'COUNTER', 'GAUGE']);
-      const out = [];
 
       const timers = typed('TIMER').filter(meter => meter.measurements.COUNT > 0);
       const slowest = peak(timers, value => value.MAX);
-      out.push(table('Timers', ['Meter', 'Count', 'Mean (since start)', 'Max (2 min)', ''],
-        timers.map(meter => {
-          const value = meter.measurements;
-          return [meterLabel(meter), num(value.COUNT), millis(value.TOTAL_TIME / value.COUNT),
-            millis(value.MAX), bar(value.MAX, slowest)];
-        })));
-
       const spreads = typed('DISTRIBUTION_SUMMARY').filter(meter => meter.measurements.COUNT > 0);
       const widest = peak(spreads, value => value.MAX);
-      out.push(table('Distributions', ['Meter', 'Count', 'Mean', 'Max', ''],
-        spreads.map(meter => {
-          const value = meter.measurements;
-          return [meterLabel(meter), num(value.COUNT), round(value.TOTAL / value.COUNT),
-            round(value.MAX), bar(value.MAX, widest)];
-        })));
-
       const counters = typed('COUNTER');
       const busiest = peak(counters, value => value.COUNT);
-      out.push(table('Counters', ['Meter', 'Count', ''],
-        counters.map(meter =>
-          [meterLabel(meter), num(meter.measurements.COUNT), bar(meter.measurements.COUNT, busiest)])));
-
-      out.push(table('Gauges', ['Meter', 'Value'],
-        typed('GAUGE').map(meter => [meterLabel(meter), round(meter.measurements.VALUE)])));
-
       const other = list.filter(meter => !modelled.has(meter.type));
-      out.push(table('Other', ['Meter', 'Current'], other.map(meter => [meterLabel(meter), rawValue(meter)])));
 
-      return out.join('');
+      return [
+        table('Timers', ['Meter', 'Count', 'Mean (since start)', 'Max (2 min)', ''],
+          timers.map(meter => {
+            const value = meter.measurements;
+            return [meterLabel(meter), num(value.COUNT), millis(value.TOTAL_TIME / value.COUNT),
+              millis(value.MAX), bar(value.MAX, slowest)];
+          })),
+        table('Distributions', ['Meter', 'Count', 'Mean', 'Max', ''],
+          spreads.map(meter => {
+            const value = meter.measurements;
+            return [meterLabel(meter), num(value.COUNT), round(value.TOTAL / value.COUNT),
+              round(value.MAX), bar(value.MAX, widest)];
+          })),
+        table('Counters', ['Meter', 'Count', ''],
+          counters.map(meter =>
+            [meterLabel(meter), num(meter.measurements.COUNT), bar(meter.measurements.COUNT, busiest)])),
+        table('Gauges', ['Meter', 'Value'],
+          typed('GAUGE').map(meter => [meterLabel(meter), round(meter.measurements.VALUE)])),
+        table('Other', ['Meter', 'Current'],
+          other.map(meter => [meterLabel(meter), rawValue(meter)])),
+      ].join('');
     }
 
     /**
@@ -1121,7 +1126,7 @@
     }
 
     function showTip(marker) {
-      const text = marker.getAttribute('data-hint');
+      const text = marker.dataset.hint;
       if (!text) {
         return;
       }

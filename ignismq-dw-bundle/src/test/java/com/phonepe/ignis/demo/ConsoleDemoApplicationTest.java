@@ -115,16 +115,24 @@ class ConsoleDemoApplicationTest {
         final String page = client().target(url("/ignisConsole/")).request()
                 .get().readEntity(String.class);
 
-        final Matcher marker = Pattern.compile("<span class=\"hint\"[^>]*>").matcher(page);
+        // Every tag, then filter - not "<button...class=hint...>", which would stop seeing a marker
+        // the moment one regressed to a span and leave the loop asserting nothing about it.
+        final Matcher tags = Pattern.compile("<[^<>]+>").matcher(page);
         int markers = 0;
-        while (marker.find()) {
-            final String tag = marker.group();
+        while (tags.find()) {
+            final String tag = tags.group();
+            if (!tag.contains("class=\"hint\"")) {
+                continue;
+            }
             markers++;
+            assertTrue(tag.startsWith("<button"),
+                    "a marker must be a button, not a span made focusable with tabindex: " + tag);
             // A title attribute reinstates the browser's own tooltip and its ~1s delay, which is
             // what made these useless and cannot be shortened from a page.
             assertFalse(tag.contains("title="), "the description must not ride on title: " + tag);
             assertTrue(tag.contains("data-hint="), "the description must be on data-hint: " + tag);
-            assertTrue(tag.contains("tabindex=\"0\""), "a hint reachable only by mouse is no hint: " + tag);
+            assertTrue(tag.contains("aria-label="), "the marker needs an accessible name: " + tag);
+            assertFalse(tag.contains("tabindex"), "a button does not need tabindex: " + tag);
         }
         assertTrue(markers > 0, "the page must render hint markers for this to mean anything");
         assertTrue(page.contains("id=\"tip\""), "and data-hint needs the tooltip element to be painted into");
@@ -140,7 +148,9 @@ class ConsoleDemoApplicationTest {
         final String css = style.group(1).replaceAll("(?s)/\\*.*?\\*/", "");
 
         final Map<String, Integer> definitions = new LinkedHashMap<>();
-        final Matcher rule = Pattern.compile("(?m)^\\s*([^{}@\\n][^{}\\n]*)\\{").matcher(css);
+        // [ \t] rather than \s: \s matches newlines, which combined with a multiline ^ lets the
+        // engine retry the same span from every line and backtrack quadratically.
+        final Matcher rule = Pattern.compile("(?m)^[ \\t]*([^{}@\\n][^{}\\n]*)\\{").matcher(css);
         while (rule.find()) {
             for (final String selector : rule.group(1).split(",")) {
                 final String bare = selector.trim();

@@ -146,7 +146,13 @@ question:
 - Free-text search across meter names and tag values, and a link from any queue on the Queues tab
   straight to its own meters here
 
+Meters are grouped by queue, and within a queue by type &mdash; timers, distributions, counters and
+gauges each get their own table, because each carries different statistics and a single shared column
+could only stringify them. Numbers sit in real columns that line up down the page, and a bar scaled
+against the largest value in that table shows which row is the outlier without reading every figure.
 Timers are shown as count, mean and max in milliseconds rather than as Micrometer's raw statistics.
+Every meter carries an **i** marker; hovering or tabbing to it explains in a sentence what that meter
+actually measures, so the name is not the only thing you have to go on.
 
 **There is no cluster total on that tab and there cannot be one.** It is one process out of however
 many are deployed. Scrape `ignismq.*` and `magazine.*` and aggregate in your metrics backend — the
@@ -191,8 +197,15 @@ on how your application authenticates:
 | Your application uses | What the console does |
 |---|---|
 | **Session cookies** | Nothing to configure. Requests are sent with `credentials: 'same-origin'`, so the browser attaches them |
-| **A bearer token** | The dashboard has no way to know your token, so there is a **Token** button in the header. Paste one and every request carries `Authorization: Bearer <token>` |
+| **A token** | The dashboard has no way to know your token, so there is a **Token** button in the header. Paste one and every request carries `Authorization: <scheme> <token>` |
 | **mTLS or a proxy that injects identity** | Nothing to configure, provided the proxy is in front of the console too |
+
+The **scheme** next to the token defaults to `Bearer`, and is the one thing worth checking first if
+the actions stay disabled after pasting a valid token. Applications front ignisMQ with their own
+authentication, and not all of them use `Bearer`. A scheme the
+application does not recognise is indistinguishable from sending nothing at all: the request is
+simply unauthenticated, `whoami` reports no roles, and every action is disabled. Empty the field to
+send the token on its own, with no scheme.
 
 The token is kept in `sessionStorage`, so it is gone when the tab closes. It is readable by any script
 on that origin, so use a **short-lived** token and serve the console over HTTPS. It is never put in a

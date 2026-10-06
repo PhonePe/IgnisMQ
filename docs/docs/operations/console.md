@@ -197,15 +197,16 @@ on how your application authenticates:
 | Your application uses | What the console does |
 |---|---|
 | **Session cookies** | Nothing to configure. Requests are sent with `credentials: 'same-origin'`, so the browser attaches them |
-| **A token** | The dashboard has no way to know your token, so there is a **Token** button in the header. Paste one and every request carries `Authorization: <scheme> <token>` |
+| **A token** | The dashboard has no way to know your token, so there is a **Token** button in the header. Paste the full header value and every request carries it verbatim |
 | **mTLS or a proxy that injects identity** | Nothing to configure, provided the proxy is in front of the console too |
 
-The **scheme** next to the token defaults to `Bearer`, and is the one thing worth checking first if
-the actions stay disabled after pasting a valid token. Applications front ignisMQ with their own
-authentication, and not all of them use `Bearer`. A scheme the
-application does not recognise is indistinguishable from sending nothing at all: the request is
-simply unauthenticated, `whoami` reports no roles, and every action is disabled. Empty the field to
-send the token on its own, with no scheme.
+Paste the **whole** value the `Authorization` header should carry, including whatever prefix your
+application expects — `Bearer <token>`, `O-Bearer <token>`, or the bare token with no prefix at all.
+The console does not add one. That prefix is the first thing to check if the actions stay disabled
+after pasting a token you know is valid: applications front ignisMQ with their own authentication and
+not all of them use `Bearer`. A value the application does not recognise is indistinguishable from
+sending nothing — the request is simply unauthenticated, `whoami` reports no roles, and every action
+is disabled.
 
 The token is kept in `sessionStorage`, so it is gone when the tab closes. It is readable by any script
 on that origin, so use a **short-lived** token and serve the console over HTTPS. It is never put in a

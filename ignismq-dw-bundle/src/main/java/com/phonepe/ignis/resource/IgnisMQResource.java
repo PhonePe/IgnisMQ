@@ -26,6 +26,7 @@ import com.phonepe.ignis.response.QueueSummary;
 import com.phonepe.ignis.service.IgnisMQService;
 import lombok.RequiredArgsConstructor;
 
+import javax.annotation.security.PermitAll;
 import javax.annotation.security.RolesAllowed;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
@@ -81,6 +82,7 @@ public final class IgnisMQResource {
 
     @GET
     @Path("/whoami")
+    @PermitAll
     public Permissions whoami(@Context final SecurityContext security) {
         return new Permissions(security.getUserPrincipal() != null,
                 security.isUserInRole(OPERATE_ROLE), security.isUserInRole(DEACTIVATE_ROLE));

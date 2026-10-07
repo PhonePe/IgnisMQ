@@ -4,7 +4,244 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ignisMQ Console</title>
-    <link rel="stylesheet" href="style.css">
+    <style>
+    :root {
+      --bg:#f7f7f6; --raised:#ffffff; --ink:#1b1a18; --muted:#6b6862; --line:#e2e0db; --line-strong:#cfccc5;
+      --accent:#c2521a; --accent-soft:#fbeee7; --good:#1f6b42; --good-ink:#1f6b42; --good-soft:#e9f5ee;
+      --warn-ink:#8a5a00; --warn-soft:#fdf3e0; --bad:#b3261e; --bad-soft:#fceceb; --shadow:0 1px 2px rgba(0,0,0,.06);
+    }
+    html[data-theme="dark"] {
+      --bg:#16161a; --raised:#1e1e23; --ink:#eceae6; --muted:#9b968e; --line:#2c2c33; --line-strong:#3b3b44;
+      --accent:#ff9448; --accent-soft:#2a1d14; --good:#6cc48c; --good-ink:#6cc48c; --good-soft:#16281d;
+      --warn-ink:#e3b566; --warn-soft:#2a2216; --bad:#ff8d85; --bad-soft:#2d1917; --shadow:none;
+    }
+    * { box-sizing:border-box; }
+    html,body { margin:0; }
+    body {
+      background:var(--bg); color:var(--ink); font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    code,.num,table { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums; }
+    a { color:var(--accent); }
+
+    header { border-bottom:1px solid var(--line); background:var(--raised); }
+    .bar { width:min(1320px,calc(100% - 40px)); margin:auto; padding:14px 0; display:flex; align-items:center;
+      gap:16px; position:relative; }
+    .brand { font-size:16px; font-weight:600; letter-spacing:-.01em; display:flex; align-items:center; gap:9px; }
+    .spark { width:9px; height:9px; border-radius:50%; background:var(--accent); flex:none; }
+    .grow { flex:1; }
+    .meta { color:var(--muted); font-size:12px; }
+    .icon-button {
+      border:1px solid var(--line-strong); background:transparent; color:var(--ink); border-radius:7px;
+      padding:6px 11px; cursor:pointer; font:inherit; font-size:12px;
+    }
+    .icon-button:hover { border-color:var(--accent); color:var(--accent); }
+
+    /* The row shares the 1320px column with the brand and the cards, but the tabs used to carry
+       14px of side padding, so "Queues" began 14px inside the column while "IgnisMQ" and every
+       card edge sat on it - the header read as indented against the page. The padding is now
+       vertical only and the space between tabs comes from the gap, which puts the first label and
+       its underline back on the same line as everything else. */
+    .tabs { width:min(1320px,calc(100% - 40px)); margin:auto; display:flex; gap:22px; }
+    .tabs button {
+      border:0; background:transparent; color:var(--muted); font:inherit; font-size:13px; padding:10px 0;
+      cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;
+    }
+    .tabs button:hover { color:var(--ink); }
+    .tabs button[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+    main { width:min(1320px,calc(100% - 40px)); margin:auto; padding:22px 0 72px; }
+    .split { display:grid; grid-template-columns:270px 1fr; gap:20px; align-items:start; }
+    .card { background:var(--raised); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); margin-bottom:18px; }
+    .card > h2 {
+      margin:0; padding:13px 16px; font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+      color:var(--muted); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px;
+    }
+    .card > .body { padding:16px; }
+    .card > .body.flush { padding:0; }
+
+    .tag { font-size:10px; letter-spacing:.05em; text-transform:uppercase; padding:3px 7px; border-radius:99px; font-weight:600; }
+    .tag.cluster { background:var(--accent-soft); color:var(--accent); }
+    .tag.instance { background:var(--warn-soft); color:var(--warn-ink); }
+    .tag.active { background:var(--good-soft); color:var(--good-ink); }
+    .tag.inactive { background:var(--line); color:var(--muted); }
+
+    .filter {
+      width:100%; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink);
+      border-radius:7px; padding:8px 11px; font:inherit; font-size:13px;
+    }
+    .filter:focus, input:focus, select:focus { outline:2px solid var(--accent); outline-offset:-1px; border-color:transparent; }
+    nav { max-height:62vh; overflow:auto; }
+    nav button {
+      width:100%; text-align:left; border:0; border-left:3px solid transparent; background:transparent; color:var(--ink);
+      font:inherit; padding:10px 14px; cursor:pointer; display:flex; align-items:center; gap:9px;
+    }
+    nav button:hover { background:var(--bg); }
+    nav button.active { background:var(--accent-soft); border-left-color:var(--accent); color:var(--accent); font-weight:600; }
+    nav button .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    nav .state { width:7px; height:7px; border-radius:50%; background:var(--good); flex:none; }
+    nav .state.off { background:var(--line-strong); }
+
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; }
+    .stat { border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:var(--bg); }
+    .stat b { display:block; font-size:22px; font-weight:600; letter-spacing:-.02em; }
+    .stat span { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td { text-align:right; padding:9px 14px; border-bottom:1px solid var(--line); }
+    th:first-child,td:first-child { text-align:left; }
+    tbody tr:last-child td { border-bottom:0; }
+    th { color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+    tbody tr:hover { background:var(--bg); }
+    td.spread { width:30%; }
+    .track { height:7px; border-radius:99px; background:var(--line); overflow:hidden; }
+    .track > i { display:block; height:100%; background:var(--accent); border-radius:99px; }
+    tr.outlier td { background:var(--warn-soft); }
+    tr.outlier .track > i { background:var(--warn-ink); }
+
+    .kv { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+    .kv > div { padding:12px 16px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .kv span { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:3px; }
+    .kv strong { font-weight:600; font-size:13px; overflow-wrap:anywhere; }
+
+    .note { color:var(--muted); font-size:12.5px; margin:0 0 14px; }
+    .note:last-child { margin-bottom:0; }
+    .banner { border-radius:8px; padding:11px 14px; font-size:12.5px; margin-bottom:16px; border:1px solid transparent; }
+    .banner.warn { background:var(--warn-soft); color:var(--warn-ink); border-color:var(--warn-ink); }
+    .banner.info { background:var(--bg); color:var(--muted); border-color:var(--line); }
+
+    .action { display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+    .action:last-child { border-bottom:0; }
+    .action .what { flex:1; min-width:220px; }
+    .action .what b { display:block; font-size:13px; font-weight:600; }
+    .action .what span { color:var(--muted); font-size:12px; }
+    .action input[type=number], .action input[type=text] {
+      width:88px; border:1px solid var(--line-strong); border-radius:7px; background:var(--bg); color:var(--ink);
+      padding:7px 9px; font:inherit; font-size:13px;
+    }
+    .action input[type=text] { width:150px; }
+    button.go {
+      border:1px solid var(--line-strong); background:var(--raised); color:var(--ink); border-radius:7px;
+      padding:7px 14px; font:inherit; font-size:13px; cursor:pointer; white-space:nowrap;
+    }
+    button.go:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+    button.go.danger { border-color:var(--bad); color:var(--bad); }
+    button.go.danger:hover:not(:disabled) { background:var(--bad-soft); }
+    button.go:disabled { opacity:.42; cursor:not-allowed; }
+
+    .result { margin:0; padding:12px 16px; font-size:12.5px; border-top:1px solid var(--line); color:var(--muted); overflow-wrap:anywhere; }
+    .result.ok { color:var(--good-ink); background:var(--good-soft); }
+    .result.error { color:var(--bad); background:var(--bad-soft); }
+    .empty { color:var(--muted); font-size:13px; padding:26px 16px; text-align:center; }
+    .hidden { display:none !important; }
+    /* The UA stylesheet's [hidden] rule is display:none, but any author rule that sets display
+       outranks it - and 'nav button' sets display:flex. So element.hidden = true left the queue
+       list entirely unfiltered, silently, because the property was set and simply had no effect.
+       Declared here once rather than per selector, so it cannot be reintroduced by the next rule
+       that happens to set display. */
+    [hidden] { display:none !important; }
+    @media (max-width:900px) { .split { grid-template-columns:1fr; } nav { max-height:220px; } }
+
+    /* theme switch */
+    .switch { display:inline-flex; align-items:center; gap:0; border:1px solid var(--line-strong); border-radius:99px;
+      padding:2px; background:var(--bg); cursor:pointer; }
+    .switch span { display:grid; place-items:center; width:26px; height:22px; border-radius:99px; font-size:12px;
+      color:var(--muted); line-height:1; }
+    .switch span.on { background:var(--raised); color:var(--accent); box-shadow:var(--shadow); }
+    .scope-chip { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line); border-radius:99px;
+      padding:4px 11px; font-size:12px; color:var(--muted); background:var(--bg); }
+    .scope-chip b { color:var(--ink); font-weight:600; }
+    .live { display:inline-flex; align-items:center; gap:6px; }
+    .live::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--good);
+      animation:pulse 2.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.25; } }
+
+    /* meter groups */
+    .group { border:1px solid var(--line); border-radius:9px; margin-bottom:12px; overflow:hidden; }
+    .group > summary { padding:11px 15px; cursor:pointer; display:flex; align-items:center; gap:10px; font-size:13px;
+      font-weight:600; background:var(--bg); list-style:none; }
+    .group > summary::-webkit-details-marker { display:none; }
+    .group > summary::before { content:"›"; transition:transform .15s; color:var(--muted); font-size:15px; }
+    .group[open] > summary::before { transform:rotate(90deg); }
+    .group > summary .count { margin-left:auto; font-weight:400; color:var(--muted); font-size:11.5px; }
+    .group table { border-top:1px solid var(--line); }
+    .group .section { padding:10px 15px 5px; font-size:10.5px; font-weight:600; text-transform:uppercase;
+      letter-spacing:.05em; color:var(--muted); background:var(--bg); border-top:1px solid var(--line); }
+    /* Numbers are compared down a column, so the digits have to occupy the same width on every row. */
+    /* .num already carries the monospace face and tabular figures; this only stops a value wrapping. */
+    td.num { white-space:nowrap; }
+    /* Namespaced deliberately. A bare .bar is the page header's centring container (see 'header'
+       above) and a bare .info is the banner modifier .banner.info - naming either of them again
+       here silently restyled both, collapsing the header and squashing the banner into a circle. */
+    .meter-bar { display:block; height:6px; min-width:54px; border-radius:99px; background:var(--line);
+      overflow:hidden; }
+    .meter-bar > i { display:block; height:100%; background:var(--accent); border-radius:99px; }
+    /* A real button, not a span with tabindex. It is focusable and activatable because of what it
+       is rather than because of attributes bolted on, and it carries the description as its
+       accessible name, so a screen reader reads it on focus without needing the tooltip at all.
+       The reset is only to undo the user agent's own button chrome. */
+    .hint { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px;
+      border-radius:50%; border:1px solid var(--line-strong); color:var(--muted); font-size:9.5px;
+      font-family:inherit; font-style:normal; font-weight:700; line-height:1; padding:0;
+      background:none; cursor:pointer; vertical-align:middle; user-select:none; }
+    .hint:hover, .hint:focus { border-color:var(--accent); color:var(--accent); outline:none; }
+    /* The description used to ride on the marker's title attribute, which meant waiting out the
+       browser's ~1s hover delay (not configurable) and, until it arrived, staring at the
+       arrow-and-question-mark pointer that the help cursor draws. This is the replacement, and it
+       lives at the end of <body> rather than next to its marker because .group sets
+       overflow:hidden for its rounded corners and would clip anything drawn inside the card.
+       position:fixed off the marker's viewport rect, so the enclosing overflow is irrelevant. */
+    #tip { position:fixed; z-index:60; max-width:320px; background:var(--raised); color:var(--ink);
+      border:1px solid var(--line-strong); border-radius:8px; padding:8px 11px; font-size:12.5px;
+      line-height:1.5; box-shadow:0 6px 20px rgba(0,0,0,.16); pointer-events:none; }
+    .legend { font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:10px; }
+    /* One rule per line. Run together as a single paragraph, the four rules about timers, counters,
+       gauges and bars read as one wall and nobody finished it. */
+    .legend p { margin:0 0 5px; }
+    .legend p:last-child { margin-bottom:0; }
+    .legend strong { color:var(--ink); font-weight:600; }
+    .legend em { font-style:normal; color:var(--ink); }
+    .chip { display:inline-block; background:var(--bg); border:1px solid var(--line); border-radius:5px;
+      padding:1px 6px; font-size:11px; color:var(--muted); margin-right:4px; font-family:ui-monospace,Menlo,monospace; }
+    .figure { white-space:nowrap; }
+    .figure em { font-style:normal; color:var(--muted); font-size:11px; margin-right:3px; }
+    .figure + .figure { margin-left:12px; }
+    .link { border:0; background:none; color:var(--accent); font:inherit; font-size:12.5px; cursor:pointer;
+      padding:0; text-decoration:underline; text-underline-offset:3px; }
+    .cta { display:flex; justify-content:flex-end; padding:0 16px 14px; }
+
+    /* toasts */
+    #toasts { position:fixed; top:16px; right:16px; z-index:50; display:flex; flex-direction:column; gap:9px;
+      width:min(380px,calc(100vw - 32px)); }
+    .toast { background:var(--raised); border:1px solid var(--line-strong); border-left-width:3px; border-radius:9px;
+      padding:11px 13px; box-shadow:0 6px 20px rgba(0,0,0,.14); font-size:13px; display:flex; gap:10px;
+      align-items:flex-start; animation:slide .16s ease-out; }
+    @keyframes slide { from { opacity:0; transform:translateX(12px); } to { opacity:1; transform:none; } }
+    .toast.pending { border-left-color:var(--accent); }
+    .toast.ok { border-left-color:var(--good); }
+    .toast.error { border-left-color:var(--bad); }
+    .toast .mark { flex:none; width:15px; text-align:center; line-height:1.4; }
+    .toast.pending .mark { border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%;
+      width:13px; height:13px; margin-top:2px; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .toast.ok .mark { color:var(--good); }
+    .toast.error .mark { color:var(--bad); }
+    .toast .text { flex:1; overflow-wrap:anywhere; }
+    .toast .text b { display:block; margin-bottom:2px; }
+    .toast .close { border:0; background:none; color:var(--muted); cursor:pointer; font-size:15px; line-height:1;
+      padding:0 2px; }
+
+    /* token */
+    #token-panel { position:absolute; right:0; top:46px; width:min(430px,calc(100vw - 32px)); background:var(--raised);
+      border:1px solid var(--line-strong); border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.16); padding:15px;
+      z-index:40; }
+    #token-panel p { margin:0 0 10px; font-size:12.5px; color:var(--muted); }
+    #token-panel .row { display:flex; gap:8px; }
+    #token-panel input { flex:1; border:1px solid var(--line-strong); border-radius:7px; background:var(--bg);
+      color:var(--ink); padding:8px 10px; font:inherit; font-size:13px; }
+    .dot-on { color:var(--good); }
+    .dot-off { color:var(--muted); }
+    </style>
 </head>
 <body>
 <header>
@@ -22,21 +259,27 @@
                 aria-label="Switch between light and dark">
             <span id="theme-light">&#9788;</span><span id="theme-dark">&#9790;</span>
         </button>
-    </div>
-    <div id="token-panel" class="hidden">
-        <p><strong>How your role is decided.</strong> IgnisMQ ships no authentication of its own; the application
-            it is embedded in populates the Jersey <code>SecurityContext</code>, and the console's actions are closed
-            unless it grants <code>ignismq_operate</code> (or <code>ignismq_deactivate</code>).</p>
-        <p>If your application authenticates with <strong>cookies</strong>, leave this empty &mdash; the browser
-            already sends them. If it expects a <strong>bearer token</strong>, paste one here and every request will
-            carry <code>Authorization: Bearer &lt;token&gt;</code>.</p>
-        <p>Held in <code>sessionStorage</code>, so it is gone when this tab closes. It is readable by any script on
-            this origin, so use a short-lived token and serve the console over HTTPS.</p>
-        <div class="row">
-            <input id="token-input" type="password" placeholder="Paste a bearer token" autocomplete="off"
-                   aria-label="Bearer token">
-            <button id="token-save" class="go" type="button">Save</button>
-            <button id="token-clear" class="go" type="button">Clear</button>
+        <!-- Inside .bar, not beside it: .bar carries the position:relative this panel anchors to.
+             As a sibling of .bar nothing above it was positioned, so right:0 resolved against the
+             viewport and the panel hung 60px past the content column, off the page's grid. -->
+        <div id="token-panel" class="hidden">
+            <p><strong>How your role is decided.</strong> IgnisMQ ships no authentication of its own; the application
+                it is embedded in populates the Jersey <code>SecurityContext</code>, and the console's actions are
+                closed unless it grants <code>ignismq_operate</code> (or <code>ignismq_deactivate</code>).</p>
+            <p>If your application authenticates with <strong>cookies</strong>, leave this empty &mdash; the browser
+                already sends them. If it expects a <strong>token</strong>, paste the full value the
+                <code>Authorization</code> header should carry &mdash; including whatever prefix your application
+                expects, such as <code>Bearer &lt;token&gt;</code> or <code>O-Bearer &lt;token&gt;</code> &mdash; and
+                every request will carry it verbatim. A value the application does not recognise leaves you
+                unauthenticated, which shows up as every action staying disabled.</p>
+            <p>Held in <code>sessionStorage</code>, so it is gone when this tab closes. It is readable by any script
+                on this origin, so use a short-lived token and serve the console over HTTPS.</p>
+            <div class="row">
+                <input id="token-input" type="password" placeholder="Authorization header value, e.g. O-Bearer <token>"
+                       autocomplete="off" aria-label="Authorization header value">
+                <button id="token-save" class="go" type="button">Save</button>
+                <button id="token-clear" class="go" type="button">Clear</button>
+            </div>
         </div>
     </div>
     <div class="tabs" role="tablist">
@@ -138,6 +381,20 @@
                     there cannot be one &mdash; scrape <code>ignismq.*</code> and <code>magazine.*</code> and aggregate
                     in your metrics backend.
                 </div>
+                <div class="legend">
+                    <p>Hover the <button type="button" class="hint"
+                        data-hint="Every meter carries one of these, explaining what it measures."
+                        aria-label="Every meter carries one of these, explaining what it measures.">i</button>
+                        beside any meter for what it measures.</p>
+                    <p><strong>Timers</strong> are in <strong>milliseconds</strong>. Their
+                        <em>mean</em> covers the whole life of this process and never decays, while their
+                        <em>max</em> is a rolling two-minute window &mdash; so after a spike settles the max can
+                        sit below the mean, which is the two windows disagreeing rather than a fault.</p>
+                    <p><strong>Counters</strong> are totals since this process started, never rates.</p>
+                    <p><strong>Gauges</strong> are the value right now.</p>
+                    <p><strong>Bars</strong> are scaled against the largest row in their own table, so they
+                        compare within a table and not across them.</p>
+                </div>
                 <input id="meter-filter" class="filter" type="search"
                        placeholder="Filter by queue, meter name or tag (e.g. sidelined, pool, orders)"
                        aria-label="Filter meters" autocomplete="off">
@@ -147,6 +404,7 @@
     </section>
 </main>
 
+<div id="tip" class="hidden" role="tooltip"></div>
 <script>
     const base = window.location.pathname.replace(/\/ignisConsole\/?$/, '');
     const api = `${base}/ignismq/v1`;
@@ -203,18 +461,18 @@
       }
     }
 
-    const TOKEN_KEY = 'ignismq-console-token';
-    function token() {
-      try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (error_) { return ''; }
+    const AUTHORIZATION_KEY = 'ignismq-console-authorization';
+    function authorization() {
+      try { return sessionStorage.getItem(AUTHORIZATION_KEY) || ''; } catch (error_) { return ''; }
     }
-    function setToken(value) {
+    function setAuthorization(value) {
       try {
-        if (value) { sessionStorage.setItem(TOKEN_KEY, value); } else { sessionStorage.removeItem(TOKEN_KEY); }
-      } catch (error_) { /* private mode: the token simply is not remembered */ }
+        if (value) { sessionStorage.setItem(AUTHORIZATION_KEY, value); } else { sessionStorage.removeItem(AUTHORIZATION_KEY); }
+      } catch (error_) { /* private mode: the value simply is not remembered */ }
       const dot = el('token-dot');
       dot.className = value ? 'dot-on' : 'dot-off';
       el('token-button').title = value
-        ? 'Sending Authorization: Bearer <token> with every request'
+        ? 'Sending this Authorization header with every request'
         : 'No token set - relying on cookies your browser already sends';
     }
     el('token-button').addEventListener('click', () => {
@@ -223,39 +481,42 @@
       panel.classList.toggle('hidden', !opening);
       el('token-button').setAttribute('aria-expanded', String(opening));
       if (opening) {
-        el('token-input').value = token();
+        el('token-input').value = authorization();
         el('token-input').focus();
       }
     });
     el('token-save').addEventListener('click', () => {
-      setToken(el('token-input').value.trim());
+      const value = el('token-input').value.trim();
+      setAuthorization(value);
       el('token-panel').classList.add('hidden');
-      toast('ok', 'Token saved', 'Sent with every request from this tab.');
+      toast('ok', 'Token saved', value
+        ? 'Sent as the Authorization header, verbatim.'
+        : 'Requests now rely on cookies alone.');
       refreshPermissions();
     });
     el('token-clear').addEventListener('click', () => {
       el('token-input').value = '';
-      setToken('');
+      setAuthorization('');
       toast('ok', 'Token cleared', 'Requests now rely on cookies alone.');
       refreshPermissions();
     });
-    setToken(token());
+    setAuthorization(authorization());
 
     async function json(url, options) {
       // Spreading undefined is a no-op, so an absent options object needs no guard.
       const request = {credentials: 'same-origin', ...options};
-      const bearer = token();
-      if (bearer) {
-        request.headers = {Authorization: `Bearer ${bearer}`, ...request.headers};
+      const credentials = authorization();
+      if (credentials) {
+        request.headers = {Authorization: credentials, ...request.headers};
       }
       const response = await fetch(url, request);
       const body = await response.text();
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          throw new Error(bearer
-            ? `${response.status} - the token was accepted by the browser but does not carry the role this `
-              + `action needs`
-            : `${response.status} - no credentials were sent. If this application authenticates with a bearer `
+          throw new Error(credentials
+            ? `${response.status} - credentials were sent but did not carry the role this action needs. `
+              + `If the application expects a different Authorization format, change it with the Token button.`
+            : `${response.status} - no credentials were sent. If this application authenticates with a `
               + `token, set one with the Token button.`);
         }
         let detail = body;
@@ -314,12 +575,23 @@
       inventory.forEach(queue => {
         const button = document.createElement('button');
         button.dataset.name = queue.name;
+        // The name is ellipsised to keep the rail narrow, so the full one has to be recoverable.
+        // A title attribute is the only form of it that survives both truncation and a narrow window.
+        button.title = queue.name;
         button.innerHTML = `<span class="state${queue.active ? '' : ' off'}"></span>`
           + `<span class="name">${esc(queue.name)}</span>`
           + `<span class="tag ${queue.active ? 'active' : 'inactive'}">${queue.active ? 'active' : 'inactive'}</span>`;
         button.addEventListener('click', () => select(queue.name));
         nav.appendChild(button);
       });
+      // Appended before the filter runs, so a term matching nothing has something to say rather
+      // than leaving an empty panel. The meters tab already does this.
+      const empty = document.createElement('div');
+      empty.id = 'queues-empty';
+      empty.className = 'empty';
+      empty.textContent = 'No queue matches that filter.';
+      empty.hidden = true;
+      nav.appendChild(empty);
       select(inventory.some(queue => queue.name === selected) ? selected : inventory[0].name);
       applyQueueFilter();
     }
@@ -454,7 +726,7 @@
     function missingRoleReason(role) {
       return permissions.authenticated
         ? `Your credentials do not carry the ${role} role.`
-        : `No credentials were sent. If this application uses a bearer token, set one with the Token button.`;
+        : `No credentials were sent. If this application uses a token, set one with the Token button.`;
     }
 
     /**
@@ -573,9 +845,16 @@
 
     function applyQueueFilter() {
       const term = el('queue-filter').value.trim().toLowerCase();
+      let shown = 0;
       document.querySelectorAll('#queues button').forEach(button => {
-        button.hidden = term.length > 0 && !button.dataset.name.toLowerCase().includes(term);
+        const hide = term.length > 0 && !button.dataset.name.toLowerCase().includes(term);
+        button.hidden = hide;
+        if (!hide) { shown += 1; }
       });
+      // Absent while the list is still loading or holds no queues at all, both of which already
+      // show their own message.
+      const empty = el('queues-empty');
+      if (empty) { empty.hidden = shown > 0; }
     }
     el('queue-filter').addEventListener('input', applyQueueFilter);
 
@@ -615,25 +894,164 @@
     // saying nothing, because it reads as a value the queue actually has.
     const finite = value => Number.isFinite(value);
     const round = value => finite(value) ? num(Math.round(value * 1000) / 1000) : '\u2014';
-    const millis = seconds => finite(seconds) ? `${num(Math.round(seconds * 100000) / 100)} ms` : '\u2014';
+    /**
+     * Timer statistics arrive in milliseconds, because the bridge leaves DropwizardMeterRegistry's
+     * base time unit at its default of MILLISECONDS. This used to multiply by 1000 on the premise
+     * that they were seconds, so every timer in this view read a thousand times too high - a 12 ms
+     * publish was shown as "12,234 ms" and looked like a twelve-second stall.
+     */
+    const millis = value => finite(value) ? `${num(Math.round(value * 100) / 100)} ms` : '\u2014';
 
     /**
-     * Micrometer reports raw statistics; an operator wants the three numbers that mean something.
-     * Timer totals are seconds, so they are shown as a mean and a max in milliseconds.
+     * Anything whose type this view does not model: every statistic it carries, named and dumped.
+     * The typed sections below cover the four Micrometer types ignisMQ and Magazine actually
+     * register, so this is the escape hatch rather than the common path.
      */
-    function readValue(meter) {
-      const value = meter.measurements;
-      const figure = (label, text) => `<span class="figure"><em>${label}</em>${text}</span>`;
-      if (meter.type === 'TIMER' && value.COUNT > 0) {
-        return figure('count', num(value.COUNT)) + figure('mean', millis(value.TOTAL_TIME / value.COUNT))
-          + figure('max', millis(value.MAX));
-      }
-      if (meter.type === 'DISTRIBUTION_SUMMARY' && value.COUNT > 0) {
-        return figure('count', num(value.COUNT)) + figure('mean', round(value.TOTAL / value.COUNT))
-          + figure('max', round(value.MAX));
-      }
-      return Object.entries(value)
-        .map(([statistic, amount]) => figure(statistic.toLowerCase(), round(amount))).join('');
+    function rawValue(meter) {
+      return Object.entries(meter.measurements)
+        .map(([statistic, amount]) =>
+          `<span class="figure"><em>${statistic.toLowerCase()}</em>${round(amount)}</span>`).join('');
+    }
+
+    /**
+     * What each meter actually means, in a sentence, because a name like
+     * {@code ignismq.consumer.budget.exhausted} is not self-explanatory to someone reading this
+     * console for the first time - and an operator guessing at a meter is worse than one who knows
+     * they do not know. Units are stated wherever the number is not a plain count.
+     * <p>
+     * Written in ordinary queue words - publish, consume, waiting, retry - and not in the names of
+     * the internals. A reader who has to already know what a magazine or a run budget is to parse
+     * the sentence has been told nothing; these are read by people debugging at the time, not by
+     * people who wrote the library.
+     */
+    const METER_INFO = {
+      'ignismq.publish': 'How long it takes to publish one message and have it stored. Tagged with whether it worked.',
+      'ignismq.consume': 'How long it takes to deal with the messages one poll returned: reading them, running your handler, then deleting them or moving them to the sideline.',
+      'ignismq.messages': 'Where each message ended up: acked (handled, then deleted), sidelined, or ignored.',
+      'ignismq.poll': 'Whether a consumer found a message when it went looking. Mostly empty means you have more consumers than traffic to feed them.',
+      'ignismq.sideline': 'Why messages were moved to the sideline - the handler rejected them, threw, or timed out; no thread was free; or the message could not be read.',
+      'ignismq.consumer.budget.exhausted': 'A consumer gave its thread back while messages were still waiting. Now and then is by design; constantly means consumers are not keeping up.',
+      'ignismq.handler.duration': 'How long your handler takes on its own, not counting anything ignisMQ does around it. Tagged success, failure, timeout or saturated.',
+      'ignismq.handler.batch.size': 'How many messages your handler is given at a time. Only queues configured to deliver more than one report this.',
+      'ignismq.handler.executions': 'Whether the handler got to run at all. "pooled" ran; "refused" never ran, because no thread came free in time.',
+      'ignismq.handler.timeouts': 'Handler calls that ran longer than handlerTimeoutInMins. The message is sidelined and the thread taken back, though your handler may still be running.',
+      'ignismq.handler.threads.active': 'Handler threads busy right now.',
+      'ignismq.queue.depth': 'How many messages are waiting: published minus consumed. This is the one to alert on.',
+      'ignismq.queue.published': 'The number of messages published to this queue, in total.',
+      'ignismq.queue.consumed': 'The number of messages consumed from this queue, in total.',
+      'ignismq.queue.sidelined': 'Messages sitting in the sideline right now, waiting to be retried or dropped.',
+      'ignismq.queue.shovelled': 'Messages moved back out of the sideline into the main queue to be retried.',
+      'ignismq.queue.consumers': 'How many consumers this process is running for the queue. Not a cluster total.',
+      'ignismq.queue.create': 'How long creating a queue takes.',
+      'ignismq.queue.refresh': 'How long one check takes to bring this process in line with the queues stored in the database.',
+      'ignismq.sweep': 'How long one sweep takes. A sweep looks for messages a consumer picked up and never finished, and recovers them. Sweeps that failed are timed too.',
+      'ignismq.sweep.rehomed': 'Stuck messages the sweeper moved to the sideline.',
+      'ignismq.shovel': 'How long one retry run takes, moving messages from the sideline back into the main queue.',
+      'ignismq.shovel.moved': 'Messages the retry run moved. It counts the ones it had to put back in the sideline too, so read it as "moved somewhere safe".',
+      'ignismq.pool.threads': 'Threads in the shared worker pool right now.',
+      'ignismq.pool.threads.max': 'The most threads this pool is allowed to grow to - your workerThreads setting.',
+      'ignismq.pool.tasks.active': 'Pool tasks running right now.',
+      'ignismq.pool.tasks.due': 'Tasks that are already late, not merely queued. Steadily above zero means the pool has run out of threads.',
+      'ignismq.pool.task.wait': 'How long a task waited for a free thread after it was due. The clearest sign the pool is too small.',
+      'ignismq.pool.task.failures': 'Pool tasks that threw an error.',
+      'magazine.load.latency': 'The storage write behind a publish: how long it takes to save one message.',
+      'magazine.fire.latency': 'The storage read behind a poll: how long it takes to hand one message to a consumer.',
+      'magazine.load.outcomes': 'How those writes ended, tagged with the result.',
+      'magazine.fire.outcomes': 'How those reads ended, tagged with the result.',
+      'magazine.fire.claims': 'Messages picked up from storage by consumers.',
+      'magazine.fire.hole.skips': 'Empty slots skipped while reading - a place reserved for a message that was never written.',
+      'magazine.aerospike.calls': 'Calls made to Aerospike, tagged with the operation.',
+      'magazine.dedupe.outcomes': 'Results of the duplicate check, which stops the same message being stored twice.',
+    };
+
+    function info(meter) {
+      const text = METER_INFO[meter.name];
+      return text
+        ? ` <button type="button" class="hint" data-hint="${esc(text)}" aria-label="${esc(text)}">i</button>`
+        : '';
+    }
+
+    /**
+     * A meter's label: its name, plus only what distinguishes it from its siblings. The queue is
+     * already the group heading, so its tag is dropped rather than repeated on every row.
+     */
+    function meterLabel(meter) {
+      const rest = Object.entries(meter.tags).filter(([key]) => key !== 'queue' && key !== 'magazine');
+      const sideline = meter.tags.magazine && meter.tags.magazine.endsWith('_SIDELINE');
+      return esc(meter.name) + info(meter)
+        + (sideline ? ' <span class="chip">sideline</span>' : '')
+        + rest.map(([key, value]) => ` <span class="chip">${esc(key)}=${esc(value)}</span>`).join('');
+    }
+
+    const peak = (list, pick) => list.reduce((high, meter) => {
+      const value = pick(meter.measurements);
+      return finite(value) && value > high ? value : high;
+    }, 0);
+
+    /**
+     * A bar scaled against the largest value in its own table, which answers "which of these is the
+     * big one" far faster than reading a column of numbers. Deliberately relative: there is no
+     * absolute scale a latency or a count could be shown against here, and inventing one would be
+     * worse than offering none.
+     */
+    function bar(value, high) {
+      if (!finite(value) || high <= 0) { return ''; }
+      const share = Math.max(1, Math.round((value / high) * 100));
+      return `<span class="meter-bar" aria-hidden="true"><i style="width:${share}%"></i></span>`;
+    }
+
+    function table(caption, headers, rows) {
+      if (!rows.length) { return ''; }
+      const head = headers.map(header => `<th>${header}</th>`).join('');
+      const body = rows.map(cells => '<tr>' + cells.map((cell, index) => {
+        if (index === 0) { return `<td>${cell}</td>`; }
+        return headers[index] === '' ? `<td class="spread">${cell}</td>` : `<td class="num">${cell}</td>`;
+      }).join('') + '</tr>').join('');
+      return `<div class="section">${caption}</div>
+        <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+
+    /**
+     * One table per meter type rather than one table for all of them.
+     * <p>
+     * Every type carries different statistics, so a single "Current" column had to stringify all of
+     * them into one cell - counts, latencies and gauge readings side by side in the same space, none
+     * of them aligned with the row above. Split by type, each gets real columns that line up and can
+     * be scanned down the page, and the numbers become comparable.
+     */
+    function meterSections(list) {
+      const typed = type => list.filter(meter => meter.type === type);
+      const modelled = new Set(['TIMER', 'DISTRIBUTION_SUMMARY', 'COUNTER', 'GAUGE']);
+
+      const timers = typed('TIMER').filter(meter => meter.measurements.COUNT > 0);
+      const slowest = peak(timers, value => value.MAX);
+      const spreads = typed('DISTRIBUTION_SUMMARY').filter(meter => meter.measurements.COUNT > 0);
+      const widest = peak(spreads, value => value.MAX);
+      const counters = typed('COUNTER');
+      const busiest = peak(counters, value => value.COUNT);
+      const other = list.filter(meter => !modelled.has(meter.type));
+
+      return [
+        table('Timers', ['Meter', 'Count', 'Mean (since start)', 'Max (2 min)', ''],
+          timers.map(meter => {
+            const value = meter.measurements;
+            return [meterLabel(meter), num(value.COUNT), millis(value.TOTAL_TIME / value.COUNT),
+              millis(value.MAX), bar(value.MAX, slowest)];
+          })),
+        table('Distributions', ['Meter', 'Count', 'Mean', 'Max', ''],
+          spreads.map(meter => {
+            const value = meter.measurements;
+            return [meterLabel(meter), num(value.COUNT), round(value.TOTAL / value.COUNT),
+              round(value.MAX), bar(value.MAX, widest)];
+          })),
+        table('Counters', ['Meter', 'Count', ''],
+          counters.map(meter =>
+            [meterLabel(meter), num(meter.measurements.COUNT), bar(meter.measurements.COUNT, busiest)])),
+        table('Gauges', ['Meter', 'Value'],
+          typed('GAUGE').map(meter => [meterLabel(meter), round(meter.measurements.VALUE)])),
+        table('Other', ['Meter', 'Current'],
+          other.map(meter => [meterLabel(meter), rawValue(meter)])),
+      ].join('');
     }
 
     /**
@@ -669,25 +1087,16 @@
              consumed here, or metrics are switched off.</div>`;
         return;
       }
-      el('meters').innerHTML = groups.map((group, index) => {
+      el('meters').innerHTML = groups.map(group => {
         const title = group.queue === null
           ? 'Process &mdash; pools, schedulers and anything not tied to one queue'
           : `Queue <strong>${esc(group.queue)}</strong>`;
-        const rows = group.meters.map(meter => {
-          const rest = Object.entries(meter.tags).filter(([key]) => key !== 'queue' && key !== 'magazine');
-          const sideline = meter.tags.magazine && meter.tags.magazine.endsWith('_SIDELINE');
-          return `<tr><td>${esc(meter.name)}${sideline ? ' <span class="chip">sideline</span>' : ''}</td>
-            <td>${rest.map(([key, value]) => `<span class="chip">${esc(key)}=${esc(value)}</span>`).join('')
-              || '<span class="meta">&mdash;</span>'}</td>
-            <td>${readValue(meter)}</td></tr>`;
-        }).join('');
         // Open the process group and any single matching group; collapse the rest, so a deployment with
         // forty queues does not render forty expanded tables.
         const open = groups.length <= 2 || group.queue === null ? ' open' : '';
         return `<details class="group"${open}><summary>${title}
             <span class="count">${group.meters.length} meter${group.meters.length === 1 ? '' : 's'}</span></summary>
-          <table><thead><tr><th>Meter</th><th>Tags</th><th>Current</th></tr></thead>
-          <tbody>${rows}</tbody></table></details>`;
+          ${meterSections(group.meters)}</details>`;
       }).join('');
     }
     el('meter-filter').addEventListener('input', renderMeters);
@@ -697,6 +1106,74 @@
       // so there is no second scope this process could show.
       el('scope').innerHTML = `<b>${esc(clientId)}</b> &middot; farm ${esc(farmId)}`;
     }
+
+    /*
+     * Hint tooltips.
+     *
+     * These were title attributes until the delay made them useless: the browser waits about a
+     * second before painting a title and nothing can shorten that, so the only feedback on hover
+     * was the cursor change. This shows the text immediately instead.
+     *
+     * Bound once on document rather than per marker, because the meter tables are re-rendered from
+     * scratch on every refresh and per-element listeners would have to be re-attached each time.
+     * mouseover/mouseout and focusin/focusout are used over mouseenter/focus for the same reason -
+     * they bubble, so delegation works.
+     */
+    const tip = el('tip');
+
+    function hideTip() {
+      tip.classList.add('hidden');
+    }
+
+    function showTip(marker) {
+      const text = marker.dataset.hint;
+      if (!text) {
+        return;
+      }
+      tip.textContent = text;
+      tip.classList.remove('hidden');
+      // Measured only once it is laid out, since the height depends on how many lines the text wraps to.
+      const box = tip.getBoundingClientRect();
+      const anchor = marker.getBoundingClientRect();
+      const gap = 8;
+      // Above by preference; below when the marker is near the top of the viewport and there is no room.
+      const above = anchor.top - box.height - gap;
+      tip.style.top = `${above >= gap ? above : anchor.bottom + gap}px`;
+      // Centred on the marker, then pulled back inside the viewport so a hint on a far-right
+      // column does not render half off-screen.
+      const centred = anchor.left + anchor.width / 2 - box.width / 2;
+      tip.style.left = `${Math.max(gap, Math.min(centred, window.innerWidth - box.width - gap))}px`;
+    }
+
+    document.addEventListener('mouseover', (event) => {
+      const marker = event.target.closest('.hint');
+      if (marker) {
+        showTip(marker);
+      }
+    });
+    document.addEventListener('mouseout', (event) => {
+      if (event.target.closest('.hint')) {
+        hideTip();
+      }
+    });
+    document.addEventListener('focusin', (event) => {
+      const marker = event.target.closest('.hint');
+      if (marker) {
+        showTip(marker);
+      }
+    });
+    document.addEventListener('focusout', (event) => {
+      if (event.target.closest('.hint')) {
+        hideTip();
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        hideTip();
+      }
+    });
+    // The tooltip is position:fixed, so it would otherwise hang in place while the page moves under it.
+    window.addEventListener('scroll', hideTip, true);
 
     refreshPermissions();
     refreshInventory();

@@ -19,9 +19,13 @@ package com.phonepe.ignis.metric;
 import com.codahale.metrics.MetricRegistry;
 import com.phonepe.magazine.metrics.MagazineMetrics;
 import com.phonepe.magazine.metrics.StorageOperation;
+import io.micrometer.core.instrument.Measurement;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,6 +34,24 @@ class DropwizardMagazineMetricsTest {
 
     private final MetricRegistry metrics = new MetricRegistry();
     private final MeterRegistry bridge = DropwizardMagazineMetrics.bridgedTo(metrics);
+
+    @Test
+    void timerStatisticsLeaveTheBridgeInMilliseconds() {
+        final Timer timer = bridge.timer("magazine.load.latency");
+        // Recorded the way Magazine records it: a nanosecond delta.
+        timer.record(12_000_000L, TimeUnit.NANOSECONDS);
+        timer.record(8_000_000L, TimeUnit.NANOSECONDS);
+
+        final Map<String, Double> measurements = new LinkedHashMap<>();
+        for (final Measurement measurement : timer.measure()) {
+            measurements.put(measurement.getStatistic().name(), measurement.getValue());
+        }
+
+        assertEquals(2.0, measurements.get("COUNT"), 0.0);
+        assertEquals(20.0, measurements.get("TOTAL_TIME"), 0.001,
+                "20ms of recorded nanos must leave the bridge as 20, not 0.02 or 20000");
+        assertEquals(12.0, measurements.get("MAX"), 0.001, "and the max likewise, in milliseconds");
+    }
 
     @Test
     void publishesMagazineMetricsToDropwizard() {

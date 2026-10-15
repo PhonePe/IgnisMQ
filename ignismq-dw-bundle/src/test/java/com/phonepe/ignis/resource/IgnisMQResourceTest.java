@@ -479,17 +479,17 @@ class IgnisMQResourceTest {
         meterRegistry.counter("magazine.fire.latency", "magazine", "main");
         meterRegistry.counter("jvm.gc.pause");
 
-        final InstanceMetrics queue = readOnly.target("/ignismq/v1/instance/metrics")
+        final InstanceMetrics perQueue = readOnly.target("/ignismq/v1/instance/metrics")
                 .queryParam("queue", ORDERS).request().get(InstanceMetrics.class);
         final InstanceMetrics process = readOnly.target("/ignismq/v1/instance/metrics")
                 .queryParam("scope", "process").request().get(InstanceMetrics.class);
 
         assertEquals(Set.of(Map.of("queue", ORDERS, "outcome", "acked"), Map.of("magazine", ORDERS),
                         Map.of("magazine", ORDERS + "_SIDELINE")),
-                Set.copyOf(queue.meters().stream().map(MeterSample::tags).toList()));
+                Set.copyOf(perQueue.meters().stream().map(MeterSample::tags).toList()));
         assertEquals(List.of("ignismq.pool.task.failures", "magazine.fire.latency"),
                 process.meters().stream().map(MeterSample::name).toList());
-        assertEquals(7, queue.meterCount(), "every ignisMQ and Magazine meter, unfiltered; not the host's");
+        assertEquals(7, perQueue.meterCount(), "every ignisMQ and Magazine meter, unfiltered; not the host's");
     }
 
     /**

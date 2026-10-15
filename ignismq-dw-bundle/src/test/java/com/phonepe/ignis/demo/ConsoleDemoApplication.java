@@ -184,7 +184,7 @@ public final class ConsoleDemoApplication extends Application<ConsoleDemoConfigu
         for (int index = 0; index < 34; index++) {
             final String name = "SEND_COMMUNICATION_" + (2610150600L + random.nextInt(99_999_999)) + "1";
             // Campaign queues: mostly young, a quarter finished and deactivated, some idle.
-            final long age = index < 6 ? random.nextInt(3_600_000) : (long) (random.nextDouble() * 30 * DAY);
+            final long age = index < 6 ? random.nextLong(3_600_000L) : random.nextLong(30L * DAY);
             final boolean active = index % 4 != 3;
             final double rate = !active || index % 5 == 0 ? 0 : random.nextDouble() * 12;
             add(name, HANDLERS[index % 3 == 0 ? 0 : index % HANDLERS.length], 8, active, active, now - age,
@@ -291,8 +291,8 @@ public final class ConsoleDemoApplication extends Application<ConsoleDemoConfigu
         void tick(final long second) {
             // Traffic comes in waves over a few minutes, so the charts have a shape.
             final double wave = 1 + 0.6 * Math.sin(second / 45.0 + name.hashCode());
-            publish((int) Math.round(publishRate * wave * (0.7 + random.nextDouble() * 0.6)));
-            final int capacity = (int) Math.round(consumers.get() * (2.6 + random.nextDouble()));
+            publish((int) Math.round(publishRate * wave * (70 + random.nextInt(61)) / 100.0));
+            final int capacity = (int) Math.round(consumers.get() * (260 + random.nextInt(101)) / 100.0);
             final int available = (int) Math.min(depth.get(), capacity);
             for (int index = 0; index < available; index++) {
                 consumeOne();
@@ -384,7 +384,8 @@ public final class ConsoleDemoApplication extends Application<ConsoleDemoConfigu
         }
 
         private long nanos(final double fromMillis, final double toMillis) {
-            return (long) ((fromMillis + random.nextDouble() * (toMillis - fromMillis)) * 1_000_000);
+            final long from = (long) (fromMillis * 1_000_000);
+            return from + random.nextLong(Math.max(1L, (long) (toMillis * 1_000_000) - from));
         }
 
         /** Publishing picks a shard at random, so the backlog spreads evenly - except a drifting shard. */

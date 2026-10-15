@@ -133,13 +133,6 @@
     .result.ok { color:var(--good-ink); background:var(--good-soft); }
     .result.error { color:var(--bad); background:var(--bad-soft); }
     .empty { color:var(--muted); font-size:13px; padding:26px 16px; text-align:center; }
-    .hidden { display:none !important; }
-    /* The UA stylesheet's [hidden] rule is display:none, but any author rule that sets display
-       outranks it - and 'nav button' sets display:flex. So element.hidden = true left the queue
-       list entirely unfiltered, silently, because the property was set and simply had no effect.
-       Declared here once rather than per selector, so it cannot be reintroduced by the next rule
-       that happens to set display. */
-    [hidden] { display:none !important; }
     @media (max-width:900px) { .split { grid-template-columns:1fr; } nav { max-height:220px; } }
 
     /* theme switch */
@@ -244,7 +237,7 @@
 
     /* State filter under the queue search: one segmented control rather than three checkboxes,
        because the three choices are exclusive. */
-    .seg { display:flex; margin-top:9px; border:1px solid var(--line-strong); border-radius:7px; overflow:hidden; }
+    .seg { padding:0; margin-inline:0; min-width:0; display:flex; margin-top:9px; border:1px solid var(--line-strong); border-radius:7px; overflow:hidden; }
     .seg button { flex:1; border:0; border-right:1px solid var(--line-strong); background:transparent;
       color:var(--muted); font:inherit; font-size:12px; padding:6px 4px; cursor:pointer; white-space:nowrap; }
     .seg button:last-child { border-right:0; }
@@ -290,7 +283,12 @@
     .chart .keys b { font-weight:600; }
     .reason { color:var(--muted); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
       font-size:12px; margin-left:6px; }
-    </style>
+    /* Last in the sheet, so it wins over every earlier rule of equal specificity. The UA stylesheet's
+       [hidden] rule is display:none, but any author rule that sets display outranks it - 'nav button'
+       sets display:flex, which once left the queue list silently unfiltered. Keep any rule that sets
+       display on a hideable element at or below this specificity (one class or attribute). */
+    .hidden, [hidden] { display:none; }
+  </style>
 </head>
 <body>
 <header>
@@ -354,11 +352,11 @@
                     <h2>Queues <span class="tag cluster">cluster</span></h2>
                     <div class="body"><input id="queue-filter" class="filter" type="search" placeholder="Filter"
                                              aria-label="Filter queues" autocomplete="off">
-                        <div class="seg" id="state-filter" role="group" aria-label="Filter queues by state">
+                        <fieldset class="seg" id="state-filter" aria-label="Filter queues by state">
                             <button type="button" data-state="all" aria-pressed="true">All</button>
                             <button type="button" data-state="active" aria-pressed="false">Active</button>
                             <button type="button" data-state="inactive" aria-pressed="false">Inactive</button>
-                        </div>
+                        </fieldset>
                         <details class="more" id="more-filters">
                             <summary>More filters <span id="more-count"></span></summary>
                             <label class="field">Handler
@@ -1412,7 +1410,8 @@
 
     /** The latest per-second figure and its trend. */
     function rateCell(series) {
-      return `${series.length ? `${perSecond(series[series.length - 1])}/s` : '\u2014'}${sparkline(series)}`;
+      const latest = series.length ? perSecond(series[series.length - 1]) + '/s' : '\u2014';
+      return latest + sparkline(series);
     }
 
     /**
@@ -1426,10 +1425,12 @@
       if (series.some(line => line.points.length >= 2)) {
         const all = series.flatMap(line => line.points);
         const high = Math.max(...all, 1);
-        body = `<svg viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true">${series
+        const lines = series
           .filter(line => line.points.length >= 2)
           .map(line => `<polyline class="${line.seriesClass}" vector-effect="non-scaling-stroke"
-              points="${polyline(line.points, 300, 80, 0, high)}"/>`).join('')}</svg>`;
+              points="${polyline(line.points, 300, 80, 0, high)}"/>`)
+          .join('');
+        body = `<svg viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>`;
       }
       return `<div class="chart"><div class="keys"><b>${esc(title)}</b>${keys}</div>${body}</div>`;
     }
@@ -1494,7 +1495,7 @@
         const intervals = members.map(lastInterval).filter(Boolean);
         const calls = intervals.reduce((sum, interval) => sum + interval.calls, 0);
         const time = intervals.reduce((sum, interval) => sum + interval.time, 0);
-        return [label, num(count), millis(total / count), millis(calls > 0 ? time / calls : NaN), millis(max),
+        return [label, num(count), millis(total / count), millis(calls > 0 ? time / calls : Number.NaN), millis(max),
           rateCell(sumSeries(members.map(meter => rates(`${meterKey(meter)}#count`)))), bar(max, slowest)];
       };
       const rows = [];

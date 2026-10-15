@@ -94,8 +94,8 @@ class ConsoleDemoApplicationTest {
         final String page = client().target(url("/ignisConsole/")).request()
                 .get().readEntity(String.class);
 
-        assertTrue(page.contains("[hidden] { display:none !important; }"),
-                "hiding by property needs a rule that outranks 'nav button { display:flex }'");
+        assertTrue(page.contains(".hidden, [hidden] { display:none; }\n  </style>"),
+                "hiding by property needs a rule that outranks 'nav button { display:flex }': one class/attribute, last in the sheet");
         assertTrue(page.contains("No queue matches that filter."),
                 "and filtering everything out must say so rather than showing a blank panel");
     }

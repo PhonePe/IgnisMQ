@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
@@ -53,7 +54,7 @@ public final class QueueMeters {
     private static final String HANDLER_BATCH_SIZE = "handler.batch.size";
 
     /** Swapped for a discarding registry on {@link #close}, so late recordings register nothing. */
-    private volatile IgnisMetrics metrics;
+    private final AtomicReference<IgnisMetrics> metrics = new AtomicReference<>();
     private final String queueName;
     private final Tags queue;
     private final Timer publishSuccess;
@@ -69,14 +70,14 @@ public final class QueueMeters {
     private final Map<String, Meter> shovelOutcomes = new ConcurrentHashMap<>();
     /** Fields, so per-message lookups allocate no lambda. */
     private final Function<String, Meter> newSidelineReason =
-            value -> metrics.counter(IgnisMetrics.SIDELINE, tags(IgnisMetrics.TAG_REASON, value));
+            value -> metrics.get().counter(IgnisMetrics.SIDELINE, tags(IgnisMetrics.TAG_REASON, value));
     private final Function<String, Meter> newHandlerOutcome =
-            value -> metrics.timer(IgnisMetrics.HANDLER_DURATION, tags(IgnisMetrics.TAG_OUTCOME, value));
+            value -> metrics.get().timer(IgnisMetrics.HANDLER_DURATION, tags(IgnisMetrics.TAG_OUTCOME, value));
     private final Function<String, Meter> newShovelOutcome =
-            value -> metrics.timer(IgnisMetrics.SHOVEL, tags(IgnisMetrics.TAG_OUTCOME, value));
+            value -> metrics.get().timer(IgnisMetrics.SHOVEL, tags(IgnisMetrics.TAG_OUTCOME, value));
 
     public QueueMeters(final IgnisMetrics metrics, final String queueName) {
-        this.metrics = metrics;
+        this.metrics.set(metrics);
         this.queueName = queueName;
         this.queue = Tags.of(IgnisMetrics.TAG_QUEUE, queueName);
         this.publishSuccess = metrics.timer(IgnisMetrics.PUBLISH,
@@ -139,7 +140,7 @@ public final class QueueMeters {
 
     /** Recorded only by batching queues. */
     public void handlerBatch(final int size) {
-        resolve(lazy, HANDLER_BATCH_SIZE, key -> metrics.summary(IgnisMetrics.HANDLER_BATCH_SIZE, queue),
+        resolve(lazy, HANDLER_BATCH_SIZE, key -> metrics.get().summary(IgnisMetrics.HANDLER_BATCH_SIZE, queue),
                 DistributionSummary.class).record(size);
     }
 
@@ -163,11 +164,11 @@ public final class QueueMeters {
      * The gauge is pulled, so the source must be the live object rather than a snapshot.
      */
     public <T> void gaugeConsumers(final T source, final ToDoubleFunction<T> count) {
-        metrics.gauge(IgnisMetrics.QUEUE_CONSUMERS, queue, source, count);
+        metrics.get().gauge(IgnisMetrics.QUEUE_CONSUMERS, queue, source, count);
     }
 
     public boolean isEnabled() {
-        return metrics.isEnabled();
+        return metrics.get().isEnabled();
     }
 
     /**
@@ -176,8 +177,7 @@ public final class QueueMeters {
      * @return number of meters removed.
      */
     public int close(final Collection<String> magazineIdentifiers) {
-        final IgnisMetrics registered = metrics;
-        metrics = discarding();
+        final IgnisMetrics registered = metrics.getAndSet(discarding());
         lazy.clear();
         sidelineReasons.clear();
         handlerOutcomes.clear();
@@ -193,11 +193,11 @@ public final class QueueMeters {
 
     /** {@code tagKey} null means the queue tag alone. */
     private Counter counter(final String key, final String name, final String tagKey, final String tagValue) {
-        return resolve(lazy, key, ignored -> metrics.counter(name, tags(tagKey, tagValue)), Counter.class);
+        return resolve(lazy, key, ignored -> metrics.get().counter(name, tags(tagKey, tagValue)), Counter.class);
     }
 
     private Timer timer(final String key, final String name, final String tagKey, final String tagValue) {
-        return resolve(lazy, key, ignored -> metrics.timer(name, tags(tagKey, tagValue)), Timer.class);
+        return resolve(lazy, key, ignored -> metrics.get().timer(name, tags(tagKey, tagValue)), Timer.class);
     }
 
     /** Plain get first, so an existing meter costs no allocation. */

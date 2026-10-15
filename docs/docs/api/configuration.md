@@ -48,11 +48,13 @@ Process-wide tunables, passed as the manager's last constructor argument. `null`
 |---|---|---|---|
 | `workerThreads` | `int` | `256` | Ceiling on threads running consumers and shovels, and on those running message handlers. Size it as **concurrently active queues x their concurrency**, not as total configured consumers. |
 | `metricsEnabled` | `boolean` | `true` | When false, every `ignismq.*` meter becomes a no-op — and so do Magazine's `magazine.*` meters. |
+| `perQueueStorageMetrics` | `boolean` | `false` | When false, Magazine's `magazine.*` meters are folded into `magazine=main` and `magazine=sideline` for the whole process rather than kept per queue. Turn on to find which queue drives storage load. `ignismq.*` meters are per queue either way. |
 
 ```java
 IgnisMQSettings.builder()
     .workerThreads(128)
     .metricsEnabled(true)
+    .perQueueStorageMetrics(false)
     .build();
 ```
 

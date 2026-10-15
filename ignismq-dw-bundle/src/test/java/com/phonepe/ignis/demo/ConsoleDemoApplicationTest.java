@@ -19,6 +19,7 @@ package com.phonepe.ignis.demo;
 import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.response.ActionResult;
 import com.phonepe.ignis.response.QueueDetail;
+import com.phonepe.ignis.response.InstanceMetrics;
 import com.phonepe.ignis.response.QueueSummary;
 import io.dropwizard.testing.ConfigOverride;
 import io.dropwizard.testing.junit5.DropwizardAppExtension;
@@ -148,11 +149,18 @@ class ConsoleDemoApplicationTest {
         final String css = style.group(1).replaceAll("(?s)/\\*.*?\\*/", "");
 
         final Map<String, Integer> definitions = new LinkedHashMap<>();
-        // [ \t] rather than \s: \s matches newlines, which combined with a multiline ^ lets the
-        // engine retry the same span from every line and backtrack quadratically.
-        final Matcher rule = Pattern.compile("(?m)^[ \\t]*([^{}@\\n][^{}\\n]*)\\{").matcher(css);
-        while (rule.find()) {
-            for (final String selector : rule.group(1).split(",")) {
+        for (final String line : css.lines().toList()) {
+            final int brace = line.indexOf('{');
+            if (brace < 0) {
+                continue;
+            }
+            final String selectors = line.substring(0, brace).trim();
+            // '@' is a media or supports block, '}' means a rule closed earlier on the same line -
+            // neither is a selector this is looking for.
+            if (selectors.isEmpty() || selectors.startsWith("@") || selectors.contains("}")) {
+                continue;
+            }
+            for (final String selector : selectors.split(",")) {
                 final String bare = selector.trim();
                 if (bare.matches("\\.[a-z][a-z0-9-]*")) {
                     definitions.merge(bare, 1, Integer::sum);
@@ -228,7 +236,10 @@ class ConsoleDemoApplicationTest {
                 .request().get(new GenericType<>() {
                 });
 
-        assertEquals(3, queues.size());
+        assertTrue(queues.size() > 30, "the demo looks like a busy instance, not a toy");
+        assertTrue(queues.stream().anyMatch(summary -> !summary.active()), "some campaigns have finished");
+        assertTrue(queues.stream().map(QueueSummary::messageHandlerType).distinct().count() > 1,
+                "and there is more than one handler to filter by");
         assertTrue(summary(queues, "order-events").active());
         assertTrue(summary(queues, "order-events").heldHere());
         assertTrue(!summary(queues, "legacy-imports").active());
@@ -277,6 +288,26 @@ class ConsoleDemoApplicationTest {
         final QueueDetail detail = client().target(url("/ignismq/v1/queues/order-events"))
                 .request().get(QueueDetail.class);
         assertEquals(7, detail.instance().consumers(), "the demo starts at four consumers");
+    }
+
+    /**
+     * The instance tab must show what a real process shows: meters produced by the real meter
+     * classes, with Magazine's folded to main/sideline and broken down by operation.
+     */
+    @Test
+    void theDemoRecordsTrafficThroughTheRealMeters() {
+        final InstanceMetrics process = client().target(url("/ignismq/v1/instance/metrics"))
+                .queryParam("scope", "process").request().get(InstanceMetrics.class);
+        final InstanceMetrics queue = client().target(url("/ignismq/v1/instance/metrics"))
+                .queryParam("queue", "order-events").request().get(InstanceMetrics.class);
+
+        assertTrue(process.meters().stream().anyMatch(meter -> meter.name().equals("magazine.aerospike.calls")
+                && "main".equals(meter.tags().get("magazine"))
+                && "claim_fire_pointer".equals(meter.tags().get("operation"))));
+        assertTrue(queue.meters().stream().noneMatch(meter -> meter.name().startsWith("magazine.")),
+                "storage meters are per process unless perQueueStorageMetrics is set");
+        assertEquals(6, queue.meters().stream().filter(meter -> meter.type().equals("GAUGE")).count(),
+                "every queue gauge, including the consumer count");
     }
 
     private static QueueSummary summary(final List<QueueSummary> queues, final String name) {

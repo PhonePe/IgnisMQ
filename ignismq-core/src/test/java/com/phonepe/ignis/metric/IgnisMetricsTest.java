@@ -220,4 +220,39 @@ class IgnisMetricsTest {
     private interface Executable {
         void run() throws Exception;
     }
+
+    @Test
+    @DisplayName("Magazine's per-queue meters fold into main and sideline, and aggregate there")
+    void magazineMetersCollapseToMainAndSideline() {
+        registry.config().meterFilter(IgnisMetrics.collapseMagazineTag());
+
+        registry.counter("magazine.aerospike.calls", "magazine", "orders", "operation", "read_data").increment();
+        registry.counter("magazine.aerospike.calls", "magazine", "payments", "operation", "read_data").increment(2);
+        registry.counter("magazine.aerospike.calls", "magazine", "orders_SIDELINE", "operation", "read_data")
+                .increment(5);
+        // ignisMQ's own meters use magazine=main/sideline already and carry the queue; untouched.
+        registry.counter(IgnisMetrics.SWEEP_REHOMED, "queue", "orders", "magazine", "sideline").increment();
+
+        assertEquals(3.0, registry.get("magazine.aerospike.calls").tags("magazine", "main").counter().count());
+        assertEquals(5.0, registry.get("magazine.aerospike.calls").tags("magazine", "sideline").counter().count());
+        assertEquals(1.0, registry.get(IgnisMetrics.SWEEP_REHOMED).tags("queue", "orders").counter().count());
+        assertEquals(3, registry.getMeters().size(), "two storage series for every queue, not two per queue");
+    }
+
+    @Test
+    @DisplayName("storage built for a queue not run here records into the folded series, or nowhere")
+    void transientStorageRegistryFollowsFolding() {
+        final IgnisMetrics folded = new IgnisMetrics(registry, true, true);
+        assertSame(registry, folded.transientStorageRegistry(), "folded meters are shared series, so keep them");
+
+        final IgnisMetrics perQueue = new IgnisMetrics(new SimpleMeterRegistry(), true, false);
+        assertNotSame(perQueue.getRegistry(), perQueue.transientStorageRegistry(),
+                "per-queue meters for a queue never deactivated here would never be removed");
+        assertNotSame(perQueue.transientStorageRegistry(), perQueue.transientStorageRegistry(),
+                "and a shared discarding registry would still hold them");
+
+        final IgnisMetrics disabled = new IgnisMetrics(registry, false, true);
+        assertFalse(disabled.isStorageMetersFolded(), "no filter is installed when metrics are off");
+        assertNotSame(registry, disabled.transientStorageRegistry());
+    }
 }

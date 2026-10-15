@@ -243,6 +243,11 @@ public final class MagazineQueue<M> implements IQueue<M>, RefreshableQueue {
         sidelineConsumers.removeIf(ScheduledTask::isDone);
     }
 
+    /** @return number of meters removed: this queue's and both its magazines'. */
+    int closeMeters() {
+        return meters.close(List.of(magazine.getMagazineIdentifier(), sidelineMagazine.getMagazineIdentifier()));
+    }
+
     /**
      * The live magazines behind this queue.
      * <p>

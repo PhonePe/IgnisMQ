@@ -302,6 +302,7 @@ class QueueSweeperTest extends AerospikeTestBase {
 
         awaitWindowRollover();
         reusing.sweepQueue(queue, entity);
+        awaitWindowRollover();
         reusing.sweepQueue(queue, reload(queue));
 
         // The registry's magazines were used, not freshly built ones.
@@ -327,9 +328,50 @@ class QueueSweeperTest extends AerospikeTestBase {
 
         awaitWindowRollover();
         missing.sweepQueue(queue, entity);
+        awaitWindowRollover();
         missing.sweepQueue(queue, reload(queue));
 
         assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
+    }
+
+    /**
+     * Folded, the leader's sweep of a queue it does not run is real Aerospike traffic worth counting,
+     * and it lands in the process-wide series without creating any per-queue meter.
+     */
+    @Test
+    void testSweepOfAQueueNotRunHereIsCountedInTheFoldedStorageMeters() {
+        final String queue = "SWEEP_FOLDED";
+        final QueueEntity entity = store(queue, 0L);
+        final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        final QueueSweeper folded = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient, FARM_ID,
+                new IgnisMetrics(registry, true, true), name -> null);
+
+        folded.sweepQueue(queue, entity);
+
+        assertTrue(registry.find("magazine.aerospike.calls").tag("magazine", "main")
+                .tag("operation", "read_fire_history").counters().stream()
+                .mapToDouble(io.micrometer.core.instrument.Counter::count).sum() > 0);
+        assertTrue(registry.getMeters().stream().noneMatch(meter -> {
+            final String magazine = meter.getId().getTag("magazine");
+            return queue.equals(magazine) || Utils.getSidelineQueueName(queue).equals(magazine);
+        }), "no meter is kept per queue");
+    }
+
+    /**
+     * Per queue, the same sweep would leave meters for a queue this process never deactivates, so
+     * they are discarded.
+     */
+    @Test
+    void testSweepOfAQueueNotRunHereRegistersNothingWhenStorageMetersArePerQueue() {
+        final String queue = "SWEEP_PER_QUEUE";
+        final QueueEntity entity = store(queue, 0L);
+        final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        final QueueSweeper perQueue = new QueueSweeper(service, CLIENT_ID, baseStorage, storageClient, FARM_ID,
+                new IgnisMetrics(registry, true, false), name -> null);
+
+        perQueue.sweepQueue(queue, entity);
+
+        assertTrue(registry.getMeters().stream().noneMatch(meter -> meter.getId().getName().startsWith("magazine.")));
     }
 
     /**
@@ -367,6 +409,7 @@ class QueueSweeperTest extends AerospikeTestBase {
 
         awaitWindowRollover();
         sweeper.sweepQueue(queue, entity);
+        awaitWindowRollover();
         sweeper.sweepQueue(queue, reload(queue));
 
         assertEquals("orphan", magazine(Utils.getSidelineQueueName(queue)).fire().getData());
@@ -416,13 +459,16 @@ class QueueSweeperTest extends AerospikeTestBase {
      * The checkpoint window must roll, because a checkpoint records where the pointer stood when the
      * window opened - which for these tests is before anything was fired. And a checkpoint written
      * during a pass is invisible to that same pass, because resolution runs against the pre-write
-     * snapshot, so the pass that records is never the pass that acts. Hence: wait out one window,
-     * record, then sweep.
+     * snapshot, so the pass that records is never the pass that acts. And a checkpoint is labelled
+     * with the end of the window it was observed in - never earlier than the observation - so it
+     * only becomes answerable once that window has closed. Hence: wait out one window, record,
+     * wait out another, then sweep.
      */
     private void sweepTwice(final String queue, final QueueEntity entity,
                             final Magazine<String> magazine, final Magazine<String> sideline) {
         awaitWindowRollover();
         sweeper.sweep(queue, entity, magazine, sideline);
+        awaitWindowRollover();
         sweeper.sweep(queue, reload(queue), magazine, sideline);
     }
 

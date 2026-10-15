@@ -70,6 +70,25 @@ namespace half-populated is worse than removing it.
 draft it left Magazine's alone; that was reversed, because a caller cannot be asked to configure a
 transitive dependency they never chose.
 
+### Fewer meters, and Magazine's are per process
+
+With many queues, registering every possible meter per queue reached tens of thousands of meters per
+process. Three changes keep it bounded:
+
+- **`magazine.*` meters are tagged `magazine=main` or `magazine=sideline` for the whole process**, not
+  per queue. Queries on `magazine=<queue>` stop matching; sum over `main`/`sideline` instead. Set
+  `IgnisMQSettings.perQueueStorageMetrics(true)` to keep per-queue storage meters, for example while
+  finding which queue drives Aerospike load.
+- **Meters are registered on first use.** A queue starts with publish, consume, poll and ack meters;
+  failures, sideline reasons, handler and shovel outcomes and timeouts appear when they first happen.
+  Rates and sums are unaffected; an alert that expects a series to exist at zero needs a default.
+- **A queue's meters are removed when it is deactivated or expires here**, instead of staying until
+  the process restarts.
+
+Magazine 2.0.2 also cuts fire-history writes to at most one batch per magazine per window, so
+`magazine.aerospike.calls{operation=write_fire_history}` drops sharply, and the sweeper sees
+abandoned messages about one checkpoint window (`sweepDuration / 8`) later.
+
 ## Threading — the silent one
 
 !!! danger "`concurrency` is now a target, not a guarantee. **Silent.**"

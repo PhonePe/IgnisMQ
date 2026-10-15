@@ -27,6 +27,22 @@ meter. Tag values come from closed sets, so cardinality is `queue count x a cons
 
 IgnisMQ also passes its `MeterRegistry` to Magazine, so `magazine.*` meters appear alongside these.
 
+### How many meters a queue costs
+
+- **Created with the queue:** `ignismq.publish{outcome=success}`, `ignismq.consume`,
+  `ignismq.poll{message|empty}`, `ignismq.messages{outcome=acked}`, and the `ignismq.queue.*` gauges.
+- **Created the first time they happen:** publish failures, every sideline reason, handler and shovel
+  outcomes, timeouts, batch sizes, `ignored`/`sidelined` message counts. An absent meter reads as
+  zero in rates and sums; an alert written as "this series exists and is 0" needs a default instead.
+- **Magazine's `magazine.*` meters are not per queue** unless `perQueueStorageMetrics` is set. They
+  are folded into `magazine=main` and `magazine=sideline` for the process: Aerospike calls by
+  operation, read/write latency and claim outcomes describe storage, not one queue.
+- **Removed when the queue stops running here** (deactivation, expiry): every meter tagged with the
+  queue, and its Magazine meters if they are per queue.
+- **Sweeps of queues not run here** (the leader sweeps every queue) record into the folded
+  `main`/`sideline` series. With `perQueueStorageMetrics` they are not recorded, because nothing on
+  this instance would ever remove those per-queue meters.
+
 ## The message path
 
 | Meter | Type | Tags | Measures |

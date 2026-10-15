@@ -55,7 +55,7 @@ if you set one.
 | `GET` | `/queues/{name}` | Cluster, plus the instance view when this process serves it | none |
 | `GET` | `/queues/{name}/shards` | Instance - `409` if this process does not serve the queue | none |
 | `GET` | `/instance` | Instance | none |
-| `GET` | `/instance/metrics` | Instance | none |
+| `GET` | `/instance/metrics` | Instance. `?queue=NAME` for one queue, `?scope=process` for meters tied to no queue | none |
 | `GET` | `/whoami` | The caller | none |
 | `POST` | `/queues/{name}/shovel` | Instance, or cluster with `intervalSeconds` | `ignismq_operate` |
 | `POST` | `/queues/{name}/sweep` | Cluster | `ignismq_operate` |
@@ -131,8 +131,11 @@ answered by throughput under concurrency, not by this table.
 ### The instance tab
 
 `GET /instance` reports the process and the queues it is running. `GET /instance/metrics` reports
-**every ignisMQ and Magazine meter this process currently holds**, read straight from the meter
-registry so it cannot drift from what a scrape would report.
+**the ignisMQ and Magazine meters this process currently holds**, read straight from the meter
+registry so it cannot drift from what a scrape would report. With hundreds of queues that is tens of
+thousands of meters, so it can be narrowed: `?scope=process` returns the meters tied to no queue, and
+`?queue=NAME` one queue's. `meterCount` always counts every ignisMQ and Magazine meter in the process, whatever the filter. The dashboard uses only the
+narrowed forms: the process meters on every refresh, and a queue's meters when its group is opened.
 
 Magazine's meters are included deliberately: ignisMQ's own meters say nothing about the storage calls
 underneath them, and an operator reading one without the other draws the wrong conclusion.
@@ -140,11 +143,54 @@ underneath them, and an operator reading one without the other draws the wrong c
 The dashboard groups them rather than listing them flat, because forty rows in name order answer no
 question:
 
-- **Process** — pools, schedulers, and anything not tied to one queue
-- **One group per queue** — that queue's meters *and* the Magazine meters beneath it, including its
-  sideline magazine, which carries its own tag value and is folded in and marked
-- Free-text search across meter names and tag values, and a link from any queue on the Queues tab
-  straight to its own meters here
+- **Process** — pools, schedulers, and Magazine's storage meters (`magazine.*`, folded to `main` and
+  `sideline` for the process)
+- **One group per queue running here**, alphabetically, 15 at a time. A queue's meters are fetched when
+  its group is opened. With `perQueueStorageMetrics` on, the queue's Magazine meters appear here too
+- Counters and timers sharing a name — Aerospike calls by operation, messages by outcome, handler
+  duration by outcome — are one row, expanding to the members. A counter row shows the total and lists
+  zero members on one line; each Aerospike operation says what queue operation it serves. A timer row
+  adds up counts and rates, takes its mean as total time over total calls (not an average of means),
+  and its max from the slowest member
+- A filter over queue names and loaded meters, and a link from any queue on either tab straight to
+  its meters
+
+"Queues running here" sits below the meters in its own scrolling box with its own filter, so a
+process with hundreds of queues does not push everything else off the page.
+
+### Finding a queue
+
+The queue list filters by name and by **All / Active / Inactive**, with counts. **More filters** adds
+handler (with counts), created time (last hour, 24 hours, 7 days, 30 days, or older than 30 days),
+whether the queue runs on this instance, and sorting by name or age. Each entry shows its handler and
+age under the name.
+
+### Trends
+
+The page refreshes every 10 seconds by default; the interval is selectable in the header (5, 10, 30
+or 60 seconds, or paused) and remembered per browser. Each refresh adds a sample, and from those
+samples the console draws:
+
+- on a queue: **backlog** (unconsumed and sidelined) and **published vs consumed per second**;
+- on the instance tab: a **per-second rate** with a sparkline for every counter and timer, the
+  **mean of the last interval** for timers next to the lifetime mean, and a trend for every gauge.
+
+How each figure is worked out:
+
+| Figure | Calculation |
+|---|---|
+| Per second | `(value now − previous value) ÷ seconds between the two samples`; a drop (a restart) counts as 0 |
+| Mean (last refresh) | `Δ total time ÷ Δ count` between the last two samples, so only the calls since the previous refresh |
+| Sparkline | The last 60 per-second values, scaled from 0 to that row's own peak - it compares a row with itself, not with other rows |
+| Gauge trend | The gauge's values as sampled |
+| Queue per second | Rates of the queue's stored published and consumed totals, so all instances, unlike the instance tab |
+
+A row reads "collecting" until it has two samples. The queue depth is cached for `cacheSeconds`, so at
+an interval shorter than that, consecutive samples can repeat and draw a zero followed by a spike.
+
+The history lives in the browser only, holds the last 60 samples, and covers only meters the page
+has loaded, so it adds no requests and does not grow with the number of queues. A trend therefore
+starts when the page opens; for longer history use your metrics backend.
 
 Meters are grouped by queue, and within a queue by type &mdash; timers, distributions, counters and
 gauges each get their own table, because each carries different statistics and a single shared column
@@ -330,7 +376,7 @@ synchronously on the server and can take minutes on a large queue.** Without tha
 looks inert invites a second click, and the second click is a second sweep.
 
 **`cacheSeconds` is not a detail.** Rendering the console is a storage read per queue, fanned out
-over every shard. An open browser tab polls every thirty seconds; anything scripted polls harder. The
+over every shard. An open browser tab polls every 10 seconds by default; anything scripted polls harder. The
 cache is what stops a console being a load source against the cluster serving production traffic,
 and it is the same argument behind the three-minute TTL on the `ignis.queue.stats` gauge.
 
@@ -347,17 +393,14 @@ mvn -B -pl ignismq-dw-bundle exec:java -Dexec.classpathScope=test \
 
 Then open <http://localhost:8080/ignisConsole/>.
 
-Its three queues are chosen to show the states that are easiest to get wrong:
+It runs about forty queues with a mix of handlers, ages and states, and simulates their traffic once
+a second through the real `QueueMeters` and Magazine `MagazineMetrics`, with the same
+`magazine.*` folding the manager installs. The instance tab therefore shows the meters a real process
+registers, and the charts move.
 
-| Queue | Shows |
-|---|---|
-| `order-events` | Active and adopted here: an even shard spread with **one shard drifting behind**, which is the only thing that view can honestly diagnose |
-| `payment-retries` | Active but not yet adopted here: configuration, and explicitly no depth |
-| `legacy-imports` | Deactivated, and still listed |
-
-The demo grants both roles unconditionally so the actions can be tried, and the
-stand-in is stateful — scaling consumers and deactivating a queue really do change what the console
-then shows. **A real deployment must not grant the role that way.**
+The demo grants both roles unconditionally so the actions can be tried, and the stand-in is
+stateful — scaling consumers and deactivating a queue really do change what the console then shows.
+**A real deployment must not grant the role that way.**
 
 ## What is deliberately missing
 

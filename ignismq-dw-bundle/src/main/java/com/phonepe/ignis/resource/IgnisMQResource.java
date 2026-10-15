@@ -76,8 +76,10 @@ public final class IgnisMQResource {
 
     @GET
     @Path("/instance/metrics")
-    public InstanceMetrics metrics() {
-        return service.metrics();
+    public InstanceMetrics metrics(@QueryParam("queue") final String queue,
+                                   @QueryParam("scope") final String scope) {
+        // ?queue=NAME for one queue, ?scope=process for meters tied to no queue, neither for all.
+        return service.metrics(queue, "process".equals(scope));
     }
 
     @GET

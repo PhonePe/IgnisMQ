@@ -18,66 +18,69 @@ package com.phonepe.ignis.metric;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 
 /**
- * Every meter belonging to one queue, resolved once at construction.
+ * Every meter belonging to one queue.
  * <p>
  * The queue's collaborators take this rather than a registry and a name, so none of them builds a
- * meter, holds a tag set or decides whether instrumentation is on. Resolving a meter costs a tag
- * set, a {@code Meter.Id} and a registry lookup, and the message path records several per message,
- * so nothing here resolves anything after construction. The two string-keyed dimensions are closed
- * sets, pre-resolved for their known values and falling back to the registry for anything else.
+ * meter, holds a tag set or decides whether instrumentation is on.
+ * <p>
+ * Publish, consume, poll and ack meters are created up front; the rest on first use.
+ * {@link #close} removes all of them, including the Magazine meters underneath.
  */
 public final class QueueMeters {
 
-    private static final String[] SIDELINE_REASONS = {
-            IgnisMetrics.REASON_REJECTED, IgnisMetrics.REASON_EXCEPTION, IgnisMetrics.REASON_TIMEOUT,
-            IgnisMetrics.REASON_SATURATED, IgnisMetrics.REASON_UNREADABLE,
-            IgnisMetrics.REASON_SIDELINE_REFUSED};
-    private static final String[] HANDLER_OUTCOMES = {
-            IgnisMetrics.SUCCESS, IgnisMetrics.FAILURE, IgnisMetrics.REASON_TIMEOUT,
-            IgnisMetrics.REASON_SATURATED};
-    private static final String[] SHOVEL_OUTCOMES = {IgnisMetrics.SUCCESS, IgnisMetrics.FAILURE};
+    private static final String PUBLISH_FAILURE = "publish.failure";
+    private static final String SIDELINED_MESSAGES = "messages.sidelined";
+    private static final String IGNORED_MESSAGES = "messages.ignored";
+    private static final String BUDGET_EXHAUSTED = "budget.exhausted";
+    private static final String HANDLER_TIMEOUTS = "handler.timeouts";
+    private static final String SHOVEL_MOVED = "shovel.moved";
+    private static final String HANDLER_BATCH_SIZE = "handler.batch.size";
 
-    private final IgnisMetrics metrics;
+    /** Swapped for a discarding registry on {@link #close}, so late recordings register nothing. */
+    private volatile IgnisMetrics metrics;
+    private final String queueName;
     private final Tags queue;
     private final Timer publishSuccess;
-    private final Timer publishFailure;
     private final Timer consume;
     private final Counter pollMessage;
     private final Counter pollEmpty;
     private final Counter ackedMessages;
-    private final Counter sidelinedMessages;
-    private final Counter ignoredMessages;
-    private final Counter budgetExhaustedRuns;
-    private final Counter handlerTimeouts;
-    private final Counter shovelMovedMessages;
-    /**
-     * The one meter not resolved at construction: a queue that does not batch must not publish it at
-     * all, and only the first recording proves the queue batches. Resolved once, on that first call.
-     */
-    private final AtomicReference<DistributionSummary> handlerBatchSize = new AtomicReference<>();
-    private final Map<String, Counter> sidelineReasons = new ConcurrentHashMap<>();
-    private final Map<String, Timer> handlerOutcomes = new ConcurrentHashMap<>();
-    private final Map<String, Timer> shovelOutcomes = new ConcurrentHashMap<>();
+    /** Single meters registered on first use, keyed by a constant of this class. */
+    private final Map<String, Meter> lazy = new ConcurrentHashMap<>();
+    /** Tagged dimensions, keyed by tag value so lookups allocate nothing. */
+    private final Map<String, Meter> sidelineReasons = new ConcurrentHashMap<>();
+    private final Map<String, Meter> handlerOutcomes = new ConcurrentHashMap<>();
+    private final Map<String, Meter> shovelOutcomes = new ConcurrentHashMap<>();
+    /** Fields, so per-message lookups allocate no lambda. */
+    private final Function<String, Meter> newSidelineReason =
+            value -> metrics.counter(IgnisMetrics.SIDELINE, tags(IgnisMetrics.TAG_REASON, value));
+    private final Function<String, Meter> newHandlerOutcome =
+            value -> metrics.timer(IgnisMetrics.HANDLER_DURATION, tags(IgnisMetrics.TAG_OUTCOME, value));
+    private final Function<String, Meter> newShovelOutcome =
+            value -> metrics.timer(IgnisMetrics.SHOVEL, tags(IgnisMetrics.TAG_OUTCOME, value));
 
     public QueueMeters(final IgnisMetrics metrics, final String queueName) {
         this.metrics = metrics;
+        this.queueName = queueName;
         this.queue = Tags.of(IgnisMetrics.TAG_QUEUE, queueName);
         this.publishSuccess = metrics.timer(IgnisMetrics.PUBLISH,
                 queue.and(IgnisMetrics.TAG_OUTCOME, IgnisMetrics.SUCCESS));
-        this.publishFailure = metrics.timer(IgnisMetrics.PUBLISH,
-                queue.and(IgnisMetrics.TAG_OUTCOME, IgnisMetrics.FAILURE));
         this.consume = metrics.timer(IgnisMetrics.CONSUME, queue);
         this.pollMessage = metrics.counter(IgnisMetrics.POLL,
                 queue.and(IgnisMetrics.TAG_RESULT, IgnisMetrics.MESSAGE));
@@ -85,33 +88,20 @@ public final class QueueMeters {
                 queue.and(IgnisMetrics.TAG_RESULT, IgnisMetrics.EMPTY));
         this.ackedMessages = metrics.counter(IgnisMetrics.MESSAGES,
                 queue.and(IgnisMetrics.TAG_OUTCOME, IgnisMetrics.ACKED));
-        this.sidelinedMessages = metrics.counter(IgnisMetrics.MESSAGES,
-                queue.and(IgnisMetrics.TAG_OUTCOME, IgnisMetrics.SIDELINED));
-        this.ignoredMessages = metrics.counter(IgnisMetrics.MESSAGES,
-                queue.and(IgnisMetrics.TAG_OUTCOME, IgnisMetrics.IGNORED));
-        this.budgetExhaustedRuns = metrics.counter(IgnisMetrics.BUDGET_EXHAUSTED, queue);
-        this.handlerTimeouts = metrics.counter(IgnisMetrics.HANDLER_TIMEOUTS, queue);
-        this.shovelMovedMessages = metrics.counter(IgnisMetrics.SHOVEL_MOVED, queue);
-        for (final String reason : SIDELINE_REASONS) {
-            sidelineReasons.put(reason, sidelineCounter(reason));
-        }
-        for (final String outcome : HANDLER_OUTCOMES) {
-            handlerOutcomes.put(outcome, handlerTimer(outcome));
-        }
-        for (final String outcome : SHOVEL_OUTCOMES) {
-            shovelOutcomes.put(outcome, shovelTimer(outcome));
-        }
     }
 
     /**
      * For collaborators built outside a manager, which in practice means tests.
      */
     public static QueueMeters unmetered(final String queueName) {
-        return new QueueMeters(new IgnisMetrics(new CompositeMeterRegistry(), false), queueName);
+        return new QueueMeters(discarding(), queueName);
     }
 
     public void recordPublish(final long nanos, final boolean failed) {
-        (failed ? publishFailure : publishSuccess).record(nanos, TimeUnit.NANOSECONDS);
+        final Timer timer = failed
+                ? timer(PUBLISH_FAILURE, IgnisMetrics.PUBLISH, IgnisMetrics.TAG_OUTCOME, IgnisMetrics.FAILURE)
+                : publishSuccess;
+        timer.record(nanos, TimeUnit.NANOSECONDS);
     }
 
     public void recordConsume(final Runnable consumption) {
@@ -127,49 +117,46 @@ public final class QueueMeters {
     }
 
     public void ignored() {
-        ignoredMessages.increment();
+        counter(IGNORED_MESSAGES, IgnisMetrics.MESSAGES, IgnisMetrics.TAG_OUTCOME, IgnisMetrics.IGNORED).increment();
     }
 
     public void sidelined(final String reason) {
-        sidelineReasons.computeIfAbsent(reason, this::sidelineCounter).increment();
-        sidelinedMessages.increment();
+        sidelineReason(reason).increment();
+        counter(SIDELINED_MESSAGES, IgnisMetrics.MESSAGES, IgnisMetrics.TAG_OUTCOME, IgnisMetrics.SIDELINED)
+                .increment();
     }
 
     /**
      * The payload is still in the main magazine, so this is not a completed sideline.
      */
     public void sidelineRefused(final String reason) {
-        sidelineReasons.computeIfAbsent(reason, this::sidelineCounter).increment();
+        sidelineReason(reason).increment();
     }
 
     public void budgetExhausted() {
-        budgetExhaustedRuns.increment();
+        counter(BUDGET_EXHAUSTED, IgnisMetrics.BUDGET_EXHAUSTED, null, null).increment();
     }
 
+    /** Recorded only by batching queues. */
     public void handlerBatch(final int size) {
-        DistributionSummary summary = handlerBatchSize.get();
-        if (Objects.isNull(summary)) {
-            // Registration is idempotent, so a race costs a duplicate lookup and nothing else.
-            summary = metrics.summary(IgnisMetrics.HANDLER_BATCH_SIZE, queue);
-            handlerBatchSize.set(summary);
-        }
-        summary.record(size);
+        resolve(lazy, HANDLER_BATCH_SIZE, key -> metrics.summary(IgnisMetrics.HANDLER_BATCH_SIZE, queue),
+                DistributionSummary.class).record(size);
     }
 
     public void handlerTimedOut() {
-        handlerTimeouts.increment();
+        counter(HANDLER_TIMEOUTS, IgnisMetrics.HANDLER_TIMEOUTS, null, null).increment();
     }
 
     public void recordHandler(final long nanos, final String outcome) {
-        handlerOutcomes.computeIfAbsent(outcome, this::handlerTimer).record(nanos, TimeUnit.NANOSECONDS);
+        resolve(handlerOutcomes, outcome, newHandlerOutcome, Timer.class).record(nanos, TimeUnit.NANOSECONDS);
     }
 
     public void shovelMoved() {
-        shovelMovedMessages.increment();
+        counter(SHOVEL_MOVED, IgnisMetrics.SHOVEL_MOVED, null, null).increment();
     }
 
     public void recordShovel(final long nanos, final String outcome) {
-        shovelOutcomes.computeIfAbsent(outcome, this::shovelTimer).record(nanos, TimeUnit.NANOSECONDS);
+        resolve(shovelOutcomes, outcome, newShovelOutcome, Timer.class).record(nanos, TimeUnit.NANOSECONDS);
     }
 
     /**
@@ -183,15 +170,48 @@ public final class QueueMeters {
         return metrics.isEnabled();
     }
 
-    private Counter sidelineCounter(final String reason) {
-        return metrics.counter(IgnisMetrics.SIDELINE, queue.and(IgnisMetrics.TAG_REASON, reason));
+    /**
+     * Unregisters this queue's meters and those of {@code magazineIdentifiers}; later recordings are discarded.
+     *
+     * @return number of meters removed.
+     */
+    public int close(final Collection<String> magazineIdentifiers) {
+        final IgnisMetrics registered = metrics;
+        metrics = discarding();
+        lazy.clear();
+        sidelineReasons.clear();
+        handlerOutcomes.clear();
+        shovelOutcomes.clear();
+        final Set<String> magazines = new HashSet<>(magazineIdentifiers);
+        return registered.removeTagged(IgnisMetrics.TAG_QUEUE, Set.of(queueName))
+                + registered.removeTagged(IgnisMetrics.TAG_MAGAZINE, magazines);
     }
 
-    private Timer handlerTimer(final String outcome) {
-        return metrics.timer(IgnisMetrics.HANDLER_DURATION, queue.and(IgnisMetrics.TAG_OUTCOME, outcome));
+    private Counter sidelineReason(final String reason) {
+        return resolve(sidelineReasons, reason, newSidelineReason, Counter.class);
     }
 
-    private Timer shovelTimer(final String outcome) {
-        return metrics.timer(IgnisMetrics.SHOVEL, queue.and(IgnisMetrics.TAG_OUTCOME, outcome));
+    /** {@code tagKey} null means the queue tag alone. */
+    private Counter counter(final String key, final String name, final String tagKey, final String tagValue) {
+        return resolve(lazy, key, ignored -> metrics.counter(name, tags(tagKey, tagValue)), Counter.class);
+    }
+
+    private Timer timer(final String key, final String name, final String tagKey, final String tagValue) {
+        return resolve(lazy, key, ignored -> metrics.timer(name, tags(tagKey, tagValue)), Timer.class);
+    }
+
+    /** Plain get first, so an existing meter costs no allocation. */
+    private static <M extends Meter> M resolve(final Map<String, Meter> meters, final String key,
+                                               final Function<String, Meter> create, final Class<M> type) {
+        final Meter existing = meters.get(key);
+        return type.cast(Objects.nonNull(existing) ? existing : meters.computeIfAbsent(key, create));
+    }
+
+    private Tags tags(final String tagKey, final String tagValue) {
+        return Objects.isNull(tagKey) ? queue : queue.and(tagKey, tagValue);
+    }
+
+    private static IgnisMetrics discarding() {
+        return new IgnisMetrics(new CompositeMeterRegistry(), false);
     }
 }

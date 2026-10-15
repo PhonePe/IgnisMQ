@@ -40,6 +40,13 @@ public class IgnisMQSettings {
     @Builder.Default
     boolean metricsEnabled = Constants.DEFAULT_METRICS_ENABLED;
 
+    /**
+     * Keep Magazine's {@code magazine.*} meters per queue. Off by default: folded into
+     * {@code magazine=main}/{@code sideline}. {@code ignismq.*} meters are per queue either way.
+     */
+    @Builder.Default
+    boolean perQueueStorageMetrics = false;
+
     public static IgnisMQSettings defaults() {
         return IgnisMQSettings.builder().build();
     }

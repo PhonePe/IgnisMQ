@@ -32,8 +32,10 @@ import com.phonepe.ignis.response.QueueDepth;
 import com.phonepe.ignis.response.QueueDetail;
 import com.phonepe.ignis.response.QueueSummary;
 import com.phonepe.ignis.entity.QueueEntity;
+import com.phonepe.ignis.metric.IgnisMetrics;
 import com.phonepe.ignis.refresh.RefreshableQueue;
 import com.phonepe.ignis.request.ShovelConfig;
+import com.phonepe.ignis.utils.Utils;
 import io.micrometer.core.instrument.Measurement;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -49,7 +51,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * The two views, kept apart on purpose.
@@ -62,7 +64,6 @@ public final class IgnisMQService {
 
     private static final String SCOPE_CLUSTER = "cluster";
     private static final String SCOPE_INSTANCE = "instance";
-    private static final Set<String> METER_PREFIXES = Set.of("ignismq.", "ignis.", "magazine.");
 
     private final IgnisMQManager manager;
     private final String clientId;
@@ -125,12 +126,44 @@ public final class IgnisMQService {
     }
 
     public InstanceMetrics metrics() {
-        final List<MeterSample> samples = meterRegistry.getMeters().stream()
-                .filter(meter -> METER_PREFIXES.stream().anyMatch(meter.getId().getName()::startsWith))
+        return metrics(null, false);
+    }
+
+    /**
+     * Meters of this process, optionally narrowed. {@code meterCount} counts every ignisMQ and Magazine meter, unfiltered.
+     *
+     * @param queue       only this queue's meters, including both its magazines'.
+     * @param processOnly only meters tied to no queue.
+     */
+    public InstanceMetrics metrics(final String queue, final boolean processOnly) {
+        final List<Meter> ours = meterRegistry.getMeters().stream()
+                .filter(IgnisMQService::isOurs)
+                .toList();
+        final Predicate<Meter> scope;
+        if (Objects.nonNull(queue)) {
+            final String sideline = Utils.getSidelineQueueName(queue);
+            scope = meter -> {
+                final String magazine = meter.getId().getTag(IgnisMetrics.TAG_MAGAZINE);
+                return queue.equals(meter.getId().getTag(IgnisMetrics.TAG_QUEUE))
+                        || queue.equals(magazine) || sideline.equals(magazine);
+            };
+        } else if (processOnly) {
+            // Collapsed magazine=main/sideline meters belong to the process.
+            scope = meter -> {
+                final String magazine = meter.getId().getTag(IgnisMetrics.TAG_MAGAZINE);
+                return Objects.isNull(meter.getId().getTag(IgnisMetrics.TAG_QUEUE))
+                        && (Objects.isNull(magazine) || IgnisMetrics.MAIN.equals(magazine)
+                        || IgnisMetrics.SIDELINE_MAGAZINE.equals(magazine));
+            };
+        } else {
+            scope = meter -> true;
+        }
+        final List<MeterSample> samples = ours.stream()
+                .filter(scope)
                 .map(IgnisMQService::toSample)
                 .sorted(Comparator.comparing(MeterSample::name).thenComparing(sample -> sample.tags().toString()))
                 .toList();
-        return new InstanceMetrics(clientId, farmId, settings.isMetricsEnabled(), samples.size(), samples);
+        return new InstanceMetrics(clientId, farmId, settings.isMetricsEnabled(), ours.size(), samples);
     }
 
     public ActionResult shovel(final String name, final int concurrency) {
@@ -257,6 +290,12 @@ public final class IgnisMQService {
 
     private static Integer positiveOrNull(final int value) {
         return value > 0 ? value : null;
+    }
+
+    /** ignisMQ's and Magazine's meters; the host application's are none of the console's business. */
+    private static boolean isOurs(final Meter meter) {
+        final String name = meter.getId().getName();
+        return name.startsWith("ignismq.") || name.startsWith("magazine.") || name.startsWith("ignis.");
     }
 
     private static MeterSample toSample(final Meter meter) {

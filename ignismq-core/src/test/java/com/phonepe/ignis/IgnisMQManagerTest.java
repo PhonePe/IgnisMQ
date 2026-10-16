@@ -104,8 +104,11 @@ class IgnisMQManagerTest extends AerospikeTestBase {
         ignisMQManager.createQueue(RequestFactory.createQueueRequest("QUEUE_1", MESSAGE_HANDLER_TYPE));
         boolean success = ignisMQManager.getQueue("QUEUE_1").publish("true");
         Assertions.assertTrue(success);
+        // Magazine's meters are folded to magazine=main/sideline for the process by default.
         Assertions.assertEquals(1, metricRegistry.find("magazine.load.outcomes")
-                .tag("magazine", "QUEUE_1").tag("outcome", "loaded").counter().count(), 0);
+                .tag("magazine", "main").tag("outcome", "loaded").counter().count(), 0);
+        Assertions.assertNull(metricRegistry.find("magazine.load.outcomes").tag("magazine", "QUEUE_1").counter(),
+                "no Magazine meter is kept per queue unless perQueueStorageMetrics is set");
     }
 
     /**

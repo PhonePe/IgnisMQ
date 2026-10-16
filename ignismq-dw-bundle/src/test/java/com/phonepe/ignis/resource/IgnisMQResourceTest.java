@@ -42,6 +42,7 @@ import javax.ws.rs.core.GenericType;
 import javax.ws.rs.core.Response;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -459,6 +460,36 @@ class IgnisMQResourceTest {
         assertEquals("billing", metrics.clientId());
         assertEquals(Map.of("queue", ORDERS, "outcome", "acked"), metrics.meters().get(0).tags());
         assertEquals(7.0, metrics.meters().get(0).measurements().get("COUNT"));
+    }
+
+    /**
+     * With hundreds of queues a process holds tens of thousands of meters, so the console asks
+     * for the process meters and then one queue at a time. A queue's answer must include Magazine's
+     * meters for both of its magazines, which Magazine tags by identifier rather than by queue.
+     */
+    @Test
+    void theMetricsViewCanBeNarrowedToOneQueueOrToTheProcess() {
+        meterRegistry.counter("ignismq.messages", "queue", ORDERS, "outcome", "acked");
+        meterRegistry.counter("magazine.aerospike.calls", "magazine", ORDERS);
+        meterRegistry.counter("magazine.aerospike.calls", "magazine", ORDERS + "_SIDELINE");
+        meterRegistry.counter("ignismq.messages", "queue", "other", "outcome", "acked");
+        meterRegistry.counter("magazine.aerospike.calls", "magazine", "other");
+        meterRegistry.counter("ignismq.pool.task.failures", "pool", "control");
+        // Magazine's meters once folded to main/sideline belong to the whole process.
+        meterRegistry.counter("magazine.fire.latency", "magazine", "main");
+        meterRegistry.counter("jvm.gc.pause");
+
+        final InstanceMetrics perQueue = readOnly.target("/ignismq/v1/instance/metrics")
+                .queryParam("queue", ORDERS).request().get(InstanceMetrics.class);
+        final InstanceMetrics process = readOnly.target("/ignismq/v1/instance/metrics")
+                .queryParam("scope", "process").request().get(InstanceMetrics.class);
+
+        assertEquals(Set.of(Map.of("queue", ORDERS, "outcome", "acked"), Map.of("magazine", ORDERS),
+                        Map.of("magazine", ORDERS + "_SIDELINE")),
+                Set.copyOf(perQueue.meters().stream().map(MeterSample::tags).toList()));
+        assertEquals(List.of("ignismq.pool.task.failures", "magazine.fire.latency"),
+                process.meters().stream().map(MeterSample::name).toList());
+        assertEquals(7, perQueue.meterCount(), "every ignisMQ and Magazine meter, unfiltered; not the host's");
     }
 
     /**

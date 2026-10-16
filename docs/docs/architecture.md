@@ -527,14 +527,14 @@ Full definitions, tags and semantics: **[Metrics](api/metrics.md)**. In outline:
 | `ignismq.queue.*` | Depth and lifetime counters, as gauges from one cached snapshot |
 | `ignismq.sweep*`, `ignismq.shovel*`, `ignismq.queue.refresh`, `ignismq.queue.create` | Control plane |
 | `ignismq.pool.*` | Control and worker pool saturation |
-| `magazine.*` | Magazine's own instrumentation, tagged by magazine and outcome |
+| `magazine.*` | Magazine's own instrumentation, tagged by operation or outcome and by `magazine=main`/`sideline` for the whole process (per queue only with `perQueueStorageMetrics`) |
 | `ignis.queue.stats` | Bundle only: a Dropwizard `CachedGauge`, 3 minute TTL |
 
 Every dimension is a tag rather than part of the name, so a queue is a tag value and not a new meter.
 
 Dropwizard has no notion of tags, so the bundle's bridge flattens each Micrometer tag into the metric
-name. `magazine.fire.outcomes` tagged `magazine=orders, outcome=delivered` is published as
-`magazine.fire.outcomes.magazine.orders.outcome.delivered`.
+name. `magazine.fire.outcomes` tagged `magazine=main, outcome=delivered` is published as
+`magazine.fire.outcomes.magazine.main.outcome.delivered`.
 
 ### The queue-stat gauges
 

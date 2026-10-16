@@ -133,13 +133,6 @@
     .result.ok { color:var(--good-ink); background:var(--good-soft); }
     .result.error { color:var(--bad); background:var(--bad-soft); }
     .empty { color:var(--muted); font-size:13px; padding:26px 16px; text-align:center; }
-    .hidden { display:none !important; }
-    /* The UA stylesheet's [hidden] rule is display:none, but any author rule that sets display
-       outranks it - and 'nav button' sets display:flex. So element.hidden = true left the queue
-       list entirely unfiltered, silently, because the property was set and simply had no effect.
-       Declared here once rather than per selector, so it cannot be reintroduced by the next rule
-       that happens to set display. */
-    [hidden] { display:none !important; }
     @media (max-width:900px) { .split { grid-template-columns:1fr; } nav { max-height:220px; } }
 
     /* theme switch */
@@ -241,7 +234,61 @@
       color:var(--ink); padding:8px 10px; font:inherit; font-size:13px; }
     .dot-on { color:var(--good); }
     .dot-off { color:var(--muted); }
-    </style>
+
+    /* State filter under the queue search: one segmented control rather than three checkboxes,
+       because the three choices are exclusive. */
+    .seg { padding:0; margin-inline:0; min-width:0; display:flex; margin-top:9px; border:1px solid var(--line-strong); border-radius:7px; overflow:hidden; }
+    .seg button { flex:1; border:0; border-right:1px solid var(--line-strong); background:transparent;
+      color:var(--muted); font:inherit; font-size:12px; padding:6px 4px; cursor:pointer; white-space:nowrap; }
+    .seg button:last-child { border-right:0; }
+    .seg button[aria-pressed="true"] { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+
+    /* Hundreds of queues must not push everything below them off the page: the list scrolls inside
+       its own card, and the header row stays put so the columns stay readable while it does. */
+    .scroll { max-height:340px; overflow:auto; border-top:1px solid var(--line); }
+    .scroll thead th { position:sticky; top:0; background:var(--raised); z-index:1; }
+    .jumps { display:flex; gap:18px; margin:-6px 0 14px; font-size:12.5px; }
+
+    /* A counter with several tag values (aerospike calls by operation, messages by outcome) is one
+       row with the total; its breakdown opens underneath. */
+    .toggle { border:0; background:none; color:var(--muted); font:inherit; font-size:12px; cursor:pointer;
+      padding:0 6px 0 0; }
+    .toggle:hover { color:var(--accent); }
+    tr.subrow td { background:var(--bg); font-size:12.5px; }
+    tr.subrow td:first-child { padding-left:34px; }
+    /* More filters in the queue rail. */
+    .more { margin-top:9px; font-size:12.5px; }
+    .more > summary { cursor:pointer; color:var(--muted); }
+    .more[open] > summary { margin-bottom:8px; }
+    .field { display:grid; grid-template-columns:62px 1fr; align-items:center; gap:8px; margin-bottom:7px;
+      color:var(--muted); }
+    .field select { border:1px solid var(--line-strong); border-radius:7px; background:var(--bg); color:var(--ink);
+      padding:5px 7px; font:inherit; font-size:12.5px; min-width:0; }
+    nav button .name-block { flex:1; min-width:0; display:flex; flex-direction:column; }
+    nav button .sub { font-size:11px; color:var(--muted); font-weight:400; overflow:hidden;
+      text-overflow:ellipsis; white-space:nowrap; }
+    .interval { border:1px solid var(--line-strong); background:transparent; color:var(--ink); border-radius:7px;
+      padding:5px 8px; font:inherit; font-size:12px; }
+
+    /* Charts. Drawn from samples this page has taken since it opened; nothing is stored server-side. */
+    .sparkline { display:inline-block; vertical-align:middle; margin-left:8px; }
+    .sparkline polyline, .chart polyline { fill:none; stroke-width:1.6; stroke-linejoin:round; }
+    .series-1 { stroke:var(--accent); color:var(--accent); }
+    .series-2 { stroke:var(--good); color:var(--good); }
+    .series-3 { stroke:var(--warn-ink); color:var(--warn-ink); }
+    .chart-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-top:14px; }
+    .chart { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:var(--bg); }
+    .chart svg { display:block; width:100%; height:80px; }
+    .chart .keys { display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--muted); margin-bottom:6px; }
+    .chart .keys b { font-weight:600; }
+    .reason { color:var(--muted); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      font-size:12px; margin-left:6px; }
+    /* Last in the sheet, so it wins over every earlier rule of equal specificity. The UA stylesheet's
+       [hidden] rule is display:none, but any author rule that sets display outranks it - 'nav button'
+       sets display:flex, which once left the queue list silently unfiltered. Keep any rule that sets
+       display on a hideable element at or below this specificity (one class or attribute). */
+    .hidden, [hidden] { display:none; }
+  </style>
 </head>
 <body>
 <header>
@@ -251,6 +298,14 @@
             <b>&ndash;</b></div>
         <div class="grow"></div>
         <div id="last-updated" class="meta live" aria-live="polite">Connecting</div>
+        <select id="refresh-every" class="interval" aria-label="Refresh interval"
+                title="How often the page refreshes. Charts gain a point per refresh.">
+            <option value="5">Every 5 s</option>
+            <option value="10">Every 10 s</option>
+            <option value="30">Every 30 s</option>
+            <option value="60">Every 60 s</option>
+            <option value="0">Paused</option>
+        </select>
         <button id="token-button" class="icon-button" type="button" aria-expanded="false"
                 title="Credentials sent with every request">
             <span id="token-dot" class="dot-off">&#9679;</span> Token
@@ -296,7 +351,40 @@
                 <div class="card">
                     <h2>Queues <span class="tag cluster">cluster</span></h2>
                     <div class="body"><input id="queue-filter" class="filter" type="search" placeholder="Filter"
-                                             aria-label="Filter queues" autocomplete="off"></div>
+                                             aria-label="Filter queues" autocomplete="off">
+                        <fieldset class="seg" id="state-filter" aria-label="Filter queues by state">
+                            <button type="button" data-state="all" aria-pressed="true">All</button>
+                            <button type="button" data-state="active" aria-pressed="false">Active</button>
+                            <button type="button" data-state="inactive" aria-pressed="false">Inactive</button>
+                        </fieldset>
+                        <details class="more" id="more-filters">
+                            <summary>More filters <span id="more-count"></span></summary>
+                            <label class="field">Handler
+                                <select id="handler-filter"><option value="">Any</option></select></label>
+                            <label class="field">Created
+                                <select id="created-filter">
+                                    <option value="">Any time</option>
+                                    <option value="3600000">Last hour</option>
+                                    <option value="86400000">Last 24 hours</option>
+                                    <option value="604800000">Last 7 days</option>
+                                    <option value="2592000000">Last 30 days</option>
+                                    <option value="-2592000000">Older than 30 days</option>
+                                </select></label>
+                            <label class="field">Here
+                                <select id="here-filter">
+                                    <option value="">Any</option>
+                                    <option value="true">Running here</option>
+                                    <option value="false">Not running here</option>
+                                </select></label>
+                            <label class="field">Sort
+                                <select id="queue-sort">
+                                    <option value="name">Name</option>
+                                    <option value="newest">Newest first</option>
+                                    <option value="oldest">Oldest first</option>
+                                </select></label>
+                            <button type="button" class="link" id="clear-filters">Clear filters</button>
+                        </details>
+                    </div>
                     <nav id="queues">
                         <div class="empty">Loading...</div>
                     </nav>
@@ -362,6 +450,10 @@
     </section>
 
     <section id="view-instance" role="tabpanel" class="hidden">
+        <div class="jumps">
+            <button type="button" class="link" data-jump="meters-card">Meters</button>
+            <button type="button" class="link" data-jump="instance-queues-card">Queues running here</button>
+        </div>
         <div class="card">
             <h2>Process <span class="tag instance">this instance only</span></h2>
             <div class="body">
@@ -369,11 +461,7 @@
                 <div class="stats" id="instance-stats"></div>
             </div>
         </div>
-        <div class="card">
-            <h2>Queues running here <span class="tag instance">this instance only</span></h2>
-            <div class="body flush" id="instance-queues"></div>
-        </div>
-        <div class="card">
+        <div class="card" id="meters-card">
             <h2>Meters <span class="tag instance">this instance only</span></h2>
             <div class="body">
                 <div class="banner info"><strong>These are one process's numbers</strong>, read live from its meter
@@ -400,6 +488,13 @@
                        aria-label="Filter meters" autocomplete="off">
             </div>
             <div class="body" id="meters"></div>
+        </div>
+        <div class="card" id="instance-queues-card">
+            <h2>Queues running here <span class="tag instance">this instance only</span></h2>
+            <div class="body"><input id="instance-queue-filter" class="filter" type="search"
+                                     placeholder="Filter queues running here" aria-label="Filter queues running here"
+                                     autocomplete="off"></div>
+            <div class="scroll" id="instance-queues"></div>
         </div>
     </section>
 </main>
@@ -552,8 +647,33 @@
       return node;
     }
 
-    const duration = ms => ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60000)} min`;
-    const stamp = () => el('last-updated').textContent = `Live \u00b7 ${new Date().toLocaleTimeString()}`;
+    /**
+     * A duration in the units it was most likely configured in, spelled out: 172800 s reads
+     * "2 days", 5400 s "1 hour 30 minutes". Every non-zero unit is kept, so nothing is rounded away -
+     * this used to round to whole minutes, which turned a 30-day expiry into "43200 min".
+     */
+    const DURATION_UNITS = [['day', 86400000], ['hour', 3600000], ['minute', 60000], ['second', 1000],
+      ['millisecond', 1]];
+    function duration(ms) {
+      if (!Number.isFinite(ms) || ms < 0) {
+        return '-';
+      }
+      let rest = Math.round(ms);
+      if (rest === 0) {
+        return '0 seconds';
+      }
+      const parts = [];
+      DURATION_UNITS.forEach(([unit, size]) => {
+        if (rest >= size) {
+          const amount = Math.floor(rest / size);
+          parts.push(`${amount.toLocaleString()} ${unit}${amount === 1 ? '' : 's'}`);
+          rest %= size;
+        }
+      });
+      return parts.join(' ');
+    }
+    const stamp = () => el('last-updated').textContent =
+      `${el('refresh-every').value === '0' ? 'Paused' : 'Live'} \u00b7 ${new Date().toLocaleTimeString()}`;
 
     async function refreshInventory() {
       try {
@@ -572,14 +692,19 @@
         return;
       }
       nav.innerHTML = '';
-      inventory.forEach(queue => {
+      renderHandlerOptions();
+      sortedInventory().forEach(queue => {
         const button = document.createElement('button');
         button.dataset.name = queue.name;
-        // The name is ellipsised to keep the rail narrow, so the full one has to be recoverable.
-        // A title attribute is the only form of it that survives both truncation and a narrow window.
-        button.title = queue.name;
+        button.dataset.active = String(queue.active);
+        button.dataset.handler = queue.messageHandlerType;
+        button.dataset.created = String(queue.createdAt);
+        button.dataset.here = String(queue.heldHere);
+        // The name is ellipsised to keep the rail narrow; the title keeps it recoverable.
+        button.title = `${queue.name}\n${queue.messageHandlerType} \u00b7 created ${new Date(queue.createdAt).toLocaleString()}`;
         button.innerHTML = `<span class="state${queue.active ? '' : ' off'}"></span>`
-          + `<span class="name">${esc(queue.name)}</span>`
+          + `<span class="name-block"><span class="name">${esc(queue.name)}</span>`
+          + `<span class="sub">${esc(queue.messageHandlerType)} \u00b7 ${esc(ago(queue.createdAt))}</span></span>`
           + `<span class="tag ${queue.active ? 'active' : 'inactive'}">${queue.active ? 'active' : 'inactive'}</span>`;
         button.addEventListener('click', () => select(queue.name));
         nav.appendChild(button);
@@ -592,8 +717,54 @@
       empty.textContent = 'No queue matches that filter.';
       empty.hidden = true;
       nav.appendChild(empty);
+      renderStateCounts();
       select(inventory.some(queue => queue.name === selected) ? selected : inventory[0].name);
       applyQueueFilter();
+    }
+
+    /** "3 days ago": the largest whole unit only, which is all a list needs. */
+    function ago(timestamp) {
+      const elapsed = Date.now() - timestamp;
+      const unit = DURATION_UNITS.find(([, size]) => elapsed >= size && size >= 60000);
+      if (!unit) {
+        return 'just now';
+      }
+      const amount = Math.floor(elapsed / unit[1]);
+      return `${amount} ${unit[0]}${amount === 1 ? '' : 's'} ago`;
+    }
+
+    function sortedInventory() {
+      const order = el('queue-sort').value;
+      const queues = [...inventory];
+      if (order === 'newest') {
+        queues.sort((left, right) => right.createdAt - left.createdAt);
+      } else if (order === 'oldest') {
+        queues.sort((left, right) => left.createdAt - right.createdAt);
+      }
+      return queues;
+    }
+
+    /** Handler choices come from the inventory, with counts; the current choice survives a refresh. */
+    function renderHandlerOptions() {
+      const picker = el('handler-filter');
+      const chosen = picker.value;
+      const counts = new Map();
+      inventory.forEach(queue => counts.set(queue.messageHandlerType, (counts.get(queue.messageHandlerType) || 0) + 1));
+      picker.innerHTML = '<option value="">Any</option>' + [...counts.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([handler, count]) => `<option value="${esc(handler)}">${esc(handler)} (${num(count)})</option>`)
+        .join('');
+      picker.value = counts.has(chosen) ? chosen : '';
+    }
+
+    /** The state buttons carry their counts, so "how many are inactive" needs no clicking. */
+    function renderStateCounts() {
+      const active = inventory.filter(queue => queue.active).length;
+      const counts = {all: inventory.length, active, inactive: inventory.length - active};
+      document.querySelectorAll('#state-filter button').forEach(button => {
+        const state = button.dataset.state;
+        button.textContent = `${state.charAt(0).toUpperCase()}${state.slice(1)} (${num(counts[state])})`;
+      });
     }
 
     function select(name) {
@@ -609,6 +780,14 @@
         const detail = await json(`${api}/queues/${encodeURIComponent(selected)}`);
         if (current !== version) {
           return;
+        }
+        if (detail.depth) {
+          const at = Date.now();
+          const key = `queue|${detail.queue.name}`;
+          remember(`${key}|depth`, detail.depth.unconsumed, at);
+          remember(`${key}|published`, detail.depth.published, at);
+          remember(`${key}|consumed`, detail.depth.consumed, at);
+          remember(`${key}|sidelined`, detail.depth.sidelined, at);
         }
         renderOverview(detail);
         renderShards(detail);
@@ -655,18 +834,33 @@
       el('overview').innerHTML = `<h2>${esc(queue.name)}
           <span class="tag ${queue.active ? 'active' : 'inactive'}">${queue.active ? 'active' : 'inactive'}</span>
           <span class="tag cluster">cluster</span></h2>
-        <div class="body">${pending}${stats}</div>
+        <div class="body">${pending}${stats}${trends(detail)}</div>
         <div class="kv">${config}</div>
         <div class="cta"><button class="link" type="button" id="to-meters">View this queue's meters on this
           instance &rarr;</button></div>`;
       el('to-meters').addEventListener('click', () => showMetersFor(queue.name));
     }
 
+    /** Backlog and throughput while this page has been open. Depth is cluster-wide; so are these. */
+    function trends(detail) {
+      if (!detail.depth) {
+        return '';
+      }
+      const key = `queue|${detail.queue.name}`;
+      return `<div class="chart-grid">
+          ${chart('Backlog', [{label: 'unconsumed', points: valuesOf(`${key}|depth`), seriesClass: 'series-3'},
+            {label: 'sidelined', points: valuesOf(`${key}|sidelined`), seriesClass: 'series-1'}], '')}
+          ${chart('Per second', [{label: 'published', points: rates(`${key}|published`), seriesClass: 'series-1'},
+            {label: 'consumed', points: rates(`${key}|consumed`), seriesClass: 'series-2'}], '/s')}
+        </div>`;
+    }
+
     function showMetersFor(name) {
       showTab('instance');
       el('meter-filter').value = name;
+      openGroups.add(name);
       renderMeters();
-      el('meters').scrollIntoView({behavior: 'smooth', block: 'start'});
+      el('meters-card').scrollIntoView({behavior: 'smooth', block: 'start'});
     }
 
     function renderShards(detail) {
@@ -843,11 +1037,32 @@
       }
     });
 
+    let stateFilter = 'all';
+
+    /** Created-time filter: a positive window means "within the last", a negative one "older than". */
+    function createdMatches(created) {
+      const span = Number(el('created-filter').value);
+      if (!span) {
+        return true;
+      }
+      const age = Date.now() - created;
+      return span > 0 ? age <= span : age > -span;
+    }
+
     function applyQueueFilter() {
       const term = el('queue-filter').value.trim().toLowerCase();
+      const handler = el('handler-filter').value;
+      const here = el('here-filter').value;
+      const extra = [handler, el('created-filter').value, here].filter(Boolean).length;
+      el('more-count').textContent = extra ? `(${extra})` : '';
       let shown = 0;
       document.querySelectorAll('#queues button').forEach(button => {
-        const hide = term.length > 0 && !button.dataset.name.toLowerCase().includes(term);
+        const wrongState = stateFilter !== 'all' && (button.dataset.active === 'true') !== (stateFilter === 'active');
+        const hide = wrongState
+          || (term.length > 0 && !button.dataset.name.toLowerCase().includes(term))
+          || (handler && button.dataset.handler !== handler)
+          || (here && button.dataset.here !== here)
+          || !createdMatches(Number(button.dataset.created));
         button.hidden = hide;
         if (!hide) { shown += 1; }
       });
@@ -857,11 +1072,65 @@
       if (empty) { empty.hidden = shown > 0; }
     }
     el('queue-filter').addEventListener('input', applyQueueFilter);
+    ['handler-filter', 'created-filter', 'here-filter'].forEach(id => el(id).addEventListener('change', applyQueueFilter));
+    el('queue-sort').addEventListener('change', renderQueueList);
+    el('clear-filters').addEventListener('click', () => {
+      ['handler-filter', 'created-filter', 'here-filter'].forEach(id => { el(id).value = ''; });
+      el('queue-filter').value = '';
+      applyQueueFilter();
+    });
+    document.querySelectorAll('#state-filter button').forEach(button => button.addEventListener('click', () => {
+      stateFilter = button.dataset.state;
+      document.querySelectorAll('#state-filter button')
+        .forEach(other => other.setAttribute('aria-pressed', String(other === button)));
+      applyQueueFilter();
+    }));
 
-    let meters = [];
+    /** Meters tied to no queue, fetched on every refresh. */
+    let processMeters = [];
+    /** One queue's meters, fetched only when its group is opened - never all of them at once. */
+    const queueMeters = new Map();
+    const loadingQueues = new Set();
+    let instanceQueues = [];
+
+    /**
+     * The queues this process runs, in a box that scrolls on its own. With hundreds of queues a
+     * full-height table pushed the meters thousands of pixels down the page. Each name opens that
+     * queue's meters. The scroll position survives a refresh, which rebuilds the table.
+     */
+    function renderInstanceQueues() {
+      const box = el('instance-queues');
+      const term = el('instance-queue-filter').value.trim().toLowerCase();
+      const shown = instanceQueues.filter(queue => !term || queue.name.toLowerCase().includes(term));
+      const scrolled = box.scrollTop;
+      if (!instanceQueues.length) {
+        box.innerHTML = '<div class="empty">This instance is running no queues.</div>';
+      } else if (!shown.length) {
+        box.innerHTML = '<div class="empty">No queue running here matches that filter.</div>';
+      } else {
+        box.innerHTML = `<table><thead><tr><th>Queue (${num(shown.length)})</th><th>Consumers</th><th>Shovels</th>
+            <th>Stored shovel</th></tr></thead>
+          <tbody>${shown.map(queue => `<tr><td><button type="button" class="link" data-meters="${esc(queue.name)}"
+              title="Show this queue's meters">${esc(queue.name)}</button></td>
+            <td class="num">${num(queue.consumers)}</td><td class="num">${num(queue.shovels)}</td>
+            <td class="num">${shovelCell(queue)}</td></tr>`).join('')}
+          </tbody></table>`;
+      }
+      box.scrollTop = scrolled;
+    }
+    el('instance-queue-filter').addEventListener('input', renderInstanceQueues);
+    el('instance-queues').addEventListener('click', (event) => {
+      const link = event.target.closest('[data-meters]');
+      if (link) {
+        showMetersFor(link.dataset.meters);
+      }
+    });
+    document.querySelectorAll('[data-jump]').forEach(button => button.addEventListener('click',
+      () => el(button.dataset.jump).scrollIntoView({behavior: 'smooth', block: 'start'})));
+
     async function refreshInstance() {
       try {
-        const [view, metrics] = await Promise.all([json(`${api}/instance`), json(`${api}/instance/metrics`)]);
+        const [view, metrics] = await Promise.all([json(`${api}/instance`), json(`${api}/instance/metrics?scope=process`)]);
         setScope(view.clientId, view.farmId);
         el('instance-banner').innerHTML = `Everything on this tab describes <strong>one process</strong>.
           A deployment runs many, and IgnisMQ has no register of them, so nothing here is a deployment
@@ -875,18 +1144,20 @@
           ['metrics', metrics.metricsEnabled ? 'on' : 'off']
         ].map(([label, value]) => `<div class="stat"><b class="num">${typeof value === 'number' ? num(value)
           : esc(value)}</b><span>${label}</span></div>`).join('');
-        el('instance-queues').innerHTML = view.queues.length
-          ? `<table><thead><tr><th>Queue</th><th>Consumers</th><th>Shovels</th><th>Stored shovel</th></tr></thead>
-             <tbody>${view.queues.map(queue => `<tr><td>${esc(queue.name)}</td>
-               <td class="num">${num(queue.consumers)}</td><td class="num">${num(queue.shovels)}</td>
-               <td class="num">${shovelCell(queue)}</td></tr>`).join('')}
-             </tbody></table>`
-          : '<div class="empty">This instance is running no queues.</div>';
-        meters = metrics.meters;
+        instanceQueues = view.queues;
+        renderInstanceQueues();
+        processMeters = metrics.meters;
+        sample(processMeters);
+        pruneHistory();
+        // Drop queues that stopped running here, and refresh the ones the operator has open.
+        const running = new Set(view.queues.map(queue => queue.name));
+        [...queueMeters.keys()].filter(name => !running.has(name)).forEach(name => queueMeters.delete(name));
+        const open = [...groupState.entries()].filter(([name, isOpen]) => isOpen && running.has(name));
+        await Promise.all(open.map(([name]) => loadQueueMeters(name).catch(() => {})));
         renderMeters();
         stamp();
       } catch (error) {
-        el('instance-queues').innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+        el('meters').innerHTML = `<div class="empty">${esc(error.message)}</div>`;
       }
     }
 
@@ -975,12 +1246,56 @@
      * A meter's label: its name, plus only what distinguishes it from its siblings. The queue is
      * already the group heading, so its tag is dropped rather than repeated on every row.
      */
-    function meterLabel(meter) {
-      const rest = Object.entries(meter.tags).filter(([key]) => key !== 'queue' && key !== 'magazine');
-      const sideline = meter.tags.magazine && meter.tags.magazine.endsWith('_SIDELINE');
+    function meterLabel(meter, keep = () => true) {
       return esc(meter.name) + info(meter)
-        + (sideline ? ' <span class="chip">sideline</span>' : '')
-        + rest.map(([key, value]) => ` <span class="chip">${esc(key)}=${esc(value)}</span>`).join('');
+        + (isSideline(meter) ? ' <span class="chip">sideline</span>' : '')
+        + tagChips(meter, keep);
+    }
+
+    /**
+     * Two spellings of the same thing. ignisMQ's own meters tag magazine=sideline, while Magazine's
+     * tag it with the full magazine identifier, which ends in _SIDELINE. Matching only the second
+     * left ignismq.sweep{magazine=main} and {magazine=sideline} rendering as two identical rows,
+     * with nothing on the page to say which was which.
+     */
+    function isSideline(meter) {
+      const magazine = meter.tags.magazine;
+      return magazine === 'sideline' || Boolean(magazine && magazine.endsWith('_SIDELINE'));
+    }
+
+    /** The tags that tell a meter apart from its siblings; queue and magazine are the group heading. */
+    function tagChips(meter, keep) {
+      return Object.entries(meter.tags)
+        .filter(([key]) => key !== 'queue' && key !== 'magazine' && keep(key))
+        .map(([key, value]) => ` <span class="chip">${esc(key)}=${esc(value)}</span>`).join('');
+    }
+
+    /**
+     * Why Magazine makes each kind of Aerospike call, in the words of the queue operation behind it.
+     * Without this, magazine.aerospike.calls is sixteen opaque operation names.
+     */
+    const OPERATION_INFO = {
+      write_data: 'publish - store the message',
+      increment_load_pointer: 'publish - reserve the next slot on a shard',
+      increment_load_counter: 'publish - confirm the message was stored',
+      claim_fire_pointer: 'consume - claim the next slot on a shard',
+      read_data: 'consume - read the claimed message',
+      increment_fire_counter: 'consume - count a delivery',
+      decrement_fire_counter: 'shovel - undo a delivery count when a message is put back',
+      delete_data: 'ack - delete a handled message',
+      batch_delete_data: 'ack - delete a batch of handled messages',
+      batch_read_data: 'sweep or peek - read slots without consuming them',
+      batch_read_metadata: 'depth - read every shard\'s pointers and counters (gauges, this console)',
+      refresh_active_shards: 'consume - find which shards hold data, every few seconds while polling',
+      write_fire_history: 'checkpoint - record where each shard\'s fire pointer stands',
+      read_fire_history: 'sweep - read the checkpoints',
+      claim_dedupe_marker: 'publish - claim the duplicate-check marker',
+      withdraw_dedupe_marker: 'publish - release the marker after a failed store',
+    };
+
+    function reason(meter) {
+      const text = meter.name === 'magazine.aerospike.calls' ? OPERATION_INFO[meter.tags.operation] : null;
+      return text ? `<span class="reason">${esc(text)}</span>` : '';
     }
 
     const peak = (list, pick) => list.reduce((high, meter) => {
@@ -1000,105 +1315,423 @@
       return `<span class="meter-bar" aria-hidden="true"><i style="width:${share}%"></i></span>`;
     }
 
+    /*
+     * Trends. Each refresh adds one sample per meter this page has loaded, and the charts draw from
+     * those samples: rates for counters and timers, values for gauges. Nothing is stored server-side,
+     * so a trend starts when the page opens, and only loaded meters are sampled, so the cost does not
+     * grow with the number of queues.
+     */
+    const HISTORY_POINTS = 60;
+    const HISTORY_IDLE_MS = 10 * 60 * 1000;
+    const history = new Map();
+
+    function remember(key, value, at) {
+      if (!finite(value)) { return; }
+      let series = history.get(key);
+      if (!series) {
+        series = [];
+        history.set(key, series);
+      }
+      series.push({t: at, v: value});
+      if (series.length > HISTORY_POINTS + 1) { series.shift(); }
+    }
+
+    function meterKey(meter) {
+      return meter.name + '|' + Object.entries(meter.tags)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, value]) => `${key}=${value}`).join(',');
+    }
+
+    function sample(list) {
+      const at = Date.now();
+      list.forEach(meter => {
+        const key = meterKey(meter);
+        const value = meter.measurements;
+        if (meter.type === 'GAUGE') {
+          remember(`${key}#value`, value.VALUE, at);
+          return;
+        }
+        remember(`${key}#count`, value.COUNT, at);
+        if (meter.type === 'TIMER') { remember(`${key}#total`, value.TOTAL_TIME, at); }
+      });
+    }
+
+    /** Drops series nothing has refreshed for a while - closed groups, stopped queues. */
+    function pruneHistory() {
+      const cutoff = Date.now() - HISTORY_IDLE_MS;
+      [...history.entries()].forEach(([key, series]) => {
+        if (series[series.length - 1].t < cutoff) { history.delete(key); }
+      });
+    }
+
+    /** Per-second change between consecutive samples. A counter that went backwards was reset. */
+    function rates(key) {
+      const series = history.get(key) || [];
+      const result = [];
+      for (let index = 1; index < series.length; index++) {
+        const seconds = (series[index].t - series[index - 1].t) / 1000;
+        const delta = series[index].v - series[index - 1].v;
+        result.push(seconds > 0 && delta >= 0 ? delta / seconds : 0);
+      }
+      return result;
+    }
+
+    const valuesOf = key => (history.get(key) || []).map(point => point.v);
+
+    /** Element-wise sum of several rate series, aligned on their latest point. */
+    function sumSeries(list) {
+      const length = Math.max(0, ...list.map(series => series.length));
+      return Array.from({length}, (unused, index) => list.reduce((sum, series) => {
+        const offset = series.length - length + index;
+        return sum + (offset >= 0 ? series[offset] : 0);
+      }, 0));
+    }
+
+    function perSecond(value) {
+      if (!finite(value)) { return '\u2014'; }
+      return value < 10 ? num(Math.round(value * 100) / 100) : num(Math.round(value));
+    }
+
+    function polyline(points, width, height, low, high) {
+      const range = high - low || 1;
+      const step = width / Math.max(points.length - 1, 1);
+      return points.map((value, index) =>
+        `${(index * step).toFixed(1)},${(height - 1 - ((value - low) / range) * (height - 2)).toFixed(1)}`).join(' ');
+    }
+
+    function sparkline(points, seriesClass = 'series-1') {
+      if (points.length < 2) { return '<span class="reason">collecting</span>'; }
+      const width = 84;
+      const height = 18;
+      return `<svg class="sparkline ${seriesClass}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"
+          aria-hidden="true"><polyline points="${polyline(points, width, height, Math.min(0, ...points),
+          Math.max(...points))}"/></svg>`;
+    }
+
+    /** The latest per-second figure and its trend. */
+    function rateCell(series) {
+      const latest = series.length ? perSecond(series[series.length - 1]) + '/s' : '\u2014';
+      return latest + sparkline(series);
+    }
+
+    /**
+     * A small line chart sharing one scale across its series.
+     * @param series [{label, points, seriesClass}]
+     */
+    function chart(title, series, unit) {
+      const keys = series.map(line => `<span class="${line.seriesClass}">&#9644; ${esc(line.label)}
+          <b>${line.points.length ? perSecond(line.points[line.points.length - 1]) + unit : '\u2014'}</b></span>`).join('');
+      let body = '<div class="reason">Collecting: one point per refresh.</div>';
+      if (series.some(line => line.points.length >= 2)) {
+        const all = series.flatMap(line => line.points);
+        const high = Math.max(...all, 1);
+        const lines = series
+          .filter(line => line.points.length >= 2)
+          .map(line => `<polyline class="${line.seriesClass}" vector-effect="non-scaling-stroke"
+              points="${polyline(line.points, 300, 80, 0, high)}"/>`)
+          .join('');
+        body = `<svg viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>`;
+      }
+      return `<div class="chart"><div class="keys"><b>${esc(title)}</b>${keys}</div>${body}</div>`;
+    }
+
     function table(caption, headers, rows) {
       if (!rows.length) { return ''; }
       const head = headers.map(header => `<th>${header}</th>`).join('');
-      const body = rows.map(cells => '<tr>' + cells.map((cell, index) => {
-        if (index === 0) { return `<td>${cell}</td>`; }
-        return headers[index] === '' ? `<td class="spread">${cell}</td>` : `<td class="num">${cell}</td>`;
-      }).join('') + '</tr>').join('');
+      const body = rows.map(row => {
+        const cells = Array.isArray(row) ? row : row.cells;
+        const attrs = Array.isArray(row) ? '' : row.attrs;
+        return `<tr${attrs}>` + cells.map((cell, index) => {
+          if (index === 0) { return `<td>${cell}</td>`; }
+          return headers[index] === '' ? `<td class="spread">${cell}</td>` : `<td class="num">${cell}</td>`;
+        }).join('') + '</tr>';
+      }).join('');
       return `<div class="section">${caption}</div>
         <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
     }
 
+    /** Meters sharing a name (and main/sideline) form one family, shown as a row with a breakdown. */
+    function familiesOf(list) {
+      const families = new Map();
+      list.forEach(meter => {
+        const key = meter.name + (isSideline(meter) ? '|sideline' : '');
+        if (!families.has(key)) { families.set(key, []); }
+        families.get(key).push(meter);
+      });
+      return families;
+    }
+
+    /** The tag that differs between a family's members - operation, outcome, reason. */
+    function varyingTags(family) {
+      return Object.keys(family[0].tags).filter(key => family.some(meter => meter.tags[key] !== family[0].tags[key]));
+    }
+
+    function familyToggle(id, open) {
+      return `<button type="button" class="toggle" data-family="${esc(id)}" aria-expanded="${open}"
+          aria-label="Show the breakdown">${open ? '&#9662;' : '&#9656;'}</button>`;
+    }
+
+    /** What a timer recorded between the last two samples: calls and time, or null before two samples. */
+    function lastInterval(meter) {
+      const key = meterKey(meter);
+      const counts = history.get(`${key}#count`) || [];
+      const totals = history.get(`${key}#total`) || [];
+      if (counts.length < 2 || totals.length < 2) { return null; }
+      return {calls: counts[counts.length - 1].v - counts[counts.length - 2].v,
+        time: totals[totals.length - 1].v - totals[totals.length - 2].v};
+    }
+
     /**
-     * One table per meter type rather than one table for all of them.
-     * <p>
-     * Every type carries different statistics, so a single "Current" column had to stringify all of
-     * them into one cell - counts, latencies and gauge readings side by side in the same space, none
-     * of them aligned with the row above. Split by type, each gets real columns that line up and can
-     * be scanned down the page, and the numbers become comparable.
+     * Timers grouped like counters. The family row combines its members: counts and per-second
+     * rates add up, means are total time over total calls (never an average of averages), and max
+     * is the largest member's.
      */
-    function meterSections(list) {
+    function timerRows(timers, groupKey) {
+      const slowest = peak(timers, value => value.MAX);
+      const cells = (label, members) => {
+        const count = members.reduce((sum, meter) => sum + meter.measurements.COUNT, 0);
+        const total = members.reduce((sum, meter) => sum + meter.measurements.TOTAL_TIME, 0);
+        const max = Math.max(...members.map(meter => meter.measurements.MAX));
+        const intervals = members.map(lastInterval).filter(Boolean);
+        const calls = intervals.reduce((sum, interval) => sum + interval.calls, 0);
+        const time = intervals.reduce((sum, interval) => sum + interval.time, 0);
+        return [label, num(count), millis(total / count), millis(calls > 0 ? time / calls : Number.NaN), millis(max),
+          rateCell(sumSeries(members.map(meter => rates(`${meterKey(meter)}#count`)))), bar(max, slowest)];
+      };
+      const rows = [];
+      [...familiesOf(timers).entries()].forEach(([familyKey, family]) => {
+        if (family.length === 1) {
+          rows.push(cells(meterLabel(family[0]), family));
+          return;
+        }
+        const varying = varyingTags(family);
+        const differs = key => varying.includes(key);
+        const id = `${groupKey}|${familyKey}`;
+        const open = expandedFamilies.has(id);
+        rows.push(cells(familyToggle(id, open) + meterLabel(family[0], key => !differs(key))
+          + ` <span class="chip">${num(family.length)} ${esc(varying.join('/') || 'kinds')}</span>`, family));
+        family.sort((left, right) => right.measurements.COUNT - left.measurements.COUNT)
+          .forEach(meter => rows.push({
+            attrs: ` class="subrow" data-parent="${esc(id)}"${open ? '' : ' hidden'}`,
+            cells: cells(tagChips(meter, differs), [meter])
+          }));
+      });
+      return rows;
+    }
+
+    /** Breakdowns the operator has opened, kept across refreshes. */
+    const expandedFamilies = new Set();
+
+    /**
+     * Counters sharing a name (and main/sideline) are one family: magazine.aerospike.calls has one
+     * counter per operation, ignismq.sideline one per reason. A family becomes a single row with
+     * the total; its non-zero members open underneath, busiest first, and the zero ones are named
+     * on one line rather than given a row each.
+     */
+    function counterRows(counters, groupKey) {
+      const families = familiesOf(counters);
+      const count = meter => finite(meter.measurements.COUNT) ? meter.measurements.COUNT : 0;
+      const totals = [...families.values()].map(family => family.reduce((sum, meter) => sum + count(meter), 0));
+      const busiest = Math.max(0, ...totals);
+
+      const rows = [];
+      [...families.entries()].forEach(([familyKey, family], index) => {
+        const total = totals[index];
+        const rateOf = meter => rates(`${meterKey(meter)}#count`);
+        if (family.length === 1) {
+          const meter = family[0];
+          rows.push([meterLabel(meter) + reason(meter), num(count(meter)), rateCell(rateOf(meter)),
+            bar(count(meter), busiest)]);
+          return;
+        }
+        // The tag that differs between members - operation, outcome, reason - names the breakdown.
+        const varying = varyingTags(family);
+        const differs = key => varying.includes(key);
+        const id = `${groupKey}|${familyKey}`;
+        const open = expandedFamilies.has(id);
+        const busy = family.filter(meter => count(meter) > 0).sort((left, right) => count(right) - count(left));
+        const idle = family.filter(meter => count(meter) === 0);
+        rows.push([familyToggle(id, open)
+            + meterLabel(family[0], key => !differs(key))
+            + ` <span class="chip">${num(busy.length)} of ${num(family.length)} ${esc(varying.join('/') || 'kinds')}</span>`,
+          num(total), rateCell(sumSeries(family.map(rateOf))), bar(total, busiest)]);
+        const hidden = open ? '' : ' hidden';
+        busy.forEach(meter => rows.push({
+          attrs: ` class="subrow" data-parent="${esc(id)}"${hidden}`,
+          cells: [tagChips(meter, differs) + reason(meter), num(count(meter)), rateCell(rateOf(meter)),
+            bar(count(meter), total)]
+        }));
+        if (idle.length) {
+          const names = idle.map(meter => varying.map(key => meter.tags[key]).join('/')).join(', ');
+          rows.push({
+            attrs: ` class="subrow" data-parent="${esc(id)}"${hidden}`,
+            cells: [`<span class="reason">None yet: ${esc(names)}</span>`, '', '', '']
+          });
+        }
+      });
+      return rows;
+    }
+
+    function meterSections(list, groupKey) {
       const typed = type => list.filter(meter => meter.type === type);
       const modelled = new Set(['TIMER', 'DISTRIBUTION_SUMMARY', 'COUNTER', 'GAUGE']);
 
       const timers = typed('TIMER').filter(meter => meter.measurements.COUNT > 0);
-      const slowest = peak(timers, value => value.MAX);
       const spreads = typed('DISTRIBUTION_SUMMARY').filter(meter => meter.measurements.COUNT > 0);
       const widest = peak(spreads, value => value.MAX);
       const counters = typed('COUNTER');
-      const busiest = peak(counters, value => value.COUNT);
       const other = list.filter(meter => !modelled.has(meter.type));
 
       return [
-        table('Timers', ['Meter', 'Count', 'Mean (since start)', 'Max (2 min)', ''],
-          timers.map(meter => {
-            const value = meter.measurements;
-            return [meterLabel(meter), num(value.COUNT), millis(value.TOTAL_TIME / value.COUNT),
-              millis(value.MAX), bar(value.MAX, slowest)];
-          })),
+        table('Timers', ['Meter', 'Count', 'Mean (since start)', 'Mean (last refresh)', 'Max (2 min)', 'Per sec', ''],
+          timerRows(timers, groupKey)),
         table('Distributions', ['Meter', 'Count', 'Mean', 'Max', ''],
           spreads.map(meter => {
             const value = meter.measurements;
             return [meterLabel(meter), num(value.COUNT), round(value.TOTAL / value.COUNT),
               round(value.MAX), bar(value.MAX, widest)];
           })),
-        table('Counters', ['Meter', 'Count', ''],
-          counters.map(meter =>
-            [meterLabel(meter), num(meter.measurements.COUNT), bar(meter.measurements.COUNT, busiest)])),
-        table('Gauges', ['Meter', 'Value'],
-          typed('GAUGE').map(meter => [meterLabel(meter), round(meter.measurements.VALUE)])),
+        table('Counters', ['Meter', 'Count', 'Per sec', ''], counterRows(counters, groupKey)),
+        table('Gauges', ['Meter', 'Value', 'Trend'],
+          typed('GAUGE').map(meter => [meterLabel(meter), round(meter.measurements.VALUE),
+            sparkline(valuesOf(`${meterKey(meter)}#value`), 'series-2')])),
         table('Other', ['Meter', 'Current'],
           other.map(meter => [meterLabel(meter), rawValue(meter)])),
       ].join('');
     }
 
-    /**
-     * Meters are grouped by what they are about, because a flat list of forty rows answers no question.
-     * A queue's own meters and the Magazine meters underneath it sit together; anything with neither
-     * tag belongs to the process.
-     */
-    function groupMeters(list) {
-      const groups = new Map();
-      list.forEach(meter => {
-        const subject = meter.tags.queue || meter.tags.magazine || null;
-        const queue = subject === null ? null : subject.replace(/_SIDELINE$/, '');
-        const key = queue === null ? '\u0000process' : queue;
-        if (!groups.has(key)) {
-          groups.set(key, {queue, meters: []});
-        }
-        groups.get(key).meters.push(meter);
-      });
-      return [...groups.values()].sort((left, right) =>
-        (left.queue === null ? '' : left.queue).localeCompare(right.queue === null ? '' : right.queue));
+    async function loadQueueMeters(name) {
+      const result = await json(`${api}/instance/metrics?queue=${encodeURIComponent(name)}`);
+      queueMeters.set(name, result.meters);
+      sample(result.meters);
     }
 
+    /** Fetches a queue's meters the first time its group is open, then redraws. */
+    function ensureLoaded(name) {
+      if (queueMeters.has(name) || loadingQueues.has(name)) {
+        return;
+      }
+      loadingQueues.add(name);
+      loadQueueMeters(name)
+        .catch(error => toast('error', `Could not load the meters of ${name}`, error.message))
+        .finally(() => {
+          loadingQueues.delete(name);
+          renderMeters();
+        });
+    }
+
+    /** Queue groups rendered at once. Beyond this the page stops being scannable. */
+    const MAX_QUEUE_GROUPS = 15;
+    /** Groups the operator opened or closed, so a refresh does not undo it. */
+    const groupState = new Map();
+    const openGroups = {add: name => groupState.set(name, true)};
+    const PROCESS_GROUP = '\u0000process';
+
+    /**
+     * The process group, then one group per queue running here, alphabetically. A queue's meters
+     * are only fetched once its group is opened, so a process with hundreds of queues sends a
+     * handful of meters per refresh rather than every meter it holds.
+     * <p>
+     * The filter matches queue names, and meter names or tags within the process group and any
+     * queue already loaded.
+     */
     function renderMeters() {
       const term = el('meter-filter').value.trim().toLowerCase();
       const matches = meter => term.length === 0
         || meter.name.toLowerCase().includes(term)
         || Object.entries(meter.tags).some(([key, value]) => `${key}=${value}`.toLowerCase().includes(term));
-      const groups = groupMeters(meters.filter(matches));
-      if (!groups.length) {
-        el('meters').innerHTML = meters.length
-          ? '<div class="empty">No meter matches that filter.</div>'
+
+      const processShown = processMeters.filter(matches);
+      const queueGroups = instanceQueues.map(queue => queue.name)
+        .map(name => {
+          const loaded = queueMeters.get(name);
+          const nameMatches = term.length === 0 || name.toLowerCase().includes(term);
+          const meterMatches = loaded ? loaded.filter(matches) : [];
+          if (!nameMatches && !meterMatches.length) {
+            return null;
+          }
+          return {queue: name, loaded: Boolean(loaded), meters: nameMatches ? (loaded || []) : meterMatches};
+        })
+        .filter(Boolean);
+
+      if (!processShown.length && !queueGroups.length) {
+        el('meters').innerHTML = term.length
+          ? '<div class="empty">No queue or meter matches that filter.</div>'
           : `<div class="empty">This process has recorded no meters yet. Nothing has been published or
              consumed here, or metrics are switched off.</div>`;
         return;
       }
+
+      const capped = queueGroups.length > MAX_QUEUE_GROUPS;
+      const shown = capped ? queueGroups.slice(0, MAX_QUEUE_GROUPS) : queueGroups;
+      const groups = (processShown.length ? [{queue: null, loaded: true, meters: processShown}] : []).concat(shown);
+      const more = capped ? `<div class="banner info">Showing ${num(MAX_QUEUE_GROUPS)} of
+          ${num(queueGroups.length)} queues. Narrow it with the filter above, or pick one from
+          <button type="button" class="link" data-jump-to="instance-queues-card">Queues running here</button>.</div>` : '';
+
       el('meters').innerHTML = groups.map(group => {
+        const key = group.queue === null ? PROCESS_GROUP : group.queue;
         const title = group.queue === null
           ? 'Process &mdash; pools, schedulers and anything not tied to one queue'
           : `Queue <strong>${esc(group.queue)}</strong>`;
-        // Open the process group and any single matching group; collapse the rest, so a deployment with
-        // forty queues does not render forty expanded tables.
-        const open = groups.length <= 2 || group.queue === null ? ' open' : '';
-        return `<details class="group"${open}><summary>${title}
-            <span class="count">${group.meters.length} meter${group.meters.length === 1 ? '' : 's'}</span></summary>
-          ${meterSections(group.meters)}</details>`;
-      }).join('');
+        // By default only the process group, or a filter narrowed to one queue, is open; after that
+        // the operator's own choice wins.
+        const fallback = group.queue === null || (term.length > 0 && shown.length === 1);
+        const isOpen = groupState.has(key) ? groupState.get(key) : fallback;
+        let count = 'open to load';
+        if (group.loaded) {
+          count = `${num(group.meters.length)} meter${group.meters.length === 1 ? '' : 's'}`;
+        } else if (loadingQueues.has(key)) {
+          count = 'loading';
+        }
+        const body = group.loaded ? meterSections(group.meters, key) : '<div class="empty">Loading...</div>';
+        return `<details class="group" data-group="${esc(key)}"${isOpen ? ' open' : ''}><summary>${title}
+            <span class="count">${count}</span></summary>${isOpen ? body : ''}</details>`;
+      }).join('') + more;
+
+      groups.filter(group => !group.loaded)
+        .filter(group => groupState.has(group.queue) ? groupState.get(group.queue) : term.length > 0 && shown.length === 1)
+        .forEach(group => ensureLoaded(group.queue));
     }
+
+    // 'toggle' does not bubble, so it is caught on the way down. Opening a queue that has not been
+    // fetched yet fetches it; closing drops nothing, so reopening is instant.
+    el('meters').addEventListener('toggle', (event) => {
+      if (!event.target.matches('details.group')) {
+        return;
+      }
+      const key = event.target.dataset.group;
+      const changed = groupState.get(key) !== event.target.open;
+      groupState.set(key, event.target.open);
+      if (event.target.open && key !== PROCESS_GROUP) {
+        if (queueMeters.has(key)) {
+          if (changed && !event.target.querySelector('table')) {
+            renderMeters();
+          }
+        } else {
+          ensureLoaded(key);
+        }
+      }
+    }, true);
+    el('meters').addEventListener('click', (event) => {
+      const jump = event.target.closest('[data-jump-to]');
+      if (jump) {
+        el(jump.dataset.jumpTo).scrollIntoView({behavior: 'smooth', block: 'start'});
+        return;
+      }
+      const toggle = event.target.closest('.toggle');
+      if (!toggle) {
+        return;
+      }
+      const id = toggle.dataset.family;
+      const open = !expandedFamilies.has(id);
+      if (open) { expandedFamilies.add(id); } else { expandedFamilies.delete(id); }
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.innerHTML = open ? '&#9662;' : '&#9656;';
+      el('meters').querySelectorAll('tr.subrow').forEach(row => {
+        if (row.dataset.parent === id) { row.hidden = !open; }
+      });
+    });
     el('meter-filter').addEventListener('input', renderMeters);
 
     function setScope(clientId, farmId) {
@@ -1175,10 +1808,7 @@
     // The tooltip is position:fixed, so it would otherwise hang in place while the page moves under it.
     window.addEventListener('scroll', hideTip, true);
 
-    refreshPermissions();
-    refreshInventory();
-    refreshInstance();
-    setInterval(() => {
+    function refreshAll() {
       // Re-asked on every cycle because a role can be revoked while the tab is open.
       refreshPermissions();
       refreshInventory();
@@ -1188,7 +1818,33 @@
       if (!el('view-instance').classList.contains('hidden')) {
         refreshInstance();
       }
-    }, 30000);
+    }
+
+    /** The refresh interval is the operator's choice, remembered per browser. Paused stops polling. */
+    const INTERVAL_KEY = 'ignismq-console-refresh-seconds';
+    let refreshTimer = null;
+    function scheduleRefresh() {
+      clearInterval(refreshTimer);
+      const seconds = Number(el('refresh-every').value);
+      try { localStorage.setItem(INTERVAL_KEY, String(seconds)); } catch (error_) { /* private mode */ }
+      el('last-updated').classList.toggle('live', seconds > 0);
+      refreshTimer = seconds > 0 ? setInterval(refreshAll, seconds * 1000) : null;
+    }
+    (function initInterval() {
+      let stored = null;
+      try { stored = localStorage.getItem(INTERVAL_KEY); } catch (error_) { /* private mode */ }
+      const picker = el('refresh-every');
+      picker.value = [...picker.options].some(option => option.value === stored) ? stored : '10';
+      picker.addEventListener('change', () => {
+        scheduleRefresh();
+        stamp();
+      });
+    })();
+
+    refreshPermissions();
+    refreshInventory();
+    refreshInstance();
+    scheduleRefresh();
 </script>
 </body>
 </html>

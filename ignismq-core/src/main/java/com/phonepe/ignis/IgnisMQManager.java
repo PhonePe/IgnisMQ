@@ -100,9 +100,10 @@ public final class IgnisMQManager {
         this.mapper = mapper;
         this.farmId = farmId;
         this.schedulers = new IgnisSchedulers(effective.getWorkerThreads());
+        // Built before any queue or storage, so the storage-meter filter applies to every one of them.
         this.metrics = new IgnisMetrics(
                 Objects.requireNonNull(meterRegistry, "Meter registry is required."),
-                effective.isMetricsEnabled());
+                effective.isMetricsEnabled(), !effective.isPerQueueStorageMetrics());
         // Magazine is an implementation detail ignisMQ's callers never configure, so disabling
         // instrumentation has to silence its meters too. Both registries are therefore the same
         // one: the caller's when enabled, a sink when not.
@@ -221,6 +222,9 @@ public final class IgnisMQManager {
             queue.stopShovelConsumers(Constants.MAX_CONSUMERS_ALLOWED);
             ignisMQMap.remove(queueName);
             queueDepthMetrics.deregister(queueName);
+
+            final int removed = queue.closeMeters();
+            log.info("Removed {} meters of queue '{}'", removed, queueName);
         }
         queueService.get(queueName).ifPresent(queueEntity -> {
             if (queueEntity.isActive()) {

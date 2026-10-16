@@ -21,6 +21,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,45 +39,81 @@ class QueueMetersTest {
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
     @Test
-    @DisplayName("recording an event resolves no meter, because every meter is resolved at construction")
-    void recordingResolvesNothing() {
+    @DisplayName("once a meter exists, recording to it again resolves nothing")
+    void recordingResolvesNothingTwice() {
         final IgnisMetrics metrics = spy(new IgnisMetrics(registry));
         final QueueMeters meters = new QueueMeters(metrics, QUEUE);
-        // The batch-size summary is deliberately resolved on first use rather than at construction,
-        // so that a queue which never batches never publishes it. One call settles it.
-        meters.handlerBatch(1);
+        // Most meters are registered on first use now. One full pass registers every one of them.
+        recordEverything(meters);
         clearInvocations(metrics);
 
-        // Everything on the message path, called the way the consumer calls it.
         for (int i = 0; i < 3; i++) {
-            meters.recordPublish(1L, false);
-            meters.recordPublish(1L, true);
-            meters.recordConsume(() -> {
-            });
-            meters.polled(true);
-            meters.polled(false);
-            meters.acked(2);
-            meters.ignored();
-            meters.budgetExhausted();
-            meters.handlerBatch(2);
-            meters.handlerTimedOut();
-            meters.shovelMoved();
-            meters.sidelined(IgnisMetrics.REASON_REJECTED);
-            meters.sidelined(IgnisMetrics.REASON_EXCEPTION);
-            meters.sidelined(IgnisMetrics.REASON_TIMEOUT);
-            meters.sidelined(IgnisMetrics.REASON_SATURATED);
-            meters.sidelineRefused(IgnisMetrics.REASON_SIDELINE_REFUSED);
-            meters.recordHandler(1L, IgnisMetrics.SUCCESS);
-            meters.recordHandler(1L, IgnisMetrics.FAILURE);
-            meters.recordHandler(1L, IgnisMetrics.REASON_TIMEOUT);
-            meters.recordHandler(1L, IgnisMetrics.REASON_SATURATED);
-            meters.recordShovel(1L, IgnisMetrics.SUCCESS);
-            meters.recordShovel(1L, IgnisMetrics.FAILURE);
+            recordEverything(meters);
         }
 
         verify(metrics, never()).counter(anyString(), any());
         verify(metrics, never()).timer(anyString(), any());
         verify(metrics, never()).summary(anyString(), any());
+    }
+
+    @Test
+    @DisplayName("a new queue registers only the meters every working queue records")
+    void onlyTheEverydayMetersAreRegisteredUpFront() {
+        new QueueMeters(new IgnisMetrics(registry), QUEUE);
+
+        // publish success, consume, poll message, poll empty, acked. Failures, sideline reasons,
+        // handler and shovel outcomes and timeouts appear when they first happen.
+        assertEquals(5, registry.getMeters().size());
+    }
+
+    @Test
+    @DisplayName("closing removes the queue's meters and its magazines', and records nothing afterwards")
+    void closeRemovesEverythingTheQueueOwned() {
+        final IgnisMetrics metrics = new IgnisMetrics(registry);
+        final QueueMeters meters = new QueueMeters(metrics, QUEUE);
+        recordEverything(meters);
+        meters.gaugeConsumers(this, self -> 1.0);
+        // Magazine tags its own meters with the magazine identifier rather than the queue.
+        registry.counter("magazine.aerospike.calls", IgnisMetrics.TAG_MAGAZINE, QUEUE);
+        registry.counter("magazine.aerospike.calls", IgnisMetrics.TAG_MAGAZINE, QUEUE + "_SIDELINE");
+        registry.counter(IgnisMetrics.POLL, IgnisMetrics.TAG_QUEUE, "OTHER");
+        registry.counter("magazine.aerospike.calls", IgnisMetrics.TAG_MAGAZINE, "OTHER");
+        final int before = registry.getMeters().size();
+
+        final int removed = meters.close(List.of(QUEUE, QUEUE + "_SIDELINE"));
+
+        assertEquals(before - 2, removed);
+        assertEquals(2, registry.getMeters().size(), "only the other queue's meters remain");
+
+        // A consumer finishing its last message after the queue stopped must not bring one back.
+        recordEverything(meters);
+        assertEquals(2, registry.getMeters().size());
+    }
+
+    private static void recordEverything(final QueueMeters meters) {
+        meters.recordPublish(1L, false);
+        meters.recordPublish(1L, true);
+        meters.recordConsume(() -> {
+        });
+        meters.polled(true);
+        meters.polled(false);
+        meters.acked(2);
+        meters.ignored();
+        meters.budgetExhausted();
+        meters.handlerBatch(2);
+        meters.handlerTimedOut();
+        meters.shovelMoved();
+        meters.sidelined(IgnisMetrics.REASON_REJECTED);
+        meters.sidelined(IgnisMetrics.REASON_EXCEPTION);
+        meters.sidelined(IgnisMetrics.REASON_TIMEOUT);
+        meters.sidelined(IgnisMetrics.REASON_SATURATED);
+        meters.sidelineRefused(IgnisMetrics.REASON_SIDELINE_REFUSED);
+        meters.recordHandler(1L, IgnisMetrics.SUCCESS);
+        meters.recordHandler(1L, IgnisMetrics.FAILURE);
+        meters.recordHandler(1L, IgnisMetrics.REASON_TIMEOUT);
+        meters.recordHandler(1L, IgnisMetrics.REASON_SATURATED);
+        meters.recordShovel(1L, IgnisMetrics.SUCCESS);
+        meters.recordShovel(1L, IgnisMetrics.FAILURE);
     }
 
     @Test
@@ -145,6 +182,6 @@ class QueueMetersTest {
         meters.recordHandler(1L, IgnisMetrics.SUCCESS);
 
         assertEquals(0, registry.getMeters().size(),
-                "resolving meters eagerly must not resolve them against the caller's registry");
+                "a disabled queue must not register anything against the caller's registry");
     }
 }

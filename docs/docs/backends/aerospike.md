@@ -144,6 +144,26 @@ Map<String, FireCheckpoint> watermarks =
 Everything at or below that pointer was claimed at least `sweepDuration` ago. Everything above it
 might have been claimed a moment ago and must not be touched.
 
+### How checkpoints are recorded
+
+IgnisMQ uses a window of `sweepDuration / 8` (150 seconds at the default 20 minutes) and keeps 32
+checkpoints per shard, so history reaches back four sweep durations. Magazine records them from its
+active-shard refresh:
+
+- **At most one checkpoint per shard per window**, across all instances. Each instance waits a
+  random offset into the first half of the window; the first to get there writes, the others see it
+  and skip.
+- **None for a shard whose pointer has not moved.** Idle queues cost nothing.
+- **One batch call per magazine**, not one per shard.
+
+The sweeper, which runs only on the leader, also records when it reads. This normally writes nothing
+because the refresh already has; it matters when consumption has stopped everywhere, so the last
+claims still become sweepable.
+
+A checkpoint is labelled with the end of the window it was taken in, so it can be used one window
+later. A message abandoned at time T is therefore eligible from about `T + sweepDuration + one
+window`, and is moved on the next sweep pass after that.
+
 ### What this buys
 
 | | Per-message `fireTS` | Watermark |
@@ -160,8 +180,9 @@ no checkpoint reaches back that far yet — and it is the safe direction.
 !!! note "There is a pause after a fresh deploy, and it is expected"
     Checkpoints are recorded as the queue is used. Immediately after a new queue is created, or after
     a long idle period, no checkpoint reaches back `sweepDuration`, so the sweeper correctly does
-    nothing. Sweeping resumes on its own once history has accumulated past that age. A quiet sweeper
-    in the first `sweepDuration` after a deploy is not a fault.
+    nothing. Sweeping resumes on its own once history has accumulated past that age — roughly
+    `sweepDuration` plus one checkpoint window. A quiet sweeper in that period after a deploy is not a
+    fault.
 
 **The sweeper refuses loudly rather than guessing.** If the retained checkpoint history no longer
 spans the requested cutoff, `firePointerBefore` throws `INVALID_REQUEST`, the pass is abandoned for

@@ -29,7 +29,6 @@ import com.phonepe.magazine.Magazine;
 import com.phonepe.magazine.core.BaseMagazineStorage;
 import com.phonepe.magazine.entity.FireCheckpoint;
 import com.phonepe.magazine.entity.MagazineData;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import lombok.extern.slf4j.Slf4j;
 
@@ -80,8 +79,6 @@ public final class QueueSweeper {
     private final StorageClient client;
     private final String farmId;
     private final IgnisMetrics metrics;
-    /** The caller's registry, or a sink when instrumentation is off. Magazine's storage wants it. */
-    private final MeterRegistry meterRegistry;
     /** Optional: null means always build, which is what a standalone sweeper does. */
     private final MagazineRegistry magazineRegistry;
 
@@ -99,7 +96,6 @@ public final class QueueSweeper {
         this.client = client;
         this.farmId = farmId;
         this.metrics = Objects.requireNonNull(metrics, "Metrics are required.");
-        this.meterRegistry = metrics.getRegistry();
     }
 
     /**
@@ -341,11 +337,12 @@ public final class QueueSweeper {
         }
     }
 
+    /** For queues not run here; see {@link IgnisMetrics#transientStorageRegistry()} for where its meters go. */
     private BaseMagazineStorage<String> buildStorage(final QueueEntity queueEntity) {
         return storage.accept(new MagazineStorageVisitor(
                 clientId, queueEntity.getMessageExpiry(),
                 queueEntity.getQueueExpiry() * Constants.TTL_FACTOR_FOR_QUEUE_EXPIRY,
-                client, queueEntity.getShards(), farmId, meterRegistry,
+                client, queueEntity.getShards(), farmId, metrics.transientStorageRegistry(),
                 queueEntity.getSweepDuration()));
     }
 

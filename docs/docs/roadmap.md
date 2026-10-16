@@ -124,7 +124,7 @@ yours to change. Listed because a limit you cannot see is worse than one you can
 | Deduplication | Off | Publish-side suppression of identical payloads |
 | Active-shard refresh | 5 seconds | Steady-state read load, and wake-up latency on an idle queue |
 | Active-shard cache size | 1024 entries | How many queues one process can hold before it re-reads shard information. See below |
-| Fire-history recording | Always on | A small write cost on every queue, including ones that never sweep |
+| Fire-history recording | Always on | At most one batch write per active magazine per checkpoint window (`sweepDuration / 8`), shared across instances. Nothing for idle queues |
 | Fire-history depth | 32 checkpoints | How far back the sweeper can safely reach |
 | Metadata TTL | 2 x queue expiry | How long a queue's bookkeeping outlives its messages |
 | Shard count after creation | Immutable | A changed `shards` value on an existing queue is ignored |

@@ -18,9 +18,12 @@ package com.phonepe.ignis.metric;
 
 import io.micrometer.core.instrument.*;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
+import io.micrometer.core.instrument.config.MeterFilter;
 import lombok.Getter;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.ToDoubleFunction;
 
@@ -80,6 +83,11 @@ public final class IgnisMetrics {
     /** A consumer that handed its thread back with work still waiting. */
     public static final String BUDGET_EXHAUSTED = "ignismq.consumer.budget.exhausted";
 
+    /** Namespace of Magazine's own meters. */
+    public static final String MAGAZINE_PREFIX = "magazine.";
+    /** Suffix of sideline magazine identifiers; see {@code Utils.getSidelineQueueName}. */
+    public static final String SIDELINE_SUFFIX = "_SIDELINE";
+
     public static final String TAG_QUEUE = "queue";
     public static final String TAG_OUTCOME = "outcome";
     public static final String TAG_MAGAZINE = "magazine";
@@ -119,18 +127,44 @@ public final class IgnisMetrics {
     private final MeterRegistry registry;
     @Getter
     private final boolean enabled;
+    /** Whether {@code magazine.*} meters are folded to {@code main}/{@code sideline}; see {@link #collapseMagazineTag()}. */
+    @Getter
+    private final boolean storageMetersFolded;
 
-    /** Enabled. */
+    /** Enabled, with Magazine's meters left per queue. */
     public IgnisMetrics(final MeterRegistry registry) {
         this(registry, true);
     }
 
     public IgnisMetrics(final MeterRegistry registry, final boolean enabled) {
+        this(registry, enabled, false);
+    }
+
+    /**
+     * @param foldStorageMeters install {@link #collapseMagazineTag()} on the registry. Install before
+     *                          any Magazine storage is built: a filter does not apply to existing meters.
+     */
+    public IgnisMetrics(final MeterRegistry registry, final boolean enabled, final boolean foldStorageMeters) {
         Objects.requireNonNull(registry, "Meter registry is required.");
         this.enabled = enabled;
         // A composite with no children accepts every registration and discards every recording, so
         // callers need no null checks and no branches on the hot path.
         this.registry = enabled ? registry : new CompositeMeterRegistry();
+        this.storageMetersFolded = enabled && foldStorageMeters;
+        if (storageMetersFolded) {
+            registry.config().meterFilter(collapseMagazineTag());
+        }
+    }
+
+    /**
+     * The registry for Magazine storage built for a queue this process does not run, such as the
+     * sweeper's. Folded meters go to the real registry, where they share the process-wide series;
+     * otherwise each call returns a fresh discarding registry, because per-queue meters for a queue
+     * that is never deactivated here would never be removed. Fresh rather than shared: an empty
+     * {@link CompositeMeterRegistry} still holds every meter registered in it.
+     */
+    public MeterRegistry transientStorageRegistry() {
+        return storageMetersFolded ? registry : new CompositeMeterRegistry();
     }
 
 
@@ -151,12 +185,45 @@ public final class IgnisMetrics {
         registry.gauge(name, tags, source, value);
     }
 
+    /** Rewrites the {@code magazine} tag of {@code magazine.*} meters to {@code main}/{@code sideline}, aggregating across queues. */
+    public static MeterFilter collapseMagazineTag() {
+        return new MeterFilter() {
+            @Override
+            public Meter.Id map(final Meter.Id id) {
+                final String magazine = id.getTag(TAG_MAGAZINE);
+                if (Objects.isNull(magazine) || !id.getName().startsWith(MAGAZINE_PREFIX)
+                        || MAIN.equals(magazine) || SIDELINE_MAGAZINE.equals(magazine)) {
+                    return id;
+                }
+                return id.withTag(Tag.of(TAG_MAGAZINE,
+                        magazine.endsWith(SIDELINE_SUFFIX) ? SIDELINE_MAGAZINE : MAIN));
+            }
+        };
+    }
+
     /** Removes a meter, so a deactivated queue stops reporting rather than freezing at its last value. */
     public void remove(final String name, final Tags tags) {
         final Meter meter = registry.find(name).tags(tags).meter();
         if (Objects.nonNull(meter)) {
             registry.remove(meter);
         }
+    }
+
+    /**
+     * Removes every meter tagged {@code key} with any of {@code values} (including bridged Dropwizard metrics).
+     *
+     * @return number of meters removed.
+     */
+    public int removeTagged(final String key, final Set<String> values) {
+        final List<Meter> tagged = registry.getMeters().stream()
+                .filter(meter -> {
+                    // Set.of rejects contains(null).
+                    final String value = meter.getId().getTag(key);
+                    return Objects.nonNull(value) && values.contains(value);
+                })
+                .toList();
+        tagged.forEach(registry::remove);
+        return tagged.size();
     }
 
     /**

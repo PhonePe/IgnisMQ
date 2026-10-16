@@ -5,7 +5,7 @@
 
     <groupId>com.phonepe</groupId>
     <artifactId>ignisMQ</artifactId>
-    <version>2.0.1-SNAPSHOT</version>
+    <version>2.0.2-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>ignisMQ</name>
@@ -77,7 +77,7 @@
         <maven.gpg.plugin.version>3.2.7</maven.gpg.plugin.version>
         <maven.sonar.plugin.version>5.7.0.6970</maven.sonar.plugin.version>
         <maven.enforcer.plugin.version>3.5.0</maven.enforcer.plugin.version>
-        <sonatype.central.publishing.maven.plugin.version>0.11.0</sonatype.central.publishing.maven.plugin.version>
+        <sonatype.central.publishing.maven.plugin.version>0.12.0</sonatype.central.publishing.maven.plugin.version>
         <jacoco.maven.plugin.version>0.8.13</jacoco.maven.plugin.version>
         <lombok.maven.version>1.18.20.0</lombok.maven.version>
         <maven.javadoc.skip>false</maven.javadoc.skip>
@@ -95,7 +95,7 @@
         <metrics-core.version>4.2.25</metrics-core.version>
         <slf4j.version>1.7.36</slf4j.version>
         <aerospike.client.version>6.3.1</aerospike.client.version>
-        <magazine.version>2.0.1</magazine.version>
+        <magazine.version>2.0.2-1</magazine.version>
         <micrometer.version>1.14.4</micrometer.version>
         <jackson.version>2.13.5</jackson.version>
         <validation-api.version>2.0.1.Final</validation-api.version>
